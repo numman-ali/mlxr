@@ -22,20 +22,17 @@ Use it to preserve stable repo-operating learnings so fresh Codex sessions do no
 
 - Add durable learnings to Tier 2.
 - Promote only cross-session critical items to Tier 1.
+- Keep Tier 1 focused on durable repo facts and sharp edges, not doctrine already stated in `AGENTS.md`.
+- If a rule belongs in repo operating doctrine, put it in `AGENTS.md` instead of repeating it here.
 - Archive obsolete items instead of silently deleting them.
 - Do not put transient task notes or diary-style entries here.
 
 ## Tier 1 — Must Read
 
-- This repo is agent-native. Codex owns implementation, formatting, linting, type checks, tests, builds, log inspection, and commits.
-- Fresh sessions should start with: `AGENTS.md` → `MEMORY.md` → core docs → `git status` → recent commits → local repo inspection.
 - The default local quality gate is `uv run python scripts/dev.py verify`.
 - `pre-commit` is a fast hygiene mirror, not the main acceptance gate.
 - If runtime behavior changes, inspect `$MLX_RUNTIME_HOME/logs/control-plane.log` as part of validation.
-- Commit only from green.
-- Do not blur source references, portable artifacts, and machine-local build cache.
-- Do not reintroduce raw file paths into the generic HTTP contract.
-- If the user does not provide a tightly scoped next task, continue with the highest-leverage validated next step from repo state.
+- `verify` and `pre-commit` run `scripts/check_type_escapes.py`; avoid `typing.cast` and explicit `Any` in the scanned runtime and test surfaces.
 - Placeholder package folders stay outside the `uv` workspace until they gain a real `pyproject.toml`.
 
 ## Tier 2 — Lookup Log
@@ -44,7 +41,6 @@ Use it to preserve stable repo-operating learnings so fresh Codex sessions do no
 - (2026-03-06) [QUALITY] The current local quality stack is `ruff`, `mypy --strict`, `unittest`, and `uv build --all-packages`. — refs: `pyproject.toml`, `scripts/dev.py`
 - (2026-03-06) [LOGS] The control plane logs to `$MLX_RUNTIME_HOME/logs/control-plane.log`, and runtime log inspection is part of the default dev loop. — refs: `packages/runtime-server/src/mlx_runtime_server/logging.py`, `docs/dev-harness.md`
 - (2026-03-06) [SKILLS] The repo-owned specialized validation overlay is `skills/validation/`; it is narrow by design and not a replacement for the common startup flow. — refs: `skills/validation/SKILL.md`, `AGENTS.md`
-- (2026-03-06) [TYPE-DISCIPLINE] `verify` and `pre-commit` now run `scripts/check_type_escapes.py`, which forbids `typing.cast` and explicit `Any` in the targeted runtime and test surfaces it scans. — refs: `scripts/check_type_escapes.py`, `.pre-commit-config.yaml`, `scripts/dev.py`
 - (2026-03-06) [COVERAGE] `verify` enforces an `85%` package coverage floor via `coverage.py`; the floor applies to `packages/`, not repo scripts. — refs: `pyproject.toml`, `scripts/dev.py`
 - (2026-03-06) [INSPECTION] Family preflight inspection now runs from `ResolvedSource` without provider fetch; selective provider fetch happens at conversion time through the family adapter’s fetch-policy seam. Hugging Face provenance also preserves `remote_code_approved` from source policy. — refs: `packages/runtime-core/src/mlx_runtime_core/catalog.py`, `packages/runtime-core/src/mlx_runtime_core/contracts.py`, `packages/runtime-core/src/mlx_runtime_core/providers.py`, `packages/model-family-ltx/src/mlx_runtime_family_ltx/adapter.py`
 - (2026-03-06) [ARTIFACTS] LTX Phase B now uses a family-generic multi-source conversion contract: `ArtifactConversionRequest` accepts exactly one of `source_id` or `source_bindings`, portable artifacts can carry typed `components`, and the first truthful LTX slice materializes copied payloads for `checkpoint`, `spatial_upsampler`, and `text_encoder` under `artifacts-portable/.../payload/`. — refs: `packages/shared-schemas/src/mlx_runtime_schemas/models.py`, `packages/runtime-core/src/mlx_runtime_core/catalog.py`, `packages/model-family-ltx/src/mlx_runtime_family_ltx/adapter.py`, `docs/research/07-ltx-integration-seams.md`

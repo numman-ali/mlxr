@@ -15,6 +15,12 @@ It should do six jobs:
 
 This file is not a diary, not marketing copy, and not a soft suggestion.
 
+## Repo Guidance Layers
+
+- `AGENTS.md` owns repo doctrine: mindset, startup protocol, dev loop, invariants, and source-of-truth order.
+- `MEMORY.md` owns durable repo facts and sharp edges that future sessions should not have to rediscover.
+- Do not duplicate the same rule in both files unless the repetition is intentionally temporary during a transition.
+
 ## Project Identity
 
 `MLXR` means `MLX Runtime`.
