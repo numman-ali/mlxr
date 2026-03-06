@@ -107,3 +107,24 @@ mlxr/
 ```
 
 The `packages/` tree is reserved for implementation work authored here. The `references/` tree is for upstream inspection and should remain gitignored.
+
+## Development Setup
+
+The repo uses a `uv` workspace rooted at the top-level `pyproject.toml`.
+
+Use:
+
+```bash
+uv sync
+```
+
+That installs the active Python workspace packages plus the default `dev` group into `.venv/`.
+
+Useful commands:
+
+```bash
+uv run python -m unittest discover -s tests -v
+uv run python -c "import mlx_runtime_server, mlx_runtime_core, mlx_runtime_schemas, mlx_runtime_family_ltx"
+```
+
+Only directories under `packages/` that contain real Python package metadata are workspace members. Placeholder adapter folders stay outside the workspace until they gain their own `pyproject.toml`.

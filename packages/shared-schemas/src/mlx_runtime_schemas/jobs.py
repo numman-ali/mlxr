@@ -34,10 +34,31 @@ class RuntimeEventKind(StrEnum):
     JOB_CANCELLED = "job.cancelled"
 
 
+class OutputDestinationMode(StrEnum):
+    RUNTIME_MANAGED = "runtime_managed"
+    TRUSTED_LOCAL_EXPORT = "trusted_local_export"
+
+
 class JobOutputPolicy(BaseModel):
     artifact_format: str | None = None
-    output_dir: str | None = None
+    destination_mode: OutputDestinationMode = OutputDestinationMode.RUNTIME_MANAGED
+    export_ref: str | None = None
     stream: bool = False
+
+
+class InputHandle(BaseModel):
+    handle_id: str
+    media_type: str | None = None
+    role: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactHandle(BaseModel):
+    artifact_id: str
+    artifact_format: str
+    role: str = "result"
+    exportable: bool = True
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobRequest(BaseModel):
@@ -64,4 +85,4 @@ class JobRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     error: str | None = None
-    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    artifacts: list[ArtifactHandle] = Field(default_factory=list)

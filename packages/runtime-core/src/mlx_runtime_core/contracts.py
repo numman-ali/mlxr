@@ -4,78 +4,129 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from mlx_runtime_schemas import CapabilityDescriptor, JobRecord, JobRequest, RuntimeEvent
+from mlx_runtime_schemas import (
+    ArtifactHandle,
+    AuthRequirements,
+    CapabilityDescriptor,
+    PortableArtifactRecord,
+    ProvenanceRecord,
+    ResolvedSource,
+    RuntimeEvent,
+    SourceRef,
+)
 
 
 @dataclass(slots=True)
-class SourceRef:
-    uri: str
-    revision: str | None = None
-    trust_remote_code: bool = False
-    family_hint: str | None = None
-
-
-@dataclass(slots=True)
-class ResolvedSource:
-    ref: SourceRef
-    local_path: Path
-    allow_patterns: tuple[str, ...] = ()
-    source_hash: str | None = None
-    detected_layout: str | None = None
-
-
-@dataclass(slots=True)
-class SourceInspection:
-    family: str
-    variant: str | None = None
-    tasks: tuple[str, ...] = ()
+class ProviderInspection:
+    resolved: ResolvedSource
+    bytes_total: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
-class ConversionProfile:
-    precision: str = "bf16"
-    compile_profile: str | None = None
+class FetchPolicy:
+    allow_patterns: tuple[str, ...] = ()
+    eager: bool = False
     options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
-class RuntimeProfile:
-    execution_mode: str = "media"
+class SourceMaterialization:
+    resolved: ResolvedSource
+    provenance: ProvenanceRecord
+    materialization_mode: str
+    local_path: Path | None = None
+    local_refs: tuple[str, ...] = ()
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class FamilyInspection:
+    family: str
+    variant: str | None = None
+    tasks: tuple[str, ...] = ()
+    scheduler_class: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ConversionPlan:
+    model_id: str
+    precision: str = "bf16"
+    target_format: str = "mlx_portable_bundle"
+    options: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class ExecutionProfile:
+    task: str
+    profile: str
     device: str = "gpu"
     options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
-class ModelArtifact:
-    artifact_path: Path
-    format_version: str
-    weight_format: str
+class PortableArtifact:
+    record: PortableArtifactRecord
+    storage_path: Path | None = None
+
+
+@dataclass(slots=True)
+class LoadedModelHandle:
+    model_id: str
+    family: str
+    artifact_digest: str
     capability: CapabilityDescriptor
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
-class LoadedHandle:
-    model_id: str
-    family: str
-    capability: CapabilityDescriptor
-    metadata: dict[str, Any] = field(default_factory=dict)
+class ExecutionStage:
+    stage_id: str
+    inputs: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
 
-class FamilyAdapter(Protocol):
+@dataclass(slots=True)
+class StageResult:
+    events: list[RuntimeEvent] = field(default_factory=list)
+    artifacts: list[ArtifactHandle] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
+
+
+class SourceProviderAdapter(Protocol):
+    provider_id: str
+
+    def resolve(self, source_ref: SourceRef) -> ResolvedSource: ...
+
+    def inspect(self, resolved: ResolvedSource) -> ProviderInspection: ...
+
+    def auth_requirements(self, source_ref: SourceRef) -> AuthRequirements: ...
+
+    def fetch(
+        self, resolved: ResolvedSource, policy: FetchPolicy
+    ) -> SourceMaterialization: ...
+
+    def provenance(self, resolved: ResolvedSource) -> ProvenanceRecord: ...
+
+
+class ModelFamilyAdapter(Protocol):
     family_id: str
 
-    def resolve_source(self, ref: SourceRef) -> ResolvedSource: ...
+    def inspect_source(self, source: SourceMaterialization) -> FamilyInspection: ...
 
-    def inspect_source(self, source: ResolvedSource) -> SourceInspection: ...
+    def convert(
+        self, source: SourceMaterialization, plan: ConversionPlan
+    ) -> PortableArtifact: ...
 
-    def convert(self, source: ResolvedSource, profile: ConversionProfile) -> ModelArtifact: ...
+    def load(
+        self, artifact: PortableArtifact, profile: ExecutionProfile
+    ) -> LoadedModelHandle: ...
 
-    def load(self, artifact: ModelArtifact, runtime: RuntimeProfile) -> LoadedHandle: ...
+    def capabilities(self, artifact: PortableArtifact) -> CapabilityDescriptor: ...
 
-    def capabilities(self, handle: LoadedHandle | None = None) -> CapabilityDescriptor: ...
+    def run_stage(
+        self, loaded: LoadedModelHandle, stage: ExecutionStage
+    ) -> StageResult: ...
 
-    def execute(self, handle: LoadedHandle, job: JobRecord) -> list[RuntimeEvent]: ...
-
-    def unload(self, handle: LoadedHandle) -> None: ...
+    def unload(self, loaded: LoadedModelHandle) -> None: ...

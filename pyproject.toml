@@ -1,9 +1,31 @@
+[tool.uv]
+default-groups = ["dev"]
+
 [tool.uv.workspace]
-members = ["packages/*"]
+members = [
+    "packages/model-family-ltx",
+    "packages/runtime-cli",
+    "packages/runtime-core",
+    "packages/runtime-server",
+    "packages/shared-schemas",
+]
+
+[tool.uv.sources]
+mlx-runtime-cli = { workspace = true }
+mlx-runtime-core = { workspace = true }
+mlx-runtime-family-ltx = { workspace = true }
+mlx-runtime-schemas = { workspace = true }
+mlx-runtime-server = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.0",
     "fastapi>=0.115.0",
+    "mlx-runtime-cli",
+    "mlx-runtime-core",
+    "mlx-runtime-family-ltx",
+    "mlx-runtime-schemas",
+    "mlx-runtime-server",
     "pydantic>=2.10.0",
     "typing-extensions>=4.12.0",
     "uvicorn>=0.30.0",
