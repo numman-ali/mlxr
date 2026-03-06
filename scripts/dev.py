@@ -50,6 +50,7 @@ def cmd_verify() -> None:
     run_command(["ruff", "check", *TARGETS])
     run_command(["mypy", "--strict", *TARGETS])
     run_command([sys.executable, "scripts/check_type_escapes.py"])
+    Path("tmp").mkdir(parents=True, exist_ok=True)
     run_command(["coverage", "erase"])
     run_command(["coverage", "run", "-m", "unittest", "discover", "-s", "tests", "-v"])
     run_command(["coverage", "report"])

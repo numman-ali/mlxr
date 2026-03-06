@@ -49,6 +49,7 @@ files = ["packages", "tests", "scripts"]
 [tool.coverage.run]
 branch = true
 source = ["packages"]
+data_file = "tmp/.coverage"
 
 [tool.coverage.report]
 fail_under = 85
