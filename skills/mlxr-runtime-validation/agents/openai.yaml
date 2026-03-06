@@ -1,0 +1,4 @@
+version: 1
+display_name: MLXR Runtime Validation
+short_description: Runtime debugging, logs, and benchmark-discipline workflow for MLXR.
+default_prompt: Use the MLXR runtime validation workflow to inspect logs, benchmark strength, and whether a runtime claim is strong enough to treat as repo truth.
