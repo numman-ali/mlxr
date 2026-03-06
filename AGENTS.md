@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file is the first-read operating doctrine for any agent working in this repo.
+This file is the first-read operating guide for any agent working in this repo.
 
 It should do six jobs:
 
@@ -13,13 +13,13 @@ It should do six jobs:
 5. point to the real source-of-truth docs
 6. stop stale assumptions from re-entering the codebase
 
-This file is not a diary, not marketing copy, and not a soft suggestion.
+Keep this file practical, durable, and grounded in repo reality.
 
 ## Repo Guidance Layers
 
 - `AGENTS.md` owns repo doctrine: mindset, startup protocol, dev loop, invariants, and source-of-truth order.
 - `MEMORY.md` owns durable repo facts and sharp edges that future sessions should not have to rediscover.
-- Do not duplicate the same rule in both files unless the repetition is intentionally temporary during a transition.
+- Avoid duplicating the same rule in both files unless the repetition is intentionally temporary during a transition.
 
 ## Project Identity
 
@@ -36,7 +36,7 @@ It has two connected tracks:
 
 This repo is not “an LTX Mac port.” LTX is the first proving workload, not the platform identity.
 
-## Agent-Native Doctrine
+## Agent-Native Operating Model
 
 This repository is operated as an agent-native codebase.
 
@@ -44,10 +44,10 @@ That means:
 
 - repo-tracked implementation work is expected to be executed by Codex through this channel
 - the human sets direction, priorities, taste, and review criteria
-- Codex owns implementation, formatting, linting, tests, type checks, build checks, logs, and local validation
-- Codex should escalate for judgment, tradeoffs, or ambiguity, not for routine execution
+- Codex is expected to carry implementation, formatting, linting, tests, type checks, build checks, logs, and local validation
+- Codex should surface judgment calls, tradeoffs, and ambiguity rather than routine execution questions
 
-Humans may inspect or edit files, but the default operating model is still agent-executed end to end. Do not optimize this repo around a human manually hopping between editor, formatter, test runner, logs, and build commands.
+Humans may inspect or edit files, but the default operating model is still agent-executed end to end. Avoid shaping the repo around a human manually hopping between editor, formatter, test runner, logs, and build commands.
 
 Fresh Codex sessions should not require a custom startup prompt to know where to start or how to continue.
 
@@ -62,7 +62,7 @@ At the start of every fresh session, do this in order unless the task is truly t
 5. Inspect recent commits.
 6. Inspect the current implementation and harness state before planning or coding.
 
-Do not skip the startup protocol just because the repo feels familiar.
+Do not skip the startup protocol just because the repo feels familiar; that is how stale assumptions re-enter.
 
 ## Default Next-Step Policy
 
@@ -104,7 +104,7 @@ When explaining repo status, architecture, tradeoffs, or implementation progress
 - when a system shape is hard to picture, offer a compact mental model or ASCII diagram
 - optimize for clarity and cognitive load, especially when the user is asking for orientation rather than a code review
 
-## Non-Negotiable Mindset
+## Mindset Defaults
 
 - Prefer primary sources over memory.
 - Prefer measured facts over elegant stories.
@@ -123,7 +123,7 @@ When uncertain:
 - re-check current upstream sources
 - downgrade certainty instead of bluffing
 
-## What Must Not Be Assumed
+## Assumptions To Avoid
 
 Do not assume any of the following unless the docs or measurements have been refreshed:
 
@@ -240,7 +240,7 @@ Good work in this repo usually does one or more of these:
 - improves agent legibility through modularity, separation of concerns, and explicit dependency seams
 - reduces the need for unsafe typing escape hatches such as avoidable `typing.cast` or broad `Any` in runtime code
 
-Bad work in this repo usually looks like:
+Patterns to avoid in this repo usually look like:
 
 - copying inference logic into another host
 - claiming universality without validation
@@ -270,7 +270,7 @@ Create or use a skill when:
 - a vertical needs its own operating style, such as debugging, benchmarking, or release hygiene
 - the task benefits from bundled scripts, references, or assets
 
-Do not move the core repo doctrine out of `AGENTS.md`. Skills are just-in-time capability overlays, not the primary constitution of the repo.
+Do not move the core repo doctrine out of `AGENTS.md`. Skills are just-in-time capability overlays, not the primary operating guide.
 
 Repo-owned skills should live under `skills/`.
 
@@ -294,4 +294,4 @@ Update `AGENTS.md` when one of these becomes true:
 - the mandatory dev loop changed
 - a repeated agent mistake exposed missing operational guidance
 
-Do not update it for vanity, tone polishing, or speculative future ideas that are not yet repo reality.
+Do not update it for style churn, vanity edits, or speculative future ideas that are not yet repo reality.
