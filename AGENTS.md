@@ -4,13 +4,14 @@
 
 This file is the first-read operating doctrine for any agent working in this repo.
 
-It should do five jobs:
+It should do six jobs:
 
 1. set the mindset for `MLXR`
 2. define the agent-native operating model
-3. define the mandatory dev loop
-4. point to the real source-of-truth docs
-5. stop stale assumptions from re-entering the codebase
+3. define the mandatory startup protocol
+4. define the mandatory dev loop
+5. point to the real source-of-truth docs
+6. stop stale assumptions from re-entering the codebase
 
 This file is not a diary, not marketing copy, and not a soft suggestion.
 
@@ -41,6 +42,41 @@ That means:
 - Codex should escalate for judgment, tradeoffs, or ambiguity, not for routine execution
 
 Humans may inspect or edit files, but the default operating model is still agent-executed end to end. Do not optimize this repo around a human manually hopping between editor, formatter, test runner, logs, and build commands.
+
+Fresh Codex sessions should not require a custom startup prompt to know where to start or how to continue.
+
+## Startup Protocol
+
+At the start of every fresh session, do this in order unless the task is truly tiny and local:
+
+1. Read `AGENTS.md`.
+2. Read `MEMORY.md`.
+3. Read the core docs in the declared order below.
+4. Inspect `git status`.
+5. Inspect recent commits.
+6. Inspect the current implementation and harness state before planning or coding.
+
+Do not skip the startup protocol just because the repo feels familiar.
+
+## Default Next-Step Policy
+
+If the user has not given a tightly scoped next task, derive the next step from repo state.
+
+Default order of operations:
+
+1. broken startup, harness, or validation loop
+2. broken logs or observability needed for safe iteration
+3. broken architecture contract or docs-code mismatch
+4. the highest-leverage incomplete implementation step implied by current docs and recent commits
+
+When choosing the next step:
+
+- prefer repo evidence over guesswork
+- prefer fixing the development loop before building new features
+- prefer platform blockers before host polish
+- continue autonomously unless blocked by a real product or architecture tradeoff
+
+Autonomous continuation means deriving the next move from the repo, not inventing random scope.
 
 ## Non-Negotiable Mindset
 
@@ -122,7 +158,7 @@ A change is not done until all of the following are true:
 
 ## Where To Start
 
-Any new agent should start in this order unless the task is tiny and local:
+Any new agent should read these in this order after `AGENTS.md` and `MEMORY.md`, unless the task is tiny and local:
 
 1. [README.md](/Users/numman/Repos/mlxr/README.md)
 2. [01-product-requirements.md](/Users/numman/Repos/mlxr/docs/01-product-requirements.md)
@@ -193,7 +229,7 @@ If it is still uncertain, capture it in [09-open-questions-and-validation-plan.m
 
 ## Skills Policy
 
-`AGENTS.md` covers the common path and should remain enough for the majority of sessions.
+`AGENTS.md` and `MEMORY.md` cover the common path and should remain enough for the majority of sessions.
 
 Create or use a skill when:
 
@@ -221,7 +257,8 @@ Update `AGENTS.md` when one of these becomes true:
 - repo structure changed
 - architecture defaults changed
 - source-of-truth order changed
-- a repeated agent mistake exposed missing operational guidance
+- the startup protocol changed
 - the mandatory dev loop changed
+- a repeated agent mistake exposed missing operational guidance
 
 Do not update it for vanity, tone polishing, or speculative future ideas that are not yet repo reality.

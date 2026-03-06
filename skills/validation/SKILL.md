@@ -1,9 +1,9 @@
 ---
-name: mlxr-runtime-validation
+name: validation
 description: Use this skill when working on MLXR runtime debugging, log triage, validation discipline, benchmark-backed claims, or deciding whether runtime behavior is strong enough to count as evidence rather than a one-off run.
 ---
 
-# MLXR Runtime Validation
+# Validation
 
 Use this skill for the narrow slice that sits beyond the normal dev loop:
 
@@ -12,7 +12,7 @@ Use this skill for the narrow slice that sits beyond the normal dev loop:
 - validating whether a claim is benchmark-grade or still provisional
 - triaging whether a behavior is a platform truth, a family quirk, or a likely bug
 
-Do not use this skill for the common implementation path. The default loop still lives in `AGENTS.md` and `docs/dev-harness.md`.
+Do not use this skill for the common implementation path. The default loop still lives in `AGENTS.md`, `MEMORY.md`, and `docs/dev-harness.md`.
 
 ## Default workflow
 

@@ -133,6 +133,14 @@ Only directories under `packages/` that contain real Python package metadata are
 Repo operating docs:
 
 - [AGENTS.md](AGENTS.md)
+- [MEMORY.md](MEMORY.md)
 - [agent-native-development.md](docs/agent-native-development.md)
 - [dev-harness.md](docs/dev-harness.md)
 - [skill-policy.md](docs/skill-policy.md)
+
+Fresh Codex sessions are expected to bootstrap from the repo itself:
+
+1. `AGENTS.md`
+2. `MEMORY.md`
+3. the core docs listed in `AGENTS.md`
+4. current repo state such as `git status`, recent commits, and the local harness state

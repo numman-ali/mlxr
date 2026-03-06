@@ -39,6 +39,10 @@ Examples in this repo:
 - release hygiene
 - specialized research workflows
 
+Current repo-owned narrow skill:
+
+- `validation`: runtime validation, log triage, and benchmark-discipline overlay
+
 ## Skill Design Rules
 
 - keep the skill narrow

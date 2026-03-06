@@ -1,0 +1,46 @@
+# MEMORY.md
+
+This file is the durable cross-session memory for `MLXR`.
+
+Use it to preserve stable repo-operating learnings so fresh Codex sessions do not have to rediscover them.
+
+## How To Use This File
+
+### Tier 1 — Must Read
+
+- Read this section at the start of every session, immediately after `AGENTS.md`.
+- Keep it short and durable.
+- Promote only facts that should shape most future sessions.
+
+### Tier 2 — Lookup Log
+
+- Do not read this end to end by default.
+- Search it when working on a related area.
+- Append durable learnings here at the end of a session.
+
+## Memory Update Rule
+
+- Add durable learnings to Tier 2.
+- Promote only cross-session critical items to Tier 1.
+- Archive obsolete items instead of silently deleting them.
+- Do not put transient task notes or diary-style entries here.
+
+## Tier 1 — Must Read
+
+- This repo is agent-native. Codex owns implementation, formatting, linting, type checks, tests, builds, log inspection, and commits.
+- Fresh sessions should start with: `AGENTS.md` → `MEMORY.md` → core docs → `git status` → recent commits → local repo inspection.
+- The default local quality gate is `uv run python scripts/dev.py verify`.
+- `pre-commit` is a fast hygiene mirror, not the main acceptance gate.
+- If runtime behavior changes, inspect `$MLX_RUNTIME_HOME/logs/control-plane.log` as part of validation.
+- Commit only from green.
+- Do not blur source references, portable artifacts, and machine-local build cache.
+- Do not reintroduce raw file paths into the generic HTTP contract.
+- If the user does not provide a tightly scoped next task, continue with the highest-leverage validated next step from repo state.
+- Placeholder package folders stay outside the `uv` workspace until they gain a real `pyproject.toml`.
+
+## Tier 2 — Lookup Log
+
+- (2026-03-06) [HARNESS] The repo uses explicit `uv` workspace membership and `tool.uv.sources`; root `uv sync`, `uv lock`, and `uv run` should work without extra flags. — refs: `pyproject.toml`, `uv.lock`
+- (2026-03-06) [QUALITY] The current local quality stack is `ruff`, `mypy --strict`, `unittest`, and `uv build --all-packages`. — refs: `pyproject.toml`, `scripts/dev.py`
+- (2026-03-06) [LOGS] The control plane logs to `$MLX_RUNTIME_HOME/logs/control-plane.log`, and runtime log inspection is part of the default dev loop. — refs: `packages/runtime-server/src/mlx_runtime_server/logging.py`, `docs/dev-harness.md`
+- (2026-03-06) [SKILLS] The repo-owned specialized validation overlay is `skills/validation/`; it is narrow by design and not a replacement for the common startup flow. — refs: `skills/validation/SKILL.md`, `AGENTS.md`
