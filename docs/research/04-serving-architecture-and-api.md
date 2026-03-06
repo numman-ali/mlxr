@@ -78,6 +78,13 @@ The old “optional token” posture is gone.
 - if `Sec-Fetch-Site` is present and indicates cross-site, reject
 - disable wildcard CORS
 
+Current scaffold implementation:
+
+- loopback HTTP requires `MLX_RUNTIME_HTTP_TOKEN`
+- allowed browser origins come from `MLX_RUNTIME_ALLOWED_ORIGINS`
+- read routes stay unauthenticated in HTTP mode for now
+- trusted local export is disabled when the daemon is running in HTTP mode
+
 ### Client guidance
 
 - browser clients should usually talk to a trusted local wrapper, not the raw daemon
@@ -122,6 +129,8 @@ Jobs write to runtime-managed artifacts first. Clients then:
 - export to a destination
 - or ask the runtime to reveal a trusted local path where appropriate
 
+The current scaffold implements runtime-managed downloads for the generic contract and a trusted local export route only when HTTP mode is disabled.
+
 ### Trusted local direct-path mode
 
 The CLI or embedded callers may use direct local paths. That mode is not the canonical HTTP contract and should not leak into host adapters.
@@ -148,6 +157,20 @@ The CLI or embedded callers may use direct local paths. That mode is not the can
 - `stream events`
 - `cancel job`
 - `query status`
+
+### Current scaffold routes
+
+- `POST /v1/inputs/import`
+- `GET /v1/inputs`
+- `GET /v1/inputs/{handle_id}`
+- `POST /v1/jobs`
+- `GET /v1/jobs`
+- `GET /v1/jobs/{job_id}`
+- `POST /v1/jobs/{job_id}/cancel`
+- `GET /v1/jobs/{job_id}/events`
+- `GET /v1/outputs/{artifact_id}`
+- `GET /v1/outputs/{artifact_id}/download`
+- `POST /v1/outputs/{artifact_id}/export`
 
 ### Example job payload
 

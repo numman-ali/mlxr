@@ -86,6 +86,9 @@ Autonomous continuation means deriving the next move from the repo, not inventin
 - Prefer honest provisional decisions over premature certainty.
 - Prefer shared runtime logic over host-specific inference copies.
 - Prefer Apple-specific realism over generic local-serving assumptions.
+- Prefer readable, modular seams over clever convenience code.
+- Prefer inversion of control, typed interfaces, and explicit boundaries over hard-wired concrete coupling.
+- Prefer repo-enforced quality rules over “remember not to do that next time.”
 
 When uncertain:
 
@@ -208,6 +211,8 @@ Good work in this repo usually does one or more of these:
 - upgrades measurement quality
 - turns host-specific logic into shared runtime logic
 - makes a new family easier to onboard without warping the platform
+- improves agent legibility through modularity, separation of concerns, and explicit dependency seams
+- reduces the need for unsafe typing escape hatches such as avoidable `typing.cast` or broad `Any` in runtime code
 
 Bad work in this repo usually looks like:
 
@@ -216,6 +221,8 @@ Bad work in this repo usually looks like:
 - hiding unresolved questions
 - jumping to native code before profiling
 - letting a compatibility facade become the de facto core API
+- solving design friction with type escapes or implicit coupling instead of fixing the seam
+- relying on reviewer memory for preventable bad practices instead of encoding them into harness or hook checks
 
 ## Expectations For Claims
 

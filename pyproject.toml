@@ -19,6 +19,7 @@ mlx-runtime-server = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "coverage[toml]>=7.10.0",
     "httpx>=0.28.0",
     "fastapi>=0.115.0",
     "mlx-runtime-cli",
@@ -44,3 +45,11 @@ extend-select = ["I"]
 python_version = "3.12"
 strict = true
 files = ["packages", "tests", "scripts"]
+
+[tool.coverage.run]
+branch = true
+source = ["packages"]
+
+[tool.coverage.report]
+fail_under = 85
+omit = ["tests/*"]

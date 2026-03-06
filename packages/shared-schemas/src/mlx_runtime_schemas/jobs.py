@@ -46,11 +46,26 @@ class JobOutputPolicy(BaseModel):
     stream: bool = False
 
 
+class InputImportRequest(BaseModel):
+    content_base64: str
+    media_type: str | None = None
+    role: str | None = None
+    filename: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class InputHandle(BaseModel):
     handle_id: str
     media_type: str | None = None
     role: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class InputHandleRecord(InputHandle):
+    filename: str | None = None
+    size_bytes: int | None = None
+    storage_key: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ArtifactHandle(BaseModel):
@@ -59,6 +74,26 @@ class ArtifactHandle(BaseModel):
     role: str = "result"
     exportable: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class OutputArtifactRecord(ArtifactHandle):
+    job_id: str
+    filename: str | None = None
+    media_type: str | None = None
+    size_bytes: int | None = None
+    storage_key: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ArtifactExportRequest(BaseModel):
+    destination_path: str
+    overwrite: bool = False
+
+
+class ArtifactExportResult(BaseModel):
+    artifact_id: str
+    destination_path: str
+    size_bytes: int | None = None
 
 
 class JobRequest(BaseModel):
@@ -85,4 +120,9 @@ class JobRecord(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     error: str | None = None
-    artifacts: list[ArtifactHandle] = Field(default_factory=list)
+    artifacts: list[OutputArtifactRecord] = Field(default_factory=list)
+
+
+class JobSubmitResult(BaseModel):
+    job_id: str
+    record: JobRecord

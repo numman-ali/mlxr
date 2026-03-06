@@ -128,6 +128,8 @@ uv run python scripts/dev.py logs
 uv run pre-commit run --all-files
 ```
 
+`verify` is the main acceptance gate. It runs formatting, linting, strict typing, the repo-owned type-escape check, the `unittest` suite under `coverage.py`, enforces the current `85%` package coverage floor, and builds all workspace packages.
+
 Only directories under `packages/` that contain real Python package metadata are workspace members. Placeholder adapter folders stay outside the workspace until they gain their own `pyproject.toml`.
 
 Repo operating docs:

@@ -37,7 +37,9 @@ Runs the required pre-commit gate:
 - `ruff format --check packages tests scripts`
 - `ruff check packages tests scripts`
 - `mypy --strict packages tests scripts`
-- `python -m unittest discover -s tests -v`
+- `python scripts/check_type_escapes.py`
+- `coverage run -m unittest discover -s tests -v`
+- `coverage report` with the current repo floor set to `85%` line coverage across `packages/`
 - `uv build --all-packages`
 
 Do not commit without a green `verify`.
@@ -50,6 +52,7 @@ Do not commit without a green `verify`.
 - EOF normalization
 - `ruff check --fix`
 - `ruff format`
+- `python scripts/check_type_escapes.py`
 
 It is a convenience mirror, not the primary acceptance gate.
 
@@ -67,7 +70,9 @@ Use it when:
 
 - `ruff` is the formatter and linter
 - `mypy --strict` is the type gate
+- `check_type_escapes.py` forbids `typing.cast` and explicit `Any` in the agent-facing runtime and test surfaces covered by the script
 - `unittest` is the current test runner
+- `coverage.py` enforces the current line-coverage floor for repo-owned Python packages
 - `uv build --all-packages` is the build gate
 
 Do not add parallel quality tools without a concrete reason.

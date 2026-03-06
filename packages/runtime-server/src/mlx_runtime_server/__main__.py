@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import os
-
 import uvicorn
 from mlx_runtime_core import RuntimeHome
 
-from .app import app
+from .app import create_app
+from .settings import ServerSettings
+from .state import RuntimeState
 
 
 def main() -> None:
-    http_host = os.environ.get("MLX_RUNTIME_HTTP_HOST")
-    http_port = int(os.environ.get("MLX_RUNTIME_HTTP_PORT", "46321"))
-    if http_host:
-        uvicorn.run(app, host=http_host, port=http_port)
+    settings = ServerSettings.from_env()
+    settings.validate_startup()
+    state = RuntimeState(settings=settings)
+    app = create_app(state)
+    if settings.http_enabled and settings.http_host is not None:
+        uvicorn.run(app, host=settings.http_host, port=settings.http_port)
         return
 
     runtime_home = RuntimeHome.from_env()

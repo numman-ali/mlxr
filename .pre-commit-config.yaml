@@ -17,3 +17,8 @@ repos:
         entry: uv run ruff format
         language: system
         types_or: [python, pyi]
+      - id: type-escapes
+        name: forbid type escapes
+        entry: uv run python scripts/check_type_escapes.py
+        language: system
+        pass_filenames: false

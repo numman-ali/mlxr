@@ -100,6 +100,13 @@ The Hugging Face provider path must support:
 
 The runtime should prefer immutable references to provider-managed cache entries rather than copying everything into a private source cache tree.
 
+Current scaffold notes:
+
+- the initial auth mapping supports `auth.token_ref = "hf-default"` only
+- `hf-default` resolves from the local `HF_TOKEN` environment variable
+- fetch materialization is a provider-cache-backed snapshot path, not a private source copy
+- remote-code requirement detection is currently best-effort and records its confidence in provenance metadata
+
 ## Local Filesystem Requirements
 
 Trusted local bundles need:

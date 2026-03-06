@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Core contracts and registry for MLXR"
 requires-python = ">=3.12"
 dependencies = [
+    "huggingface_hub>=0.36.0",
     "mlx-runtime-schemas",
 ]
 

@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from mlx_runtime_core import (
+    HuggingFaceProviderAdapter,
+    LocalFileProviderAdapter,
+    RuntimeRegistry,
+)
+from mlx_runtime_family_ltx import LTXFamilyAdapter
+
+
+def default_runtime_registry() -> RuntimeRegistry:
+    registry = RuntimeRegistry()
+    registry.register_provider(LocalFileProviderAdapter())
+    registry.register_provider(HuggingFaceProviderAdapter())
+    registry.register_family(LTXFamilyAdapter())
+    return registry
