@@ -17,7 +17,6 @@ from mlx_runtime_schemas import (
 
 from .contracts import (
     ConversionPlan,
-    FetchPolicy,
     ModelFamilyAdapter,
     PortableArtifact,
     SourceProviderAdapter,
@@ -64,9 +63,8 @@ class RuntimeCatalog:
         provenance = provider.provenance(resolved)
         family_inspection = None
         if source_ref.family_hint:
-            materialization = provider.fetch(resolved, FetchPolicy())
             family = self._family(source_ref.family_hint)
-            family_result = family.inspect_source(materialization)
+            family_result = family.inspect_source(resolved)
             family_inspection = FamilyInspectionResult(
                 family=family_result.family,
                 variant=family_result.variant,
@@ -131,7 +129,8 @@ class RuntimeCatalog:
 
         provider = self._provider(source_record.source.provider)
         family = self._family(family_id)
-        materialization = provider.fetch(source_record.resolved_source, FetchPolicy())
+        fetch_policy = family.fetch_policy_for_conversion(source_record.resolved_source)
+        materialization = provider.fetch(source_record.resolved_source, fetch_policy)
         artifact = family.convert(
             materialization,
             ConversionPlan(

@@ -230,6 +230,7 @@ class HuggingFaceProviderAdapter:
                 "private": bool(getattr(model_info, "private", False)),
                 "gated": bool(getattr(model_info, "gated", False)),
                 "auth_token_ref": source_ref.auth.token_ref,
+                "remote_code_approved": source_ref.policy.allow_remote_code,
                 **remote_code_metadata,
             },
         )
@@ -327,7 +328,9 @@ class HuggingFaceProviderAdapter:
             license=resolved.license,
             access_state=resolved.access_state,
             remote_code_required=resolved.remote_code_required,
-            remote_code_approved=False,
+            remote_code_approved=bool(
+                resolved.metadata.get("remote_code_approved", False)
+            ),
             metadata=metadata,
         )
 

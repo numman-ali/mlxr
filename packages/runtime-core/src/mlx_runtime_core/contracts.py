@@ -113,7 +113,9 @@ class SourceProviderAdapter(Protocol):
 class ModelFamilyAdapter(Protocol):
     family_id: str
 
-    def inspect_source(self, source: SourceMaterialization) -> FamilyInspection: ...
+    def inspect_source(self, source: ResolvedSource) -> FamilyInspection: ...
+
+    def fetch_policy_for_conversion(self, source: ResolvedSource) -> FetchPolicy: ...
 
     def convert(
         self, source: SourceMaterialization, plan: ConversionPlan

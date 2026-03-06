@@ -9,6 +9,7 @@ from mlx_runtime_core import (
     ExecutionProfile,
     ExecutionStage,
     FamilyInspection,
+    FetchPolicy,
     LoadedModelHandle,
     PortableArtifact,
     SourceMaterialization,
@@ -21,13 +22,14 @@ from mlx_runtime_schemas import (
     HardwareTier,
     PolicyDescriptor,
     PortableArtifactRecord,
+    ResolvedSource,
 )
 
 
 class LTXFamilyAdapter:
     family_id = "ltx"
 
-    def inspect_source(self, source: SourceMaterialization) -> FamilyInspection:
+    def inspect_source(self, source: ResolvedSource) -> FamilyInspection:
         return FamilyInspection(
             family=self.family_id,
             variant="fast",
@@ -35,7 +37,23 @@ class LTXFamilyAdapter:
             scheduler_class="media_video_dit",
             metadata={
                 "status": "scaffold",
-                "source_provider": source.resolved.provider,
+                "source_provider": source.provider,
+            },
+        )
+
+    def fetch_policy_for_conversion(self, source: ResolvedSource) -> FetchPolicy:
+        return FetchPolicy(
+            allow_patterns=(
+                "*.json",
+                "*.safetensors",
+                "*.txt",
+                "*.model",
+                "*.tiktoken",
+            ),
+            options={
+                "family": self.family_id,
+                "reason": "ltx-fast-conversion",
+                "strict_local_text_encoding": True,
             },
         )
 

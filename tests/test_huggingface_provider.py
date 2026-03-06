@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mlx_runtime_core import FetchPolicy, HuggingFaceProviderAdapter
-from mlx_runtime_schemas import SourceAuth, SourceRef
+from mlx_runtime_schemas import SourceAuth, SourcePolicy, SourceRef
 
 
 class FakeHfApi:
@@ -38,6 +38,7 @@ class HuggingFaceProviderTests(unittest.TestCase):
         source_ref = SourceRef(
             provider="huggingface",
             locator={"repo": "example/model", "revision": "main"},
+            policy=SourcePolicy(allow_remote_code=True),
         )
 
         resolved = provider.resolve(source_ref)
@@ -49,6 +50,7 @@ class HuggingFaceProviderTests(unittest.TestCase):
         self.assertTrue(resolved.remote_code_required)
         self.assertEqual(inspection.bytes_total, 133)
         self.assertEqual(provenance.license, "other")
+        self.assertTrue(provenance.remote_code_approved)
         self.assertEqual(provenance.metadata["remote_code_detection_confidence"], "low")
 
     def test_fetch_uses_snapshot_download_with_allow_patterns(self) -> None:

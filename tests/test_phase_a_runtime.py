@@ -11,13 +11,24 @@ os.environ.setdefault(
 
 from fastapi.testclient import TestClient
 from mlx_runtime_core import (
+    FetchPolicy,
     LocalFileProviderAdapter,
+    ProviderInspection,
+    RuntimeCatalog,
     RuntimeHome,
     RuntimeRegistry,
+    SourceMaterialization,
     source_id_for_ref,
 )
 from mlx_runtime_family_ltx import LTXFamilyAdapter
-from mlx_runtime_schemas import SourceRef
+from mlx_runtime_schemas import (
+    ArtifactConversionRequest,
+    AuthRequirements,
+    ProvenanceRecord,
+    ResolvedSource,
+    SourceFileRecord,
+    SourceRef,
+)
 from mlx_runtime_server.app import create_app
 from mlx_runtime_server.state import RuntimeState
 
@@ -34,6 +45,63 @@ def make_state(tmp_path: Path) -> RuntimeState:
         registry=make_registry(),
         runtime_home=RuntimeHome(root=tmp_path / "runtime-home"),
     )
+
+
+class RecordingProvider:
+    provider_id = "fake"
+
+    def __init__(self, *, allow_fetch: bool = True) -> None:
+        self.allow_fetch = allow_fetch
+        self.fetch_calls: list[FetchPolicy] = []
+
+    def resolve(self, source_ref: SourceRef) -> ResolvedSource:
+        return ResolvedSource(
+            provider=self.provider_id,
+            locator=source_ref.locator,
+            pinned_ref="fake-revision",
+            access_state="public",
+            auth_requirements=AuthRequirements(),
+            files=[
+                SourceFileRecord(path="config.json", size_bytes=12),
+                SourceFileRecord(path="weights.safetensors", size_bytes=128),
+            ],
+            metadata={"remote_code_approved": source_ref.policy.allow_remote_code},
+        )
+
+    def inspect(self, resolved: ResolvedSource) -> ProviderInspection:
+        return ProviderInspection(
+            resolved=resolved,
+            bytes_total=sum(file.size_bytes or 0 for file in resolved.files),
+            metadata={"file_count": len(resolved.files)},
+        )
+
+    def auth_requirements(self, source_ref: SourceRef) -> AuthRequirements:
+        return AuthRequirements()
+
+    def fetch(
+        self, resolved: ResolvedSource, policy: FetchPolicy
+    ) -> SourceMaterialization:
+        if not self.allow_fetch:
+            raise AssertionError("inspect_source should not fetch provider contents")
+        self.fetch_calls.append(policy)
+        return SourceMaterialization(
+            resolved=resolved,
+            provenance=self.provenance(resolved),
+            materialization_mode="provider-cache-ref",
+            metadata={"allow_patterns": list(policy.allow_patterns)},
+        )
+
+    def provenance(self, resolved: ResolvedSource) -> ProvenanceRecord:
+        return ProvenanceRecord(
+            provider=resolved.provider,
+            locator=resolved.locator,
+            resolved_ref=resolved.pinned_ref,
+            access_state=resolved.access_state,
+            remote_code_required=resolved.remote_code_required,
+            remote_code_approved=bool(
+                resolved.metadata.get("remote_code_approved", False)
+            ),
+        )
 
 
 class PhaseARuntimeTests(unittest.TestCase):
@@ -257,6 +325,61 @@ class PhaseARuntimeTests(unittest.TestCase):
 
             self.assertEqual(first_convert.status_code, 200)
             self.assertEqual(second_convert.status_code, 409)
+
+    def test_family_inspection_does_not_fetch_provider_contents(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            registry = RuntimeRegistry()
+            provider = RecordingProvider(allow_fetch=False)
+            registry.register_provider(provider)
+            registry.register_family(LTXFamilyAdapter())
+            catalog = RuntimeCatalog(
+                registry=registry,
+                runtime_home=RuntimeHome(root=Path(tmp_dir) / "runtime-home"),
+            )
+
+            inspection = catalog.inspect_source(
+                SourceRef(
+                    provider="fake",
+                    locator={"repo": "example/model"},
+                    family_hint="ltx",
+                )
+            )
+
+            self.assertIsNotNone(inspection.family_inspection)
+            self.assertEqual(provider.fetch_calls, [])
+
+    def test_convert_uses_family_fetch_policy_for_selective_materialization(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            registry = RuntimeRegistry()
+            provider = RecordingProvider()
+            registry.register_provider(provider)
+            registry.register_family(LTXFamilyAdapter())
+            catalog = RuntimeCatalog(
+                registry=registry,
+                runtime_home=RuntimeHome(root=Path(tmp_dir) / "runtime-home"),
+            )
+
+            source_record = catalog.register_source(
+                SourceRef(
+                    provider="fake",
+                    locator={"repo": "example/model"},
+                    family_hint="ltx",
+                )
+            )
+            catalog.convert_artifact(
+                ArtifactConversionRequest(
+                    source_id=source_record.source_id,
+                    model_id="ltx-2.3-fast-local",
+                )
+            )
+
+            self.assertEqual(len(provider.fetch_calls), 1)
+            fetch_policy = provider.fetch_calls[0]
+            self.assertIn("*.json", fetch_policy.allow_patterns)
+            self.assertIn("*.safetensors", fetch_policy.allow_patterns)
+            self.assertTrue(fetch_policy.options["strict_local_text_encoding"])
 
     def test_control_plane_logging_writes_runtime_log(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
