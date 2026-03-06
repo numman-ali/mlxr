@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Local runtime and temp state
+tmp/
+tmp/**
+*.log
+
+# Benchmarks and generated outputs
+benchmarks/output/
+benchmarks/results/
+
+# External reference repos are intentionally local-only
+references/official/
+references/ecosystem/
+
+# Keep top-level docs and placeholders only
+!references/README.md

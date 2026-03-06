@@ -1,0 +1,13 @@
+[project]
+name = "mlx-runtime-family-ltx"
+version = "0.1.0"
+description = "LTX family adapter scaffold for MLXR"
+requires-python = ">=3.12"
+dependencies = [
+    "mlx-runtime-core",
+    "mlx-runtime-schemas",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

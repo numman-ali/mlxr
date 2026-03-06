@@ -1,0 +1,15 @@
+[project]
+name = "mlx-runtime-server"
+version = "0.1.0"
+description = "FastAPI daemon scaffold for MLXR"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "mlx-runtime-core",
+    "mlx-runtime-schemas",
+    "uvicorn>=0.30.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
