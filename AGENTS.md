@@ -81,8 +81,28 @@ When choosing the next step:
 - prefer fixing the development loop before building new features
 - prefer platform blockers before host polish
 - continue autonomously unless blocked by a real product or architecture tradeoff
+- recommend one next step clearly instead of defaulting to an unprioritized dump of possibilities
 
 Autonomous continuation means deriving the next move from the repo, not inventing random scope.
+
+When reporting the next step back to the user:
+
+- start with a short plain-English recommendation
+- connect the recommendation to the current phase, product goal, or repo gap it closes
+- use code and doc references as support, not as the opening move
+- keep the first answer orienting; add deeper implementation evidence after the user understands the direction
+
+## Repo Communication Defaults
+
+When explaining repo status, architecture, tradeoffs, or implementation progress:
+
+- orient first, then substantiate
+- start with the direct answer in plain English before diving into file-level evidence
+- connect low-level details back to what they mean for `MLXR` as a platform or proving path
+- prefer one clear recommendation over a neutral wall of technically correct observations
+- use file references to support claims, not to carry the whole explanation
+- when a system shape is hard to picture, offer a compact mental model or ASCII diagram
+- optimize for clarity and cognitive load, especially when the user is asking for orientation rather than a code review
 
 ## Non-Negotiable Mindset
 
