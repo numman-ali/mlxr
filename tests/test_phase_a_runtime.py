@@ -10,7 +10,6 @@ os.environ.setdefault(
 )
 
 from fastapi.testclient import TestClient
-
 from mlx_runtime_core import (
     LocalFileProviderAdapter,
     RuntimeHome,
@@ -258,6 +257,31 @@ class PhaseARuntimeTests(unittest.TestCase):
 
             self.assertEqual(first_convert.status_code, 200)
             self.assertEqual(second_convert.status_code, 409)
+
+    def test_control_plane_logging_writes_runtime_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = root / "ltx-bundle"
+            source_dir.mkdir()
+            (source_dir / "weights.safetensors").write_text("bundle", encoding="utf-8")
+
+            state = make_state(root)
+            with TestClient(create_app(state)) as client:
+                response = client.post(
+                    "/v1/sources/register",
+                    json={
+                        "provider": "local",
+                        "locator": {"path": str(source_dir)},
+                        "family_hint": "ltx",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+
+            log_path = state.runtime_home.logs_dir / "control-plane.log"
+            self.assertTrue(log_path.exists())
+            content = log_path.read_text(encoding="utf-8")
+            self.assertIn("Control-plane app startup", content)
+            self.assertIn("Source registered", content)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,21 @@ dev = [
     "mlx-runtime-family-ltx",
     "mlx-runtime-schemas",
     "mlx-runtime-server",
+    "mypy>=1.18.0",
+    "pre-commit>=4.3.0",
     "pydantic>=2.10.0",
+    "ruff>=0.14.0",
     "typing-extensions>=4.12.0",
     "uvicorn>=0.30.0",
 ]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["packages", "tests", "scripts"]

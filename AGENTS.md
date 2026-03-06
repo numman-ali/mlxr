@@ -2,31 +2,45 @@
 
 ## Purpose
 
-This file is the repo-local operating doctrine for any agent working in this workspace.
+This file is the first-read operating doctrine for any agent working in this repo.
 
-It should do four jobs:
+It should do five jobs:
 
-1. explain what this project is
-2. explain how to start work without drifting into stale assumptions
-3. explain how to think and make decisions here
-4. preserve durable repo-operating knowledge across sessions
+1. set the mindset for `MLXR`
+2. define the agent-native operating model
+3. define the mandatory dev loop
+4. point to the real source-of-truth docs
+5. stop stale assumptions from re-entering the codebase
 
-Treat this file as repo memory with teeth. It is not marketing copy.
+This file is not a diary, not marketing copy, and not a soft suggestion.
 
 ## Project Identity
 
-This repository is the implementation and research home for `MLXR`, an MLX-native local runtime on Apple Silicon.
-
 `MLXR` means `MLX Runtime`.
 
-The project has two connected tracks:
+This repository is the implementation and research home for a local-first MLX runtime on Apple Silicon.
+
+It has two connected tracks:
 
 1. Platform track
-   Build a reusable Apple Silicon runtime with provider resolution, provenance, portable artifacts, machine-local build cache, scheduling, security, and host surfaces.
+   Build a reusable runtime with provider resolution, provenance, portable artifacts, machine-local build cache, scheduling, security, and multiple host surfaces.
 2. Product track
    Prove the platform on `LTX-2.3 Fast` first, then validate it across additional families before claiming stability.
 
-This repo is not “an LTX Mac port.” LTX is the first proving workload, not the identity of the platform.
+This repo is not “an LTX Mac port.” LTX is the first proving workload, not the platform identity.
+
+## Agent-Native Doctrine
+
+This repository is operated as an agent-native codebase.
+
+That means:
+
+- repo-tracked implementation work is expected to be executed by Codex through this channel
+- the human sets direction, priorities, taste, and review criteria
+- Codex owns implementation, formatting, linting, tests, type checks, build checks, logs, and local validation
+- Codex should escalate for judgment, tradeoffs, or ambiguity, not for routine execution
+
+Humans may inspect or edit files, but the default operating model is still agent-executed end to end. Do not optimize this repo around a human manually hopping between editor, formatter, test runner, logs, and build commands.
 
 ## Non-Negotiable Mindset
 
@@ -37,10 +51,11 @@ This repo is not “an LTX Mac port.” LTX is the first proving workload, not t
 - Prefer shared runtime logic over host-specific inference copies.
 - Prefer Apple-specific realism over generic local-serving assumptions.
 
-When in doubt:
+When uncertain:
 
-- re-check upstream docs or code
-- re-check the benchmark and validation docs
+- re-check current code
+- re-check current docs
+- re-check current upstream sources
 - downgrade certainty instead of bluffing
 
 ## What Must Not Be Assumed
@@ -48,26 +63,62 @@ When in doubt:
 Do not assume any of the following unless the docs or measurements have been refreshed:
 
 - that the public API is fixed
-- that build or compile outputs are portable artifacts
+- that compile outputs are portable artifacts
 - that `localhost` is a sufficient trust boundary
-- that raw file paths belong in the generic HTTP contract
+- that raw file paths belong in the universal HTTP contract
 - that Hugging Face-shaped flows equal provider universality
-- that Swift is a “later only” concern
-- that LTX alone is enough to validate a universal runtime
+- that Swift is “later only”
+- that LTX alone validates a universal runtime
 
 ## Current Architecture Defaults
 
 - Core runtime language: `Python`
-- Core compute substrate: `official MLX`
-- Preferred external transport on macOS: `Unix domain socket`
-- Canonical external shape: `local job-oriented daemon`
-- Execution shape: `control-plane daemon + workers`
-- Host strategy: `thin adapters`
-- Native hotspot seam: `MLX compile`, `mx.fast.*`, `custom Metal kernels`, `MLX extensions`
+- Core compute substrate: official `MLX`
+- Preferred macOS transport: Unix domain socket
+- Canonical external shape: local job-oriented daemon
+- Execution shape: control-plane daemon plus workers
+- Host strategy: thin adapters
+- Native hotspot seam: `MLX compile`, `mx.fast.*`, custom Metal kernels, `MLX` extensions
 - Swift role: early at the host boundary, not as the v1 family bring-up language
 - Rust role: optional and non-core
 
-These are defaults, not eternal truths. If evidence changes them, update the docs and this file together.
+These are defaults, not frozen truths. If evidence changes them, update the docs and this file together.
+
+## Hard Technical Invariants
+
+- Do not reintroduce raw file paths into the generic HTTP contract.
+- Do not blur source references, portable artifacts, and machine-local build cache.
+- Do not let host adapters own inference logic.
+- Do not treat benchmark-free claims as settled architecture.
+- Do not move hotspots into native code before profiling evidence exists.
+- Do not let compatibility facades become the de facto core API.
+
+## Mandatory Dev Loop
+
+Every non-trivial code change should follow this loop:
+
+1. Read the relevant code and docs first.
+2. Make the change.
+3. Run the local harness.
+4. If the change affects runtime behavior, inspect logs as part of validation.
+5. Update docs if repo truth changed.
+6. Commit only from a green state.
+
+The default quality gate for this repo is the local harness, not intuition.
+
+## Done Definition
+
+A change is not done until all of the following are true:
+
+- the implementation is complete enough for the requested scope
+- formatting passes
+- linting passes
+- type checks pass
+- tests pass
+- package builds pass
+- runtime logs were checked when runtime behavior changed
+- docs were updated when repo truth changed
+- remaining uncertainty is called out explicitly instead of hidden
 
 ## Where To Start
 
@@ -107,71 +158,7 @@ If those disagree:
 
 - do not silently pick one
 - reconcile the difference
-- update the docs if the repo’s stated position is now stale
-
-## Reference Repo Rules
-
-### `references/official/`
-
-Use for highest-authority upstream repos maintained by the original authors or organization.
-
-Examples:
-
-- `ml-explore/*`
-- `Lightricks/*`
-
-### `references/ecosystem/`
-
-Use for strong community projects that inform:
-
-- serving patterns
-- conversion strategies
-- model-family feasibility
-- optimization ideas
-
-These are valuable inputs, not default truth over first-party sources.
-
-These reference repos are intentionally gitignored and not part of the authored source tree.
-
-## Durable Repo Rules
-
-### Platform versus product
-
-Keep platform and product thinking separate.
-
-- Platform track asks: what is reusable, truthful, secure, and benchmarkable?
-- Product track asks: how do we make the first real user path excellent?
-
-Do not let LTX urgency freeze the wrong platform decisions.
-
-### Portability classes
-
-Keep these distinct:
-
-1. source references and provenance
-2. portable converted artifacts
-3. machine-local build cache
-
-If a change blurs these together, it is probably wrong.
-
-### Security
-
-Default assumptions:
-
-- UDS first
-- HTTP opt-in
-- mandatory auth on mutating HTTP routes
-- browser-origin protections when HTTP exists
-- handle-based generic API
-- `trust_remote_code` off by default
-
-### Capability honesty
-
-Hosts must learn constraints, outputs, profiles, hardware tiers, and policy from the runtime, not from scattered README text.
-
-### Benchmark honesty
-
-No architectural claim is stable until it survives the benchmark matrix and cross-family validation.
+- update the docs if the repo’s stated position is stale
 
 ## What Good Work Looks Like
 
@@ -196,18 +183,7 @@ Bad work in this repo usually looks like:
 
 ## Expectations For Claims
 
-Any meaningful claim about:
-
-- hardware support
-- memory requirements
-- speedups
-- quantization quality
-- output-path improvements
-- batching gains
-- provider support
-- compatibility
-
-must be tied to one of:
+Any meaningful claim about hardware, memory, speed, quantization, output-path wins, batching, provider support, or compatibility must be tied to one of:
 
 - a primary-source constraint
 - a local benchmark
@@ -215,64 +191,37 @@ must be tied to one of:
 
 If it is still uncertain, capture it in [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md).
 
-## Expectations For Editing Docs
+## Skills Policy
 
-When repo-level truth changes, update:
+`AGENTS.md` covers the common path and should remain enough for the majority of sessions.
 
-- the relevant design doc
-- any affected ADR
-- `README.md` if the change affects project framing
-- this `AGENTS.md` if the change affects how future agents should operate
+Create or use a skill when:
 
-Do not leave repo-operating rules stranded only in conversation context.
+- a workflow is repeated often enough to justify a deterministic recipe
+- a vertical needs its own operating style, such as debugging, benchmarking, or release hygiene
+- the task benefits from bundled scripts, references, or assets
 
-## Policy For Updating AGENTS.md
+Do not move the core repo doctrine out of `AGENTS.md`. Skills are just-in-time capability overlays, not the primary constitution of the repo.
 
-Agents are allowed to update this file when one of these is true:
+Repo-owned skills should live under `skills/`.
 
-- the project identity changed
-- the repo structure changed
-- the architecture defaults changed
-- the source-of-truth order changed
+## Supporting Docs
+
+Use these support docs when you need the deeper operational details:
+
+- [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
+- [dev-harness.md](/Users/numman/Repos/mlxr/docs/dev-harness.md)
+- [skill-policy.md](/Users/numman/Repos/mlxr/docs/skill-policy.md)
+
+## Policy For Updating This File
+
+Update `AGENTS.md` when one of these becomes true:
+
+- project identity changed
+- repo structure changed
+- architecture defaults changed
+- source-of-truth order changed
 - a repeated agent mistake exposed missing operational guidance
-- new memory or workflow guidance would materially help future sessions
+- the mandatory dev loop changed
 
-Agents should not update this file for vanity, tone polishing, or speculative future ideas that are not yet repo reality.
-
-If you update `AGENTS.md`, keep it:
-
-- durable
-- operational
-- short enough to be read on entry
-- aligned with the actual docs
-
-## Memory Guidance
-
-If a persistent memory system is available, this repo should be treated as a long-lived project entity.
-
-Durable items worth writing to memory:
-
-- repo identity and any rename
-- frozen architectural decisions
-- provider and security model decisions
-- benchmark-backed hardware truths
-- high-value user preferences specific to this repo
-- known traps or repeated failure modes
-
-Do not rely on temporary session context to preserve those.
-
-When memory is updated, prefer storing:
-
-- concise project summaries
-- durable facts
-- superseding decisions rather than deleting older ones
-
-## Rename Guidance
-
-If the parent directory is renamed again away from `mlxr`, update:
-
-- `README.md`
-- this file
-- any plan or memory entry that still uses the old name as if it were the project identity
-
-The rename should make the platform sound broader than LTX while still sounding concrete and technical.
+Do not update it for vanity, tone polishing, or speculative future ideas that are not yet repo reality.

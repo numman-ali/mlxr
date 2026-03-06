@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, HTTPException
 from mlx_runtime_core import (
     CatalogConflictError,
     CatalogNotFoundError,
@@ -18,16 +20,34 @@ from mlx_runtime_schemas import (
     SourceRegistrationRecord,
 )
 
+from .logging import get_control_plane_logger
 from .state import RuntimeState
 
 
 def create_app(state: RuntimeState | None = None) -> FastAPI:
     runtime = state or RuntimeState()
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        logger = get_control_plane_logger()
+        logger.info(
+            "Control-plane app startup transport_default=uds runtime_home=%s",
+            runtime.runtime_home.root,
+        )
+        try:
+            yield
+        finally:
+            logger.info(
+                "Control-plane app shutdown runtime_home=%s", runtime.runtime_home.root
+            )
+
     app = FastAPI(
         title="MLXR Control Plane",
         description="Provider and family-aware local runtime scaffold for MLXR",
         version="0.1.0",
+        lifespan=lifespan,
     )
+    logger = get_control_plane_logger()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -44,19 +64,52 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
     @app.post("/v1/sources/inspect", response_model=SourceInspectionResult)
     def inspect_source(source_ref: SourceRef) -> SourceInspectionResult:
         try:
-            return runtime.catalog.inspect_source(source_ref)
+            result = runtime.catalog.inspect_source(source_ref)
+            logger.info(
+                "Source inspected provider=%s family_hint=%s",
+                source_ref.provider,
+                source_ref.family_hint,
+            )
+            return result
         except CatalogNotFoundError as exc:
+            logger.warning(
+                "Source inspect failed not_found provider=%s error=%s",
+                source_ref.provider,
+                exc,
+            )
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            logger.warning(
+                "Source inspect failed validation provider=%s error=%s",
+                source_ref.provider,
+                exc,
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/sources/register", response_model=SourceRegistrationRecord)
     def register_source(source_ref: SourceRef) -> SourceRegistrationRecord:
         try:
-            return runtime.catalog.register_source(source_ref)
+            result = runtime.catalog.register_source(source_ref)
+            logger.info(
+                "Source registered source_id=%s provider=%s family_hint=%s",
+                result.source_id,
+                result.source.provider,
+                result.family_hint,
+            )
+            return result
         except CatalogNotFoundError as exc:
+            logger.warning(
+                "Source register failed not_found provider=%s error=%s",
+                source_ref.provider,
+                exc,
+            )
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            logger.warning(
+                "Source register failed validation provider=%s error=%s",
+                source_ref.provider,
+                exc,
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/v1/sources", response_model=list[SourceRegistrationRecord])
@@ -75,12 +128,40 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
         request: ArtifactConversionRequest,
     ) -> ArtifactConversionResult:
         try:
-            return runtime.catalog.convert_artifact(request)
+            result = runtime.catalog.convert_artifact(request)
+            logger.info(
+                "Artifact converted source_id=%s model_id=%s artifact_digest=%s family=%s",
+                request.source_id,
+                result.model.model_id,
+                result.artifact.artifact_digest,
+                result.model.family,
+            )
+            logger.info(
+                "Model registered model_id=%s artifact_digest=%s",
+                result.model.model_id,
+                result.artifact.artifact_digest,
+            )
+            return result
         except CatalogNotFoundError as exc:
+            logger.warning(
+                "Artifact convert failed not_found source_id=%s error=%s",
+                request.source_id,
+                exc,
+            )
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except CatalogConflictError as exc:
+            logger.warning(
+                "Artifact convert failed conflict model_id=%s error=%s",
+                request.model_id,
+                exc,
+            )
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            logger.warning(
+                "Artifact convert failed validation model_id=%s error=%s",
+                request.model_id,
+                exc,
+            )
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/v1/artifacts", response_model=list[PortableArtifactRecord])

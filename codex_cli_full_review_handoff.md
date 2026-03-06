@@ -1,7 +1,7 @@
 # Rewrite Brief for GPT-5.4 Codex CLI: Universal MLX Runtime / LTX Platform
 
-**Audience:** the GPT-5.4 Codex CLI agent that authored the current docs  
-**Purpose:** rewrite brief, not a polite review  
+**Audience:** the GPT-5.4 Codex CLI agent that authored the current docs
+**Purpose:** rewrite brief, not a polite review
 **Verified against current public sources:** 2026-03-06
 
 ---
@@ -480,7 +480,7 @@ This should have changed the artifact and scheduler design immediately.
 
 ### 2. Machine-local kernel build/JIT behavior
 
-The current pack talks about custom Metal kernels as if they are just “later if needed.”  
+The current pack talks about custom Metal kernels as if they are just “later if needed.”
 What is missing is the operational implication:
 
 - kernel creation/build/JIT has a cold-path cost
@@ -536,7 +536,7 @@ At minimum, the rewrite must cover:
 
 ### 6. Worker-process topology
 
-The current docs implicitly push too much into one daemon process.  
+The current docs implicitly push too much into one daemon process.
 There is almost no analysis of a control-plane daemon plus per-family or per-job workers, even though that design obviously helps with:
 
 - crash isolation
@@ -593,7 +593,7 @@ Right now it gestures at both and proves neither completely.
 
 ### Alternative 1: Control-plane daemon + per-family Python workers
 
-**Description**  
+**Description**
 A thin daemon owns model registry, source/artifact indexes, auth, scheduling, and job state. Actual execution happens in family-specific Python workers.
 
 **Better**
@@ -608,15 +608,15 @@ A thin daemon owns model registry, source/artifact indexes, auth, scheduling, an
 - more IPC and orchestration complexity
 - slightly higher cold-start overhead
 
-**Recommendation**  
-**Adopt partially.**  
+**Recommendation**
+**Adopt partially.**
 Make this the preferred execution topology, even if a simple in-process mode exists for early bring-up.
 
 ---
 
 ### Alternative 2: Shared core library + optional daemon wrapper
 
-**Description**  
+**Description**
 There is one shared runtime core. External tools use the daemon. First-party Apple apps may embed the core directly or through a shared framework.
 
 **Better**
@@ -628,15 +628,15 @@ There is one shared runtime core. External tools use the daemon. First-party App
 **Worse**
 - risk of policy drift if embedded callers bypass daemon-enforced lifecycle rules
 
-**Recommendation**  
-**Partially adopt.**  
+**Recommendation**
+**Partially adopt.**
 Keep the daemon as the canonical external surface, but do not design the core so tightly around “daemon only” that first-party embedding becomes awkward.
 
 ---
 
 ### Alternative 3: Content-addressable internal store + user-facing HF-like layout
 
-**Description**  
+**Description**
 Internally store blobs and manifests content-addressably. Externally support familiar HF-style portable artifact folders where useful.
 
 **Better**
@@ -650,15 +650,15 @@ Internally store blobs and manifests content-addressably. Externally support fam
 - more implementation complexity
 - less immediately familiar to users than a plain folder story
 
-**Recommendation**  
-**Adopt internally.**  
+**Recommendation**
+**Adopt internally.**
 Do not force users to see the complexity, but stop pretending a simple folder tree is the whole storage model.
 
 ---
 
 ### Alternative 4: Explicit platform track and product track
 
-**Description**  
+**Description**
 Separate the universal runtime/platform work from the LTX product integration work.
 
 **Better**
@@ -669,8 +669,8 @@ Separate the universal runtime/platform work from the LTX product integration wo
 **Worse**
 - coordination overhead
 
-**Recommendation**  
-**Adopt.**  
+**Recommendation**
+**Adopt.**
 This is the cleanest correction to the current pack.
 
 ---
@@ -805,7 +805,7 @@ The rewrite should explicitly cover:
 
 ### Rewrite instruction
 
-The optimization docs should stop pretending that one ladder fits all families.  
+The optimization docs should stop pretending that one ladder fits all families.
 Rewrite them into:
 
 - **production baseline**
@@ -1221,19 +1221,19 @@ The current doc set is missing several architecture records that should exist be
 
 ### Required new ADRs
 
-1. **`docs/adr/0001-source-provider-adapter.md`**  
+1. **`docs/adr/0001-source-provider-adapter.md`**
    Why provider abstraction exists, what v1 supports, and how provenance/auth/license are modeled.
 
-2. **`docs/adr/0002-artifact-vs-build-cache.md`**  
+2. **`docs/adr/0002-artifact-vs-build-cache.md`**
    Defines portability classes and explicitly states that build cache / compile cache are machine-local.
 
-3. **`docs/adr/0003-local-security-model.md`**  
+3. **`docs/adr/0003-local-security-model.md`**
    Defines transport modes, UDS vs HTTP, auth requirements, browser-origin validation, file-handle model, and `trust_remote_code` policy.
 
-4. **`docs/adr/0004-worker-process-topology.md`**  
+4. **`docs/adr/0004-worker-process-topology.md`**
    Defines control-plane daemon vs execution workers and failure/isolation behavior.
 
-5. **`docs/adr/0005-mlx-extension-and-upstream-roadmap.md`**  
+5. **`docs/adr/0005-mlx-extension-and-upstream-roadmap.md`**
    Defines when to use pure MLX, `mx.compile`, `fast.metal_kernel`, custom MLX extensions, or upstream MLX work.
 
 ### Recommended new non-ADR docs
@@ -1435,19 +1435,19 @@ This is stronger than “minor revision” but not a full pivot away from the cu
 
 ### The clearest next 5 actions
 
-1. **Rewrite `02-universal-mlx-runtime-design.md` and `04-serving-architecture-and-api.md` first.**  
+1. **Rewrite `02-universal-mlx-runtime-design.md` and `04-serving-architecture-and-api.md` first.**
    Those two docs currently contain the most consequential wrong or incomplete decisions.
 
-2. **Split the plan into platform and product tracks.**  
+2. **Split the plan into platform and product tracks.**
    Do not let LTX product urgency freeze the universal runtime design prematurely.
 
-3. **Add the missing ADRs before code is written.**  
+3. **Add the missing ADRs before code is written.**
    Provider abstraction, security model, artifact/build-cache split, worker topology, MLX extension roadmap.
 
-4. **Refresh the upstream/research docs against current reality.**  
+4. **Refresh the upstream/research docs against current reality.**
    Especially LTX 2.3, Comfy core state, MLX Swift/C, and current MLX ecosystem packages.
 
-5. **Replace the current benchmark plan with a real matrix and freeze criteria.**  
+5. **Replace the current benchmark plan with a real matrix and freeze criteria.**
    The architecture is not “fixed” until it survives that matrix.
 
 ---
@@ -1494,100 +1494,100 @@ These are not exhaustive; they are the highest-value checked sources.
 
 ### MLX core / official
 
-- MLX repo (official overview, language APIs):  
+- MLX repo (official overview, language APIs):
   https://github.com/ml-explore/mlx
 
-- MLX compile docs (shape changes, shapeless mode, purity caveats):  
+- MLX compile docs (shape changes, shapeless mode, purity caveats):
   https://ml-explore.github.io/mlx/build/html/usage/compile.html
 
-- MLX export/import docs (explicitly experimental compatibility):  
+- MLX export/import docs (explicitly experimental compatibility):
   https://ml-explore.github.io/mlx/build/html/python/_autosummary/mlx.core.exporter.html
 
-- MLX custom extensions / primitives:  
+- MLX custom extensions / primitives:
   https://ml-explore.github.io/mlx/build/html/dev/extensions.html
 
-- MLX custom Metal kernels:  
+- MLX custom Metal kernels:
   https://ml-explore.github.io/mlx/build/html/dev/custom_metal_kernels.html
 
-- MLX streams and unified memory model:  
+- MLX streams and unified memory model:
   https://ml-explore.github.io/mlx/build/html/usage/using_streams.html
 
-- MLX Metal memory APIs:  
+- MLX Metal memory APIs:
   https://ml-explore.github.io/mlx/build/html/python/metal.html
 
 ### MLX language surfaces
 
-- MLX C repo:  
+- MLX C repo:
   https://github.com/ml-explore/mlx-c
 
-- MLX Swift examples / Apple-native examples:  
+- MLX Swift examples / Apple-native examples:
   https://github.com/ml-explore/mlx-swift-examples
 
-- MLX Swift LM:  
-  https://github.com/ml-explore/mlx-swift-examples/tree/main/Applications/MLXLMExample  
+- MLX Swift LM:
+  https://github.com/ml-explore/mlx-swift-examples/tree/main/Applications/MLXLMExample
   and current releases / packages under the MLX Swift examples repo
 
 ### Hugging Face / provenance / source policy
 
-- `hf_hub_download` cache semantics:  
+- `hf_hub_download` cache semantics:
   https://huggingface.co/docs/huggingface_hub/guides/download
 
-- gated model access docs:  
+- gated model access docs:
   https://huggingface.co/docs/hub/models-gated
 
-- safetensors metadata parsing without full download:  
+- safetensors metadata parsing without full download:
   https://huggingface.co/docs/safetensors/en/metadata_parsing
 
-- Transformers `trust_remote_code` guidance:  
+- Transformers `trust_remote_code` guidance:
   https://huggingface.co/docs/transformers/models
 
 ### LTX / Comfy
 
-- `Lightricks/LTX-2.3` model card:  
+- `Lightricks/LTX-2.3` model card:
   https://huggingface.co/Lightricks/LTX-2.3
 
-- official or current LTX project repos:  
+- official or current LTX project repos:
   https://github.com/Lightricks/LTX-Video
 
-- ComfyUI-LTXVideo current state:  
+- ComfyUI-LTXVideo current state:
   https://github.com/Lightricks/ComfyUI-LTXVideo
 
 ### Apple system / performance
 
-- Apple unified memory and media-engine workflow guidance:  
+- Apple unified memory and media-engine workflow guidance:
   https://developer.apple.com/videos/play/wwdc2021/10153/
 
-- Metal `recommendedMaxWorkingSetSize`:  
+- Metal `recommendedMaxWorkingSetSize`:
   https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize
 
-- Metal `currentAllocatedSize`:  
+- Metal `currentAllocatedSize`:
   https://developer.apple.com/documentation/metal/mtldevice/currentallocatedsize
 
 ### Security / localhost
 
-- NVD localhost/Origin-validation example (illustrative current risk class):  
+- NVD localhost/Origin-validation example (illustrative current risk class):
   https://nvd.nist.gov/vuln/detail/CVE-2026-26317
 
-- OWASP CSRF cheat sheet:  
+- OWASP CSRF cheat sheet:
   https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
 
 ### Serving ecosystem / current packages
 
-- `mlx-vlm`:  
+- `mlx-vlm`:
   https://github.com/Blaizzy/mlx-vlm
 
-- `mlx-audio`:  
+- `mlx-audio`:
   https://github.com/Blaizzy/mlx-audio
 
-- `vllm-metal`:  
+- `vllm-metal`:
   https://github.com/vllm-project/vllm-metal
 
 ### Acceleration research to track, not blindly assume
 
-- AdaCache  
-- FasterCache  
-- PAB (Pyramid Attention Broadcast)  
-- HiCache  
+- AdaCache
+- FasterCache
+- PAB (Pyramid Attention Broadcast)
+- HiCache
 - ProCache
 
 Use current papers and their caveats; do not turn paper headlines into architecture facts without benchmark evidence.

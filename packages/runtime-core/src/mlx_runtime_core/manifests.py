@@ -4,14 +4,13 @@ import json
 from pathlib import Path
 from typing import Any, TypeVar
 
-from pydantic import BaseModel
-
 from mlx_runtime_schemas import (
     ModelRecord,
     PortableArtifactRecord,
     SourceRef,
     SourceRegistrationRecord,
 )
+from pydantic import BaseModel
 
 from .runtime_home import RuntimeHome
 

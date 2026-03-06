@@ -123,8 +123,16 @@ That installs the active Python workspace packages plus the default `dev` group 
 Useful commands:
 
 ```bash
-uv run python -m unittest discover -s tests -v
-uv run python -c "import mlx_runtime_server, mlx_runtime_core, mlx_runtime_schemas, mlx_runtime_family_ltx"
+uv run python scripts/dev.py verify
+uv run python scripts/dev.py logs
+uv run pre-commit run --all-files
 ```
 
 Only directories under `packages/` that contain real Python package metadata are workspace members. Placeholder adapter folders stay outside the workspace until they gain their own `pyproject.toml`.
+
+Repo operating docs:
+
+- [AGENTS.md](AGENTS.md)
+- [agent-native-development.md](docs/agent-native-development.md)
+- [dev-harness.md](docs/dev-harness.md)
+- [skill-policy.md](docs/skill-policy.md)
