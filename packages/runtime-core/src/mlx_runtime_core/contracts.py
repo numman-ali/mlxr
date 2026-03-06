@@ -69,6 +69,21 @@ class ExecutionProfile:
 class PortableArtifact:
     record: PortableArtifactRecord
     storage_path: Path | None = None
+    payload_items: tuple["ArtifactPayloadItem", ...] = ()
+
+
+@dataclass(slots=True)
+class ArtifactPayloadItem:
+    source_path: Path
+    relative_path: Path
+
+
+@dataclass(slots=True)
+class ConversionSource:
+    role: str
+    source_id: str
+    source: SourceRef
+    materialization: SourceMaterialization
 
 
 @dataclass(slots=True)
@@ -115,10 +130,12 @@ class ModelFamilyAdapter(Protocol):
 
     def inspect_source(self, source: ResolvedSource) -> FamilyInspection: ...
 
-    def fetch_policy_for_conversion(self, source: ResolvedSource) -> FetchPolicy: ...
+    def fetch_policy_for_conversion(
+        self, role: str, source: ResolvedSource
+    ) -> FetchPolicy: ...
 
     def convert(
-        self, source: SourceMaterialization, plan: ConversionPlan
+        self, sources: dict[str, ConversionSource], plan: ConversionPlan
     ) -> PortableArtifact: ...
 
     def load(

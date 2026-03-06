@@ -26,6 +26,9 @@ os.environ.setdefault(
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+LTX_CHECKPOINT_FILENAME = "ltx-2.3-22b-distilled.safetensors"
+LTX_SPATIAL_UPSAMPLER_FILENAME = "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+LTX_TEXT_ENCODER_DIRNAME = "gemma-3-12b-it-qat-q4_0-unquantized"
 
 
 def make_state(tmp_path: Path, settings: ServerSettings | None = None) -> RuntimeState:
@@ -39,8 +42,44 @@ def make_state(tmp_path: Path, settings: ServerSettings | None = None) -> Runtim
 def make_local_bundle(root: Path, *, directory_name: str = "ltx-bundle") -> Path:
     source_dir = root / directory_name
     source_dir.mkdir()
-    (source_dir / "weights.safetensors").write_text("bundle", encoding="utf-8")
+    (source_dir / LTX_CHECKPOINT_FILENAME).write_text("bundle", encoding="utf-8")
+    (source_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
+        "upsampler", encoding="utf-8"
+    )
+    text_encoder_dir = source_dir / LTX_TEXT_ENCODER_DIRNAME
+    _write_fake_text_encoder(text_encoder_dir)
     return source_dir
+
+
+def make_split_local_ltx_sources(root: Path) -> dict[str, Path]:
+    checkpoint_dir = root / "ltx-checkpoint-source"
+    checkpoint_dir.mkdir()
+    (checkpoint_dir / LTX_CHECKPOINT_FILENAME).write_text("bundle", encoding="utf-8")
+
+    upsampler_dir = root / "ltx-upsampler-source"
+    upsampler_dir.mkdir()
+    (upsampler_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
+        "upsampler", encoding="utf-8"
+    )
+
+    text_encoder_dir = root / "ltx-text-encoder-source"
+    text_encoder_dir.mkdir()
+    _write_fake_text_encoder(text_encoder_dir)
+
+    return {
+        "checkpoint": checkpoint_dir,
+        "spatial_upsampler": upsampler_dir,
+        "text_encoder": text_encoder_dir,
+    }
+
+
+def _write_fake_text_encoder(text_encoder_dir: Path) -> None:
+    text_encoder_dir.mkdir(exist_ok=True)
+    (text_encoder_dir / "config.json").write_text("{}", encoding="utf-8")
+    (text_encoder_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (text_encoder_dir / "model-00001-of-00001.safetensors").write_text(
+        "weights", encoding="utf-8"
+    )
 
 
 def response_model(response: Response, model_type: type[ModelT]) -> ModelT:

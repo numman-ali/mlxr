@@ -18,6 +18,7 @@ from mlx_runtime_schemas import (
     JobState,
     ModelRecord,
     OutputArtifactRecord,
+    PortableArtifactComponentRecord,
     PortableArtifactRecord,
     ProvenanceRecord,
     RuntimeEvent,
@@ -26,6 +27,11 @@ from mlx_runtime_schemas import (
 from mlx_runtime_server.settings import ServerSettings
 from mlx_runtime_server.store import InputStore, JobStore, OutputStore
 from mlx_runtime_server.worker import run_job_worker
+
+from tests.runtime_test_support import (
+    LTX_CHECKPOINT_FILENAME,
+    LTX_SPATIAL_UPSAMPLER_FILENAME,
+)
 
 
 class RuntimeUnitTests(unittest.TestCase):
@@ -165,6 +171,35 @@ class RuntimeUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
             runtime_home.ensure_layout()
+            artifact_root = runtime_home.artifact_dir(
+                "ltx", "ltx-2.3-fast-local", "sha256:test"
+            )
+            checkpoint_path = (
+                artifact_root / "payload" / "checkpoint" / LTX_CHECKPOINT_FILENAME
+            )
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint_path.write_text("checkpoint", encoding="utf-8")
+            upsampler_path = (
+                artifact_root
+                / "payload"
+                / "spatial_upsampler"
+                / LTX_SPATIAL_UPSAMPLER_FILENAME
+            )
+            upsampler_path.parent.mkdir(parents=True, exist_ok=True)
+            upsampler_path.write_text("upsampler", encoding="utf-8")
+            text_encoder_dir = artifact_root / "payload" / "text_encoder"
+            text_encoder_dir.mkdir(parents=True, exist_ok=True)
+            (text_encoder_dir / "config.json").write_text("{}", encoding="utf-8")
+            (text_encoder_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
+            (text_encoder_dir / "model-00001-of-00001.safetensors").write_text(
+                "weights", encoding="utf-8"
+            )
+            artifact_storage_key = runtime_home.artifact_storage_key(
+                "ltx", "ltx-2.3-fast-local", "sha256:test"
+            )
+            provenance = ProvenanceRecord(
+                provider="local", locator={"path": "/tmp/model"}
+            )
             model_record = ModelRecord(
                 model_id="ltx-2.3-fast-local",
                 family="ltx",
@@ -172,9 +207,9 @@ class RuntimeUnitTests(unittest.TestCase):
                     model_id="ltx-2.3-fast-local",
                     artifact_digest="sha256:test",
                     family="ltx",
-                    format_version="0.1.0",
-                    weight_format="mlx_safetensors_sharded",
-                    storage_key="artifacts-portable/ltx/ltx-2.3-fast-local/sha256_test",
+                    format_version="0.2.0",
+                    weight_format="source_packaged_fastpath_assets",
+                    storage_key=artifact_storage_key,
                     capability=CapabilityDescriptor(
                         model_id="ltx-2.3-fast-local",
                         artifact_digest="sha256:test",
@@ -183,9 +218,42 @@ class RuntimeUnitTests(unittest.TestCase):
                         artifacts_out=["mp4"],
                         scheduler_class="media_video_dit",
                     ),
-                    provenance=ProvenanceRecord(
-                        provider="local", locator={"path": "/tmp/model"}
-                    ),
+                    provenance=provenance,
+                    components=[
+                        PortableArtifactComponentRecord(
+                            role="checkpoint",
+                            kind="file",
+                            relative_path=f"payload/checkpoint/{LTX_CHECKPOINT_FILENAME}",
+                            storage_key=(
+                                f"{artifact_storage_key}/payload/checkpoint/"
+                                f"{LTX_CHECKPOINT_FILENAME}"
+                            ),
+                            source_id="src_bundle",
+                            provenance=provenance,
+                        ),
+                        PortableArtifactComponentRecord(
+                            role="spatial_upsampler",
+                            kind="file",
+                            relative_path=(
+                                "payload/spatial_upsampler/"
+                                f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
+                            ),
+                            storage_key=(
+                                f"{artifact_storage_key}/payload/spatial_upsampler/"
+                                f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
+                            ),
+                            source_id="src_bundle",
+                            provenance=provenance,
+                        ),
+                        PortableArtifactComponentRecord(
+                            role="text_encoder",
+                            kind="directory",
+                            relative_path="payload/text_encoder",
+                            storage_key=f"{artifact_storage_key}/payload/text_encoder",
+                            source_id="src_bundle",
+                            provenance=provenance,
+                        ),
+                    ],
                 ),
             )
             request = JobRequest(

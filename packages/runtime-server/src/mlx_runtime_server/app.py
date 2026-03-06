@@ -187,11 +187,18 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
         conversion_request: ArtifactConversionRequest, request: Request
     ) -> ArtifactConversionResult:
         guard_mutation(request)
+        source_selector = json.dumps(
+            {
+                "source_id": conversion_request.source_id,
+                "source_bindings": conversion_request.source_bindings,
+            },
+            sort_keys=True,
+        )
         try:
             result = runtime.catalog.convert_artifact(conversion_request)
             logger.info(
-                "Artifact converted source_id=%s model_id=%s artifact_digest=%s family=%s",
-                conversion_request.source_id,
+                "Artifact converted source_selector=%s model_id=%s artifact_digest=%s family=%s",
+                source_selector,
                 result.model.model_id,
                 result.artifact.artifact_digest,
                 result.model.family,
@@ -204,8 +211,8 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
             return result
         except CatalogNotFoundError as exc:
             logger.warning(
-                "Artifact convert failed not_found source_id=%s error=%s",
-                conversion_request.source_id,
+                "Artifact convert failed not_found source_selector=%s error=%s",
+                source_selector,
                 exc,
             )
             raise HTTPException(status_code=404, detail=str(exc)) from exc

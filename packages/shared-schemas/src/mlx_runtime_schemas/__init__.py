@@ -23,6 +23,7 @@ from .models import (
     HardwareTier,
     ModelRecord,
     PolicyDescriptor,
+    PortableArtifactComponentRecord,
     PortableArtifactRecord,
 )
 from .sources import (
@@ -63,6 +64,7 @@ __all__ = [
     "OutputArtifactRecord",
     "OutputDestinationMode",
     "PolicyDescriptor",
+    "PortableArtifactComponentRecord",
     "PortableArtifactRecord",
     "ProvenanceRecord",
     "ProviderInspectionResult",

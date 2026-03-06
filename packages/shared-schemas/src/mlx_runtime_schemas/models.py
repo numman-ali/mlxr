@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .sources import ProvenanceRecord, SourceRef
 
@@ -48,6 +48,19 @@ class CapabilityDescriptor(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class PortableArtifactComponentRecord(BaseModel):
+    role: str
+    kind: str
+    relative_path: str
+    storage_key: str = ""
+    source_id: str
+    resolved_ref: str | None = None
+    size_bytes: int | None = None
+    component_digest: str | None = None
+    provenance: ProvenanceRecord
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class PortableArtifactRecord(BaseModel):
     model_id: str
     artifact_digest: str
@@ -58,6 +71,7 @@ class PortableArtifactRecord(BaseModel):
     storage_key: str
     capability: CapabilityDescriptor
     provenance: ProvenanceRecord
+    components: list[PortableArtifactComponentRecord] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -71,12 +85,35 @@ class ModelRecord(BaseModel):
 
 
 class ArtifactConversionRequest(BaseModel):
-    source_id: str
+    source_id: str | None = None
+    source_bindings: dict[str, str] | None = None
     family: str | None = None
     model_id: str
     precision: str = "bf16"
     target_format: str = "mlx_portable_bundle"
     options: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_source_selection(self) -> "ArtifactConversionRequest":
+        has_source_id = isinstance(self.source_id, str) and bool(self.source_id.strip())
+        has_source_bindings = bool(self.source_bindings)
+        if has_source_id == has_source_bindings:
+            raise ValueError(
+                "Artifact conversion requires exactly one of source_id or source_bindings"
+            )
+        if has_source_bindings and self.family is None:
+            raise ValueError(
+                "Artifact conversion with source_bindings requires request.family"
+            )
+        if self.source_bindings is not None:
+            for role, source_id in self.source_bindings.items():
+                if not role.strip():
+                    raise ValueError("Artifact conversion role names must be non-empty")
+                if not source_id.strip():
+                    raise ValueError(
+                        "Artifact conversion source_bindings values must be non-empty"
+                    )
+        return self
 
 
 class ArtifactConversionResult(BaseModel):

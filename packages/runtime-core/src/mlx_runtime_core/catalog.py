@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 
 from mlx_runtime_schemas import (
     ArtifactConversionRequest,
@@ -16,7 +18,9 @@ from mlx_runtime_schemas import (
 )
 
 from .contracts import (
+    ArtifactPayloadItem,
     ConversionPlan,
+    ConversionSource,
     ModelFamilyAdapter,
     PortableArtifact,
     SourceProviderAdapter,
@@ -120,19 +124,25 @@ class RuntimeCatalog:
     def convert_artifact(
         self, request: ArtifactConversionRequest
     ) -> ArtifactConversionResult:
-        source_record = self.get_source(request.source_id)
-        family_id = request.family or source_record.family_hint
-        if not family_id:
-            raise CatalogValidationError(
-                "Artifact conversion requires request.family or a registered source family_hint"
-            )
-
-        provider = self._provider(source_record.source.provider)
+        family_id, source_records = self._resolve_conversion_sources(request)
         family = self._family(family_id)
-        fetch_policy = family.fetch_policy_for_conversion(source_record.resolved_source)
-        materialization = provider.fetch(source_record.resolved_source, fetch_policy)
+        conversion_sources: dict[str, ConversionSource] = {}
+        for role, source_record in source_records.items():
+            provider = self._provider(source_record.source.provider)
+            fetch_policy = family.fetch_policy_for_conversion(
+                role, source_record.resolved_source
+            )
+            materialization = provider.fetch(
+                source_record.resolved_source, fetch_policy
+            )
+            conversion_sources[role] = ConversionSource(
+                role=role,
+                source_id=source_record.source_id,
+                source=source_record.source,
+                materialization=materialization,
+            )
         artifact = family.convert(
-            materialization,
+            conversion_sources,
             ConversionPlan(
                 model_id=request.model_id,
                 precision=request.precision,
@@ -153,10 +163,11 @@ class RuntimeCatalog:
                     f"'{existing_model.artifact.artifact_digest}'"
                 )
 
+        primary_source_record = self._primary_source_record(source_records)
         model_record = ModelRecord(
             model_id=request.model_id,
             family=family_id,
-            source=source_record.source,
+            source=primary_source_record.source,
             artifact=persisted_artifact,
             loaded=existing_model.loaded if existing_model is not None else False,
             capability=persisted_artifact.capability,
@@ -192,20 +203,35 @@ class RuntimeCatalog:
         ]
 
     def _persist_artifact(self, artifact: PortableArtifact) -> PortableArtifactRecord:
+        artifact_root = self.runtime_home.artifact_dir(
+            artifact.record.family,
+            artifact.record.model_id,
+            artifact.record.artifact_digest,
+        )
+        self._materialize_artifact_payload(artifact_root, artifact.payload_items)
         record = artifact.record.model_copy(
             update={
                 "storage_key": self.runtime_home.artifact_storage_key(
                     artifact.record.family,
                     artifact.record.model_id,
                     artifact.record.artifact_digest,
-                )
+                ),
+                "components": [
+                    component.model_copy(
+                        update={
+                            "storage_key": self._component_storage_key(
+                                artifact.record.family,
+                                artifact.record.model_id,
+                                artifact.record.artifact_digest,
+                                component.relative_path,
+                            )
+                        }
+                    )
+                    for component in artifact.record.components
+                ],
             }
         )
-        artifact.storage_path = self.runtime_home.artifact_manifest_path(
-            record.family,
-            record.model_id,
-            record.artifact_digest,
-        ).parent
+        artifact.storage_path = artifact_root
         artifact.record = record
         return self.artifacts.save(record)
 
@@ -218,3 +244,80 @@ class RuntimeCatalog:
         if not self.registry.has_family(family_id):
             raise CatalogNotFoundError(f"Unknown family '{family_id}'")
         return self.registry.get_family(family_id)
+
+    def _resolve_conversion_sources(
+        self, request: ArtifactConversionRequest
+    ) -> tuple[str, dict[str, SourceRegistrationRecord]]:
+        if request.source_id is not None:
+            source_record = self.get_source(request.source_id)
+            family_id = request.family or source_record.family_hint
+            if not family_id:
+                raise CatalogValidationError(
+                    "Artifact conversion requires request.family or a registered source family_hint"
+                )
+            return family_id, {"bundle": source_record}
+
+        if request.source_bindings is None or request.family is None:
+            raise CatalogValidationError(
+                "Artifact conversion with source_bindings requires request.family"
+            )
+
+        source_records: dict[str, SourceRegistrationRecord] = {}
+        for role, source_id in request.source_bindings.items():
+            source_record = self.get_source(source_id)
+            if (
+                source_record.family_hint is not None
+                and source_record.family_hint != request.family
+            ):
+                raise CatalogValidationError(
+                    f"Source '{source_id}' is registered for family '{source_record.family_hint}', not '{request.family}'"
+                )
+            source_records[role] = source_record
+        return request.family, source_records
+
+    def _primary_source_record(
+        self, source_records: dict[str, SourceRegistrationRecord]
+    ) -> SourceRegistrationRecord:
+        if "checkpoint" in source_records:
+            return source_records["checkpoint"]
+        if "bundle" in source_records:
+            return source_records["bundle"]
+        first_role = sorted(source_records)[0]
+        return source_records[first_role]
+
+    def _component_storage_key(
+        self,
+        family: str,
+        model_id: str,
+        artifact_digest: str,
+        relative_path: str,
+    ) -> str:
+        base_key = self.runtime_home.artifact_storage_key(
+            family, model_id, artifact_digest
+        )
+        return f"{base_key}/{relative_path}"
+
+    def _materialize_artifact_payload(
+        self, artifact_root: Path, payload_items: tuple[ArtifactPayloadItem, ...]
+    ) -> None:
+        seen_paths: set[str] = set()
+        for item in payload_items:
+            relative_path = self._validated_relative_payload_path(item.relative_path)
+            relative_key = relative_path.as_posix()
+            if relative_key in seen_paths:
+                raise CatalogValidationError(
+                    f"Artifact payload path '{relative_key}' was staged more than once"
+                )
+            seen_paths.add(relative_key)
+            destination_path = artifact_root / relative_path
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item.source_path, destination_path)
+
+    def _validated_relative_payload_path(self, relative_path: Path) -> Path:
+        if relative_path.is_absolute() or any(
+            part == ".." for part in relative_path.parts
+        ):
+            raise CatalogValidationError(
+                f"Artifact payload path '{relative_path}' must be relative and stay within the artifact root"
+            )
+        return relative_path

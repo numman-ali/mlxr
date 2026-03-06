@@ -81,12 +81,14 @@ class RuntimeHome:
     def artifact_manifest_path(
         self, family: str, model_id: str, artifact_digest: str
     ) -> Path:
+        return self.artifact_dir(family, model_id, artifact_digest) / "artifact.json"
+
+    def artifact_dir(self, family: str, model_id: str, artifact_digest: str) -> Path:
         return (
             self.artifacts_portable_dir
             / _safe_path_segment(family)
             / _safe_path_segment(model_id)
             / _safe_path_segment(artifact_digest)
-            / "artifact.json"
         )
 
     def artifact_storage_key(

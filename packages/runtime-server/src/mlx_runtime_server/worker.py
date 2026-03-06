@@ -50,7 +50,14 @@ def run_job_worker(
             kind=RuntimeEventKind.JOB_PHASE_CHANGED,
         )
         load_started = time.perf_counter()
-        artifact = PortableArtifact(record=model.artifact, storage_path=None)
+        artifact = PortableArtifact(
+            record=model.artifact,
+            storage_path=runtime_home.artifact_dir(
+                model.artifact.family,
+                model.artifact.model_id,
+                model.artifact.artifact_digest,
+            ),
+        )
         profile = ExecutionProfile(
             task=request.task,
             profile=_profile_for_request(model, request),

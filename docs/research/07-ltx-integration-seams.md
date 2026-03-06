@@ -153,6 +153,30 @@ Platform implication:
 
 - provider and provenance logic should absorb this into a general source model instead of leaving it as desktop-local policy
 
+## Current First-Slice Runtime Artifact Shape
+
+The current runtime-backed LTX artifact slice is artifact-first, not execution-complete.
+
+What the repo now treats as canonical for the first truthful fast-path slice:
+
+- required source roles are `checkpoint`, `spatial_upsampler`, and `text_encoder`
+- the checkpoint and x2 spatial upsampler come from `Lightricks/LTX-2.3`
+- the text encoder comes from `google/gemma-3-12b-it-qat-q4_0-unquantized`
+- a single local bundle is still allowed, but the real family contract also accepts explicit multi-source role bindings
+
+Portable artifact implications:
+
+- portable artifact payloads are copied under `payload/<role>/...`
+- each artifact records typed components with role, kind, relative path, source id, resolved ref, component digest, size, and provenance
+- artifact identity comes from copied component contents plus conversion settings, not provider-cache paths
+- load-time validation now checks that the required payload roles are present and internally consistent before stage execution begins
+
+Still intentionally out of scope for this slice:
+
+- local Gemma prompt execution
+- temporal upsamplers, x1.5 upsampler, LoRAs, audio-aware branches, and prompt enhancement
+- claiming that the LTX artifact shape has already validated the platform across families
+
 ## Comfy Seams
 
 ### Current baseline reality

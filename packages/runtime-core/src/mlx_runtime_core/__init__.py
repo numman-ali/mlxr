@@ -6,7 +6,9 @@ from .catalog import (
     RuntimeCatalogError,
 )
 from .contracts import (
+    ArtifactPayloadItem,
     ConversionPlan,
+    ConversionSource,
     ExecutionProfile,
     ExecutionStage,
     FamilyInspection,
@@ -28,7 +30,9 @@ __all__ = [
     "CatalogConflictError",
     "CatalogNotFoundError",
     "CatalogValidationError",
+    "ArtifactPayloadItem",
     "ConversionPlan",
+    "ConversionSource",
     "ExecutionProfile",
     "ExecutionStage",
     "FamilyInspection",
