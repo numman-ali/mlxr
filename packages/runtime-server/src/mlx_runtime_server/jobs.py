@@ -421,6 +421,41 @@ class JobManager:
             or (num_frames - 1) % 8 != 0
         ):
             raise JobValidationError("num_frames must satisfy the current 8n+1 rule")
+        images = request.inputs.get("images")
+        if request.task == "video.condition.image" and (
+            not isinstance(images, list) or not images
+        ):
+            raise JobValidationError(
+                "video.condition.image requires at least one image input"
+            )
+        if images is not None:
+            if not isinstance(images, list):
+                raise JobValidationError("images must be a list when provided")
+            for image in images:
+                if not isinstance(image, dict):
+                    raise JobValidationError("images entries must be objects")
+                handle_id = image.get("input_handle")
+                if not isinstance(handle_id, str) or not handle_id:
+                    raise JobValidationError(
+                        "images entries require a non-empty input_handle"
+                    )
+                frame_index = image.get("frame_index", 0)
+                if not isinstance(frame_index, int) or frame_index < 0:
+                    raise JobValidationError(
+                        "images frame_index must be a non-negative integer"
+                    )
+                if isinstance(num_frames, int) and frame_index >= num_frames:
+                    raise JobValidationError(
+                        "images frame_index must be within num_frames"
+                    )
+                strength = image.get("strength", 1.0)
+                if not isinstance(strength, (int, float)):
+                    raise JobValidationError("images strength must be numeric")
+                strength_value = float(strength)
+                if not 0.0 <= strength_value <= 1.0:
+                    raise JobValidationError(
+                        "images strength must be between 0.0 and 1.0"
+                    )
         for handle_id in _collect_input_handles(request.inputs):
             if self.input_store.get(handle_id) is None:
                 raise JobValidationError(f"Unknown input handle '{handle_id}'")

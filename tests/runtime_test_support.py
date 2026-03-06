@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import os
 import queue
 import tempfile
@@ -25,6 +26,7 @@ from mlx_runtime_schemas import (
 from mlx_runtime_server.registry import default_runtime_registry
 from mlx_runtime_server.settings import ServerSettings
 from mlx_runtime_server.state import RuntimeState
+from PIL import Image
 from pydantic import BaseModel
 
 os.environ.setdefault(
@@ -139,6 +141,18 @@ def import_input_handle(
     )
     assert response.status_code == 200, response.text
     return response_model(response, InputHandleRecord).handle_id
+
+
+def make_png_bytes(
+    *,
+    width: int = 64,
+    height: int = 64,
+    color: tuple[int, int, int] = (36, 108, 196),
+) -> bytes:
+    image = Image.new("RGB", (width, height), color=color)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def wait_for_job_terminal_state(

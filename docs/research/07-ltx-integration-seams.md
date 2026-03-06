@@ -174,13 +174,15 @@ Portable artifact implications:
 Execution implications:
 
 - `prompt_encode` now runs through a repo-owned strict-local MLX Gemma path using the artifactized `checkpoint` and `text_encoder` payloads
+- `condition_inputs` now resolves imported image handles into worker-local conditioning inputs before generation
 - prompt context stays worker-local and becomes the honest seam into later denoise/generate work
+- the current runtime path now emits real runtime-managed `mp4` artifacts plus per-stage timing and memory telemetry, while keeping the generation backend explicitly narrow
 - negative-prompt support is still intentionally excluded for the fast path instead of being silently ignored
 
 Still intentionally out of scope for this slice:
 
 - temporal upsamplers, x1.5 upsampler, LoRAs, audio-aware branches, and prompt enhancement
-- real denoise/video generation
+- checkpoint-faithful denoise/video generation
 - claiming that the LTX artifact shape has already validated the platform across families
 
 ## Comfy Seams

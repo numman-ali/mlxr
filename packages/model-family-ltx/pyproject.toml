@@ -9,6 +9,7 @@ dependencies = [
     "mlx>=0.22.0",
     "mlx-vlm",
     "numpy",
+    "pillow",
     "safetensors",
     "sentencepiece",
     "transformers",

@@ -30,6 +30,13 @@ from mlx_runtime_schemas import (
     ResolvedSource,
 )
 
+from .generation import (
+    ConditioningInput,
+    GeneratedVideo,
+    VideoGenerator,
+    create_video_generator,
+    encode_mp4_video,
+)
 from .prompt_encoding import PromptEncoder, PromptEncodingResult, create_prompt_encoder
 
 
@@ -48,6 +55,9 @@ class LoadedLTXRuntimeState:
     component_paths: dict[str, Path]
     prompt_encoder: PromptEncoder | None = None
     prompt_context: PromptEncodingResult | None = None
+    video_generator: VideoGenerator | None = None
+    conditioning_inputs: tuple[ConditioningInput, ...] = ()
+    generated_video: GeneratedVideo | None = None
 
 
 class LTXFamilyAdapter:
@@ -127,7 +137,7 @@ class LTXFamilyAdapter:
             family_variant="fast",
             tasks=["video.generate", "video.condition.image"],
             modalities_in=["text", "image"],
-            modalities_out=["video", "audio"],
+            modalities_out=["video"],
             constraints={
                 "width": {"multiple_of": 32},
                 "height": {"multiple_of": 32},
@@ -140,11 +150,11 @@ class LTXFamilyAdapter:
             },
             streaming={
                 "progress_events": True,
-                "partial_artifacts": True,
-                "segment_events": True,
+                "partial_artifacts": False,
+                "segment_events": False,
                 "token_deltas": False,
             },
-            artifacts_out=["mp4", "mov", "wav"],
+            artifacts_out=["mp4"],
             scheduler_class="media_video_dit",
             hardware_tiers=[
                 HardwareTier(
@@ -262,7 +272,7 @@ class LTXFamilyAdapter:
                 return StageResult(
                     metrics={
                         "stage": stage.stage_id,
-                        "status": "scaffold",
+                        "status": "placeholder",
                         "tokens_estimate": len(
                             str(stage.inputs.get("prompt", "")).split()
                         ),
@@ -295,15 +305,27 @@ class LTXFamilyAdapter:
                 }
             )
         if stage.stage_id == "condition_inputs":
-            conditioning_items = stage.inputs.get("images", [])
-            conditioning_count = (
-                len(conditioning_items) if isinstance(conditioning_items, list) else 0
-            )
+            prepared_inputs = self._prepared_conditioning_inputs(stage)
+            if runtime_state is None:
+                return StageResult(
+                    metrics={
+                        "stage": stage.stage_id,
+                        "status": "placeholder",
+                        "conditioning_count": len(prepared_inputs),
+                    }
+                )
+            runtime_state.conditioning_inputs = prepared_inputs
+            task = self._stage_task(stage)
+            if task == "video.condition.image" and not prepared_inputs:
+                raise ValueError(
+                    "video.condition.image requires at least one resolved conditioning image"
+                )
             return StageResult(
                 metrics={
                     "stage": stage.stage_id,
-                    "status": "scaffold",
-                    "conditioning_count": conditioning_count,
+                    "status": "prepared" if prepared_inputs else "skipped",
+                    "conditioning_count": len(prepared_inputs),
+                    "frame_indices": [item.frame_index for item in prepared_inputs],
                 }
             )
         if stage.stage_id == "generate":
@@ -311,7 +333,7 @@ class LTXFamilyAdapter:
                 return StageResult(
                     metrics={
                         "stage": stage.stage_id,
-                        "status": "scaffold",
+                        "status": "placeholder",
                         "frames_requested": stage.params.get(
                             "num_frames", stage.inputs.get("num_frames")
                         ),
@@ -321,18 +343,29 @@ class LTXFamilyAdapter:
                 raise ValueError(
                     "LTX generate stage requires prompt_encode to run successfully first"
                 )
-            prompt_context = runtime_state.prompt_context
+            generator = self._video_generator(runtime_state)
+            generated_video = generator.generate(
+                prompt_context=runtime_state.prompt_context,
+                conditioning_inputs=runtime_state.conditioning_inputs,
+                width=self._stage_dimension(stage.params.get("width"), name="width"),
+                height=self._stage_dimension(stage.params.get("height"), name="height"),
+                num_frames=self._num_frames(stage),
+                fps=self._fps(stage),
+                seed=self._seed(stage),
+            )
+            runtime_state.generated_video = generated_video
             return StageResult(
                 metrics={
                     "stage": stage.stage_id,
-                    "status": "scaffold",
-                    "frames_requested": stage.params.get(
-                        "num_frames", stage.inputs.get("num_frames")
-                    ),
-                    "prompt_token_count": prompt_context.token_count,
-                    "sequence_length": prompt_context.sequence_length,
-                    "video_context_shape": list(prompt_context.video_context_shape),
-                    "audio_context_available": prompt_context.audio_context is not None,
+                    "status": "generated",
+                    "frames_generated": int(generated_video.frames.shape[0]),
+                    "width": int(generated_video.frames.shape[2]),
+                    "height": int(generated_video.frames.shape[1]),
+                    "fps": generated_video.fps,
+                    "seed": generated_video.seed,
+                    "backend": generated_video.backend,
+                    "conditioning_count": generated_video.conditioning_count,
+                    "prompt_signature": generated_video.prompt_signature,
                 }
             )
         if stage.stage_id == "encode_output":
@@ -349,16 +382,17 @@ class LTXFamilyAdapter:
             filename = f"{artifact_id}.{artifact_format}"
             output_path = Path(output_dir) / filename
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = (
-                "MLXR scaffold output\n"
-                f"model_id={loaded.model_id}\n"
-                f"family={loaded.family}\n"
-                f"artifact_digest={loaded.artifact_digest}\n"
-                f"task={loaded.metadata.get('task')}\n"
-                f"prompt={stage.inputs.get('prompt', '')}\n"
-                f"format={artifact_format}\n"
-            ).encode("utf-8")
-            output_path.write_bytes(payload)
+            if artifact_format != "mp4":
+                raise ValueError(
+                    f"LTX encode_output only supports runtime-managed mp4 artifacts, got '{artifact_format}'"
+                )
+            if runtime_state is None or runtime_state.generated_video is None:
+                raise ValueError(
+                    "LTX encode_output requires generate to run successfully first"
+                )
+            encode_mp4_video(runtime_state.generated_video, output_path)
+            generated_video = runtime_state.generated_video
+            runtime_state.generated_video = None
             return StageResult(
                 artifacts=[
                     ArtifactHandle(
@@ -374,8 +408,11 @@ class LTXFamilyAdapter:
                 ],
                 metrics={
                     "stage": stage.stage_id,
-                    "status": "scaffold",
+                    "status": "encoded",
                     "output_bytes": output_path.stat().st_size,
+                    "frames_encoded": int(generated_video.frames.shape[0]),
+                    "fps": generated_video.fps,
+                    "backend": generated_video.backend,
                 },
             )
 
@@ -389,7 +426,12 @@ class LTXFamilyAdapter:
             if runtime_state.prompt_encoder is not None:
                 runtime_state.prompt_encoder.close()
                 runtime_state.prompt_encoder = None
+            if runtime_state.video_generator is not None:
+                runtime_state.video_generator.close()
+                runtime_state.video_generator = None
             runtime_state.prompt_context = None
+            runtime_state.conditioning_inputs = ()
+            runtime_state.generated_video = None
             loaded.metadata.pop(self._runtime_state_key, None)
         return None
 
@@ -407,11 +449,116 @@ class LTXFamilyAdapter:
             )
         return runtime_state.prompt_encoder
 
+    def _video_generator(self, runtime_state: LoadedLTXRuntimeState) -> VideoGenerator:
+        if runtime_state.video_generator is None:
+            runtime_state.video_generator = create_video_generator(
+                checkpoint_path=runtime_state.component_paths["checkpoint"],
+                spatial_upsampler_path=runtime_state.component_paths[
+                    "spatial_upsampler"
+                ],
+            )
+        return runtime_state.video_generator
+
     def _prompt_text(self, inputs: dict[str, object]) -> str:
         prompt = inputs.get("prompt", "")
         if not isinstance(prompt, str):
             raise ValueError("LTX prompt_encode expects inputs.prompt to be a string")
         return prompt
+
+    def _prepared_conditioning_inputs(
+        self, stage: ExecutionStage
+    ) -> tuple[ConditioningInput, ...]:
+        resolved_inputs = stage.params.get("resolved_inputs")
+        if resolved_inputs is None:
+            return ()
+        if not isinstance(resolved_inputs, dict):
+            raise ValueError("LTX stage params.resolved_inputs must be an object")
+        raw_images = resolved_inputs.get("images", [])
+        if not isinstance(raw_images, list):
+            raise ValueError("LTX resolved conditioning inputs must be a list")
+
+        num_frames = self._num_frames(stage)
+        prepared: list[ConditioningInput] = []
+        for entry in raw_images:
+            if not isinstance(entry, dict):
+                raise ValueError(
+                    "LTX resolved conditioning image entries must be objects"
+                )
+            handle_id = self._require_str(entry.get("input_handle"), "input_handle")
+            payload_path = Path(
+                self._require_str(entry.get("payload_path"), "payload_path")
+            )
+            if not payload_path.is_file():
+                raise ValueError(
+                    f"LTX resolved conditioning payload '{payload_path}' does not exist"
+                )
+            frame_index = entry.get("frame_index", 0)
+            if not isinstance(frame_index, int) or frame_index < 0:
+                raise ValueError(
+                    "LTX conditioning frame_index must be a non-negative integer"
+                )
+            if frame_index >= num_frames:
+                raise ValueError(
+                    f"LTX conditioning frame_index {frame_index} is outside num_frames={num_frames}"
+                )
+            strength = entry.get("strength", 1.0)
+            if not isinstance(strength, (int, float)):
+                raise ValueError("LTX conditioning strength must be numeric")
+            strength_value = float(strength)
+            if not 0.0 <= strength_value <= 1.0:
+                raise ValueError(
+                    "LTX conditioning strength must be between 0.0 and 1.0"
+                )
+            media_type = entry.get("media_type")
+            filename = entry.get("filename")
+            prepared.append(
+                ConditioningInput(
+                    handle_id=handle_id,
+                    payload_path=payload_path,
+                    frame_index=frame_index,
+                    strength=strength_value,
+                    media_type=media_type if isinstance(media_type, str) else None,
+                    filename=filename if isinstance(filename, str) else None,
+                )
+            )
+        return tuple(prepared)
+
+    def _stage_dimension(self, value: object, *, name: str) -> int:
+        if value is None:
+            return 768 if name == "width" else 512
+        if not isinstance(value, int) or value < 32:
+            raise ValueError(f"LTX {name} must be an integer >= 32")
+        return value
+
+    def _num_frames(self, stage: ExecutionStage) -> int:
+        value = stage.params.get("num_frames", stage.inputs.get("num_frames"))
+        if value is None:
+            return 121
+        if not isinstance(value, int) or value < 1:
+            raise ValueError("LTX num_frames must be a positive integer")
+        return value
+
+    def _fps(self, stage: ExecutionStage) -> int:
+        value = stage.params.get("fps", stage.inputs.get("fps"))
+        if value is None:
+            return 24
+        if not isinstance(value, int) or value < 1:
+            raise ValueError("LTX fps must be a positive integer")
+        return value
+
+    def _seed(self, stage: ExecutionStage) -> int | None:
+        value = stage.params.get("seed", stage.inputs.get("seed"))
+        if value is None:
+            return None
+        if not isinstance(value, int):
+            raise ValueError("LTX seed must be an integer when provided")
+        return value
+
+    def _stage_task(self, stage: ExecutionStage) -> str:
+        value = stage.params.get("task")
+        if isinstance(value, str) and value:
+            return value
+        return "video.generate"
 
     def _reject_unsupported_negative_prompt(self, inputs: dict[str, object]) -> None:
         negative_prompt = inputs.get("negative_prompt")
@@ -781,5 +928,5 @@ class LTXFamilyAdapter:
 
     def _require_str(self, value: object, name: str) -> str:
         if not isinstance(value, str) or not value:
-            raise ValueError(f"encode_output requires a non-empty {name}")
+            raise ValueError(f"LTX stage data requires a non-empty {name}")
         return value

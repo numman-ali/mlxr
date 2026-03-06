@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from mlx_runtime_schemas import JobSubmitResult
+from mlx_runtime_schemas import JobSubmitResult, RuntimeEventKind
 from mlx_runtime_server.app import create_app
 from mlx_runtime_server.settings import ServerSettings
 
@@ -13,6 +13,7 @@ from tests.runtime_test_support import (
     http_headers,
     import_input_handle,
     make_local_bundle,
+    make_png_bytes,
     make_state,
     patched_inline_job_process_context,
     patched_ltx_prompt_encoder,
@@ -20,6 +21,10 @@ from tests.runtime_test_support import (
     response_model,
     wait_for_job_terminal_state,
 )
+
+VALID_WIDTH = 96
+VALID_HEIGHT = 64
+VALID_NUM_FRAMES = 9
 
 
 def first_artifact_id(job_record: dict[str, object]) -> str:
@@ -47,7 +52,7 @@ class RuntimeJobTests(unittest.TestCase):
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
-                handle_id = import_input_handle(client, b"conditioning-bytes")
+                handle_id = import_input_handle(client, make_png_bytes())
 
                 submit = client.post(
                     "/v1/jobs",
@@ -64,7 +69,13 @@ class RuntimeJobTests(unittest.TestCase):
                                 }
                             ],
                         },
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                            "fps": 12,
+                            "seed": 7,
+                        },
                         "output": {"artifact_format": "mp4"},
                         "extensions": {"simulate_delay_seconds": 0.02},
                     },
@@ -80,12 +91,25 @@ class RuntimeJobTests(unittest.TestCase):
                 self.assertEqual(output_record.status_code, 200)
                 download = client.get(f"/v1/outputs/{artifact_id}/download")
                 self.assertEqual(download.status_code, 200)
-                self.assertIn(b"MLXR scaffold output", download.content)
+                self.assertIn(b"ftyp", download.content[:32])
 
                 events = client.get(f"/v1/jobs/{job_id}/events")
                 self.assertEqual(events.status_code, 200)
                 self.assertIn("event: job.accepted", events.text)
                 self.assertIn("event: job.completed", events.text)
+                metric_events = [
+                    event
+                    for event in state.job_manager.list_events(job_id)
+                    if event.kind == RuntimeEventKind.JOB_METRICS
+                ]
+                self.assertTrue(
+                    any(
+                        event.data.get("stage_id") == "generate"
+                        and isinstance(event.data.get("memory"), dict)
+                        and event.data["memory"].get("telemetry_available") is True
+                        for event in metric_events
+                    )
+                )
 
     def test_job_validation_and_admission_rejection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -105,7 +129,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "city skyline"},
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                         "extensions": {"simulate_delay_seconds": 0.15},
                     },
@@ -118,7 +146,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "second request"},
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                 )
@@ -130,7 +162,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "bad frames"},
-                        "params": {"width": 768, "height": 512, "num_frames": 10},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": 10,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                 )
@@ -145,7 +181,11 @@ class RuntimeJobTests(unittest.TestCase):
                             "prompt": "missing handle",
                             "images": [{"input_handle": "inp_missing"}],
                         },
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                 )
@@ -176,7 +216,11 @@ class RuntimeJobTests(unittest.TestCase):
                             "prompt": "city skyline",
                             "negative_prompt": "blurry",
                         },
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                 )
@@ -207,7 +251,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "cancel me"},
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                         "extensions": {"simulate_delay_seconds": 0.15},
                     },
@@ -243,7 +291,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "export local"},
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                 )
@@ -285,7 +337,11 @@ class RuntimeJobTests(unittest.TestCase):
                         "model_id": "ltx-2.3-fast-local",
                         "task": "video.generate",
                         "inputs": {"prompt": "export denied"},
-                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
                         "output": {"artifact_format": "mp4"},
                     },
                     headers=http_headers(origin="http://localhost:3000"),

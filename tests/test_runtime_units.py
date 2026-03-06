@@ -37,6 +37,7 @@ from mlx_runtime_server.worker import run_job_worker
 from tests.runtime_test_support import (
     LTX_CHECKPOINT_FILENAME,
     LTX_SPATIAL_UPSAMPLER_FILENAME,
+    make_png_bytes,
     patched_ltx_prompt_encoder,
 )
 
@@ -128,7 +129,9 @@ class RuntimeUnitTests(unittest.TestCase):
             storage_path=artifact_root,
         )
 
-    def test_ltx_adapter_stage_scaffold_writes_output(self) -> None:
+    def test_ltx_adapter_without_runtime_state_reports_placeholder_metrics(
+        self,
+    ) -> None:
         adapter = LTXFamilyAdapter()
         capability = CapabilityDescriptor(
             model_id="ltx-2.3-fast-local",
@@ -144,7 +147,7 @@ class RuntimeUnitTests(unittest.TestCase):
             metadata={"task": "video.generate"},
         )
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
+        with tempfile.TemporaryDirectory():
             prompt_result = adapter.run_stage(
                 loaded,
                 ExecutionStage(
@@ -153,28 +156,7 @@ class RuntimeUnitTests(unittest.TestCase):
                     params={"simulate_delay_seconds": 0.0},
                 ),
             )
-            self.assertEqual(prompt_result.metrics["status"], "scaffold")
-
-            encode_result = adapter.run_stage(
-                loaded,
-                ExecutionStage(
-                    stage_id="encode_output",
-                    inputs={"prompt": "cinematic fox in snow"},
-                    params={
-                        "artifact_id": "out_job_1",
-                        "artifact_format": "mp4",
-                        "output_dir": tmp_dir,
-                        "storage_key": "jobs/job_1/outputs/out_job_1/out_job_1.mp4",
-                        "simulate_delay_seconds": 0.0,
-                    },
-                ),
-            )
-            output_path = Path(tmp_dir) / "out_job_1.mp4"
-            self.assertTrue(output_path.exists())
-            self.assertEqual(len(encode_result.artifacts), 1)
-            self.assertEqual(
-                encode_result.artifacts[0].metadata["media_type"], "video/mp4"
-            )
+            self.assertEqual(prompt_result.metrics["status"], "placeholder")
 
     def test_ltx_adapter_prompt_encode_stores_context_and_unload_clears_it(
         self,
@@ -209,11 +191,46 @@ class RuntimeUnitTests(unittest.TestCase):
                     ExecutionStage(
                         stage_id="generate",
                         inputs={"prompt": "cinematic fox in snow"},
-                        params={"num_frames": 9, "simulate_delay_seconds": 0.0},
+                        params={
+                            "task": "video.generate",
+                            "width": 96,
+                            "height": 64,
+                            "num_frames": 9,
+                            "fps": 12,
+                            "seed": 11,
+                            "resolved_inputs": {"images": []},
+                            "simulate_delay_seconds": 0.0,
+                        },
                     ),
                 )
-                self.assertEqual(generate_result.metrics["status"], "scaffold")
-                self.assertEqual(generate_result.metrics["prompt_token_count"], 11)
+                self.assertEqual(generate_result.metrics["status"], "generated")
+                self.assertEqual(generate_result.metrics["frames_generated"], 9)
+                self.assertEqual(
+                    generate_result.metrics["backend"],
+                    "mlx_prompt_conditioned_preview",
+                )
+
+                with tempfile.TemporaryDirectory() as output_dir:
+                    encode_result = adapter.run_stage(
+                        loaded,
+                        ExecutionStage(
+                            stage_id="encode_output",
+                            inputs={"prompt": "cinematic fox in snow"},
+                            params={
+                                "artifact_id": "out_job_1",
+                                "artifact_format": "mp4",
+                                "output_dir": output_dir,
+                                "storage_key": (
+                                    "jobs/job_1/outputs/out_job_1/out_job_1.mp4"
+                                ),
+                                "simulate_delay_seconds": 0.0,
+                            },
+                        ),
+                    )
+                    output_path = Path(output_dir) / "out_job_1.mp4"
+                    self.assertTrue(output_path.exists())
+                    self.assertIn(b"ftyp", output_path.read_bytes()[:32])
+                    self.assertEqual(encode_result.metrics["status"], "encoded")
 
                 adapter.unload(loaded)
                 self.assertEqual(len(encoders), 1)
@@ -246,6 +263,46 @@ class RuntimeUnitTests(unittest.TestCase):
                     ),
                 )
 
+    def test_ltx_adapter_condition_inputs_prepares_resolved_images(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.condition.image", profile="bf16"),
+            )
+            image_path = Path(tmp_dir) / "conditioning.png"
+            image_path.write_bytes(make_png_bytes())
+
+            result = adapter.run_stage(
+                loaded,
+                ExecutionStage(
+                    stage_id="condition_inputs",
+                    inputs={"images": [{"input_handle": "inp_1"}]},
+                    params={
+                        "task": "video.condition.image",
+                        "num_frames": 9,
+                        "resolved_inputs": {
+                            "images": [
+                                {
+                                    "input_handle": "inp_1",
+                                    "payload_path": str(image_path),
+                                    "frame_index": 0,
+                                    "strength": 1.0,
+                                    "media_type": "image/png",
+                                    "filename": "conditioning.png",
+                                }
+                            ]
+                        },
+                        "simulate_delay_seconds": 0.0,
+                    },
+                ),
+            )
+            self.assertEqual(result.metrics["status"], "prepared")
+            self.assertEqual(result.metrics["conditioning_count"], 1)
+
     def test_ltx_adapter_generate_requires_prompt_context(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
@@ -266,7 +323,14 @@ class RuntimeUnitTests(unittest.TestCase):
                     ExecutionStage(
                         stage_id="generate",
                         inputs={"prompt": "cinematic fox in snow"},
-                        params={"num_frames": 9, "simulate_delay_seconds": 0.0},
+                        params={
+                            "task": "video.generate",
+                            "width": 96,
+                            "height": 64,
+                            "num_frames": 9,
+                            "resolved_inputs": {"images": []},
+                            "simulate_delay_seconds": 0.0,
+                        },
                     ),
                 )
 
@@ -396,7 +460,7 @@ class RuntimeUnitTests(unittest.TestCase):
                 model_id="ltx-2.3-fast-local",
                 task="video.generate",
                 inputs={"prompt": "direct worker test"},
-                params={"num_frames": 9},
+                params={"width": 96, "height": 64, "num_frames": 9, "fps": 12},
                 output=JobOutputPolicy(artifact_format="mp4"),
                 extensions={"simulate_delay_seconds": 0.0},
             )
@@ -444,13 +508,15 @@ class RuntimeUnitTests(unittest.TestCase):
                     and isinstance(payload.get("data"), dict)
                     and isinstance(payload["data"].get("metrics"), dict)
                     and payload["data"]["metrics"].get("status") == "encoded"
+                    and isinstance(payload["data"].get("memory"), dict)
+                    and "telemetry_available" in payload["data"]["memory"]
                     for payload in event_payloads
                 )
             )
-            self.assertTrue(
-                runtime_home.output_artifact_path(
-                    "job_worker_test",
-                    "out_job_worker_test",
-                    "out_job_worker_test.mp4",
-                ).exists()
+            output_path = runtime_home.output_artifact_path(
+                "job_worker_test",
+                "out_job_worker_test",
+                "out_job_worker_test.mp4",
             )
+            self.assertTrue(output_path.exists())
+            self.assertIn(b"ftyp", output_path.read_bytes()[:32])
