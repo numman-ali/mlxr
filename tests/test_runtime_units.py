@@ -7,7 +7,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from mlx_runtime_core import ExecutionStage, LoadedModelHandle, RuntimeHome
+from mlx_runtime_core import (
+    ExecutionProfile,
+    ExecutionStage,
+    LoadedModelHandle,
+    PortableArtifact,
+    RuntimeHome,
+)
 from mlx_runtime_family_ltx import LTXFamilyAdapter
 from mlx_runtime_schemas import (
     CapabilityDescriptor,
@@ -31,10 +37,97 @@ from mlx_runtime_server.worker import run_job_worker
 from tests.runtime_test_support import (
     LTX_CHECKPOINT_FILENAME,
     LTX_SPATIAL_UPSAMPLER_FILENAME,
+    patched_ltx_prompt_encoder,
 )
 
 
 class RuntimeUnitTests(unittest.TestCase):
+    def _artifactized_portable_artifact(
+        self, runtime_home: RuntimeHome
+    ) -> PortableArtifact:
+        artifact_root = runtime_home.artifact_dir(
+            "ltx", "ltx-2.3-fast-local", "sha256:test"
+        )
+        checkpoint_path = (
+            artifact_root / "payload" / "checkpoint" / LTX_CHECKPOINT_FILENAME
+        )
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint_path.write_text("checkpoint", encoding="utf-8")
+        upsampler_path = (
+            artifact_root
+            / "payload"
+            / "spatial_upsampler"
+            / LTX_SPATIAL_UPSAMPLER_FILENAME
+        )
+        upsampler_path.parent.mkdir(parents=True, exist_ok=True)
+        upsampler_path.write_text("upsampler", encoding="utf-8")
+        text_encoder_dir = artifact_root / "payload" / "text_encoder"
+        text_encoder_dir.mkdir(parents=True, exist_ok=True)
+        (text_encoder_dir / "config.json").write_text("{}", encoding="utf-8")
+        (text_encoder_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
+        (text_encoder_dir / "model-00001-of-00001.safetensors").write_text(
+            "weights", encoding="utf-8"
+        )
+        artifact_storage_key = runtime_home.artifact_storage_key(
+            "ltx", "ltx-2.3-fast-local", "sha256:test"
+        )
+        provenance = ProvenanceRecord(provider="local", locator={"path": "/tmp/model"})
+        return PortableArtifact(
+            record=PortableArtifactRecord(
+                model_id="ltx-2.3-fast-local",
+                artifact_digest="sha256:test",
+                family="ltx",
+                format_version="0.2.0",
+                weight_format="source_packaged_fastpath_assets",
+                storage_key=artifact_storage_key,
+                capability=CapabilityDescriptor(
+                    model_id="ltx-2.3-fast-local",
+                    artifact_digest="sha256:test",
+                    family="ltx",
+                    tasks=["video.generate"],
+                    artifacts_out=["mp4"],
+                    scheduler_class="media_video_dit",
+                ),
+                provenance=provenance,
+                components=[
+                    PortableArtifactComponentRecord(
+                        role="checkpoint",
+                        kind="file",
+                        relative_path=f"payload/checkpoint/{LTX_CHECKPOINT_FILENAME}",
+                        storage_key=(
+                            f"{artifact_storage_key}/payload/checkpoint/"
+                            f"{LTX_CHECKPOINT_FILENAME}"
+                        ),
+                        source_id="src_bundle",
+                        provenance=provenance,
+                    ),
+                    PortableArtifactComponentRecord(
+                        role="spatial_upsampler",
+                        kind="file",
+                        relative_path=(
+                            "payload/spatial_upsampler/"
+                            f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
+                        ),
+                        storage_key=(
+                            f"{artifact_storage_key}/payload/spatial_upsampler/"
+                            f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
+                        ),
+                        source_id="src_bundle",
+                        provenance=provenance,
+                    ),
+                    PortableArtifactComponentRecord(
+                        role="text_encoder",
+                        kind="directory",
+                        relative_path="payload/text_encoder",
+                        storage_key=f"{artifact_storage_key}/payload/text_encoder",
+                        source_id="src_bundle",
+                        provenance=provenance,
+                    ),
+                ],
+            ),
+            storage_path=artifact_root,
+        )
+
     def test_ltx_adapter_stage_scaffold_writes_output(self) -> None:
         adapter = LTXFamilyAdapter()
         capability = CapabilityDescriptor(
@@ -82,6 +175,128 @@ class RuntimeUnitTests(unittest.TestCase):
             self.assertEqual(
                 encode_result.artifacts[0].metadata["media_type"], "video/mp4"
             )
+
+    def test_ltx_adapter_prompt_encode_stores_context_and_unload_clears_it(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.generate", profile="bf16"),
+            )
+
+            with patched_ltx_prompt_encoder(token_count=11) as encoders:
+                prompt_result = adapter.run_stage(
+                    loaded,
+                    ExecutionStage(
+                        stage_id="prompt_encode",
+                        inputs={"prompt": "cinematic fox in snow"},
+                        params={"simulate_delay_seconds": 0.0},
+                    ),
+                )
+                self.assertEqual(prompt_result.metrics["status"], "encoded")
+                self.assertEqual(prompt_result.metrics["token_count"], 11)
+                self.assertEqual(
+                    prompt_result.metrics["video_context_shape"], [1, 1024, 3840]
+                )
+
+                generate_result = adapter.run_stage(
+                    loaded,
+                    ExecutionStage(
+                        stage_id="generate",
+                        inputs={"prompt": "cinematic fox in snow"},
+                        params={"num_frames": 9, "simulate_delay_seconds": 0.0},
+                    ),
+                )
+                self.assertEqual(generate_result.metrics["status"], "scaffold")
+                self.assertEqual(generate_result.metrics["prompt_token_count"], 11)
+
+                adapter.unload(loaded)
+                self.assertEqual(len(encoders), 1)
+                self.assertTrue(encoders[0].closed)
+
+    def test_ltx_adapter_prompt_encode_rejects_negative_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.generate", profile="bf16"),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "does not support negative_prompt yet",
+            ):
+                adapter.run_stage(
+                    loaded,
+                    ExecutionStage(
+                        stage_id="prompt_encode",
+                        inputs={
+                            "prompt": "cinematic fox in snow",
+                            "negative_prompt": "blurry",
+                        },
+                        params={"simulate_delay_seconds": 0.0},
+                    ),
+                )
+
+    def test_ltx_adapter_generate_requires_prompt_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.generate", profile="bf16"),
+            )
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "requires prompt_encode to run successfully first",
+            ):
+                adapter.run_stage(
+                    loaded,
+                    ExecutionStage(
+                        stage_id="generate",
+                        inputs={"prompt": "cinematic fox in snow"},
+                        params={"num_frames": 9, "simulate_delay_seconds": 0.0},
+                    ),
+                )
+
+    def test_ltx_adapter_prompt_encode_surfaces_backend_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.generate", profile="bf16"),
+            )
+
+            with patch(
+                "mlx_runtime_family_ltx.adapter.create_prompt_encoder",
+                side_effect=RuntimeError("Local MLX LTX prompt encoder unavailable."),
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Local MLX LTX prompt encoder unavailable",
+                ):
+                    adapter.run_stage(
+                        loaded,
+                        ExecutionStage(
+                            stage_id="prompt_encode",
+                            inputs={"prompt": "cinematic fox in snow"},
+                            params={"simulate_delay_seconds": 0.0},
+                        ),
+                    )
 
     def test_server_settings_parse_http_and_referer_rules(self) -> None:
         with patch.dict(
@@ -171,90 +386,11 @@ class RuntimeUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
             runtime_home.ensure_layout()
-            artifact_root = runtime_home.artifact_dir(
-                "ltx", "ltx-2.3-fast-local", "sha256:test"
-            )
-            checkpoint_path = (
-                artifact_root / "payload" / "checkpoint" / LTX_CHECKPOINT_FILENAME
-            )
-            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-            checkpoint_path.write_text("checkpoint", encoding="utf-8")
-            upsampler_path = (
-                artifact_root
-                / "payload"
-                / "spatial_upsampler"
-                / LTX_SPATIAL_UPSAMPLER_FILENAME
-            )
-            upsampler_path.parent.mkdir(parents=True, exist_ok=True)
-            upsampler_path.write_text("upsampler", encoding="utf-8")
-            text_encoder_dir = artifact_root / "payload" / "text_encoder"
-            text_encoder_dir.mkdir(parents=True, exist_ok=True)
-            (text_encoder_dir / "config.json").write_text("{}", encoding="utf-8")
-            (text_encoder_dir / "tokenizer.json").write_text("{}", encoding="utf-8")
-            (text_encoder_dir / "model-00001-of-00001.safetensors").write_text(
-                "weights", encoding="utf-8"
-            )
-            artifact_storage_key = runtime_home.artifact_storage_key(
-                "ltx", "ltx-2.3-fast-local", "sha256:test"
-            )
-            provenance = ProvenanceRecord(
-                provider="local", locator={"path": "/tmp/model"}
-            )
+            artifact = self._artifactized_portable_artifact(runtime_home)
             model_record = ModelRecord(
                 model_id="ltx-2.3-fast-local",
                 family="ltx",
-                artifact=PortableArtifactRecord(
-                    model_id="ltx-2.3-fast-local",
-                    artifact_digest="sha256:test",
-                    family="ltx",
-                    format_version="0.2.0",
-                    weight_format="source_packaged_fastpath_assets",
-                    storage_key=artifact_storage_key,
-                    capability=CapabilityDescriptor(
-                        model_id="ltx-2.3-fast-local",
-                        artifact_digest="sha256:test",
-                        family="ltx",
-                        tasks=["video.generate"],
-                        artifacts_out=["mp4"],
-                        scheduler_class="media_video_dit",
-                    ),
-                    provenance=provenance,
-                    components=[
-                        PortableArtifactComponentRecord(
-                            role="checkpoint",
-                            kind="file",
-                            relative_path=f"payload/checkpoint/{LTX_CHECKPOINT_FILENAME}",
-                            storage_key=(
-                                f"{artifact_storage_key}/payload/checkpoint/"
-                                f"{LTX_CHECKPOINT_FILENAME}"
-                            ),
-                            source_id="src_bundle",
-                            provenance=provenance,
-                        ),
-                        PortableArtifactComponentRecord(
-                            role="spatial_upsampler",
-                            kind="file",
-                            relative_path=(
-                                "payload/spatial_upsampler/"
-                                f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
-                            ),
-                            storage_key=(
-                                f"{artifact_storage_key}/payload/spatial_upsampler/"
-                                f"{LTX_SPATIAL_UPSAMPLER_FILENAME}"
-                            ),
-                            source_id="src_bundle",
-                            provenance=provenance,
-                        ),
-                        PortableArtifactComponentRecord(
-                            role="text_encoder",
-                            kind="directory",
-                            relative_path="payload/text_encoder",
-                            storage_key=f"{artifact_storage_key}/payload/text_encoder",
-                            source_id="src_bundle",
-                            provenance=provenance,
-                        ),
-                    ],
-                ),
+                artifact=artifact.record,
             )
             request = JobRequest(
                 model_id="ltx-2.3-fast-local",
@@ -268,14 +404,15 @@ class RuntimeUnitTests(unittest.TestCase):
             event_queue: queue.Queue[dict[str, object]] = queue.Queue()
             command_queue: queue.Queue[dict[str, object]] = queue.Queue()
 
-            run_job_worker(
-                job_id="job_worker_test",
-                request_data=request.model_dump(mode="json"),
-                model_data=model_record.model_dump(mode="json"),
-                runtime_home_root=str(runtime_home.root),
-                event_queue=event_queue,
-                command_queue=command_queue,
-            )
+            with patched_ltx_prompt_encoder(token_count=9):
+                run_job_worker(
+                    job_id="job_worker_test",
+                    request_data=request.model_dump(mode="json"),
+                    model_data=model_record.model_dump(mode="json"),
+                    runtime_home_root=str(runtime_home.root),
+                    event_queue=event_queue,
+                    command_queue=command_queue,
+                )
 
             messages: list[dict[str, object]] = []
             while True:
@@ -299,6 +436,16 @@ class RuntimeUnitTests(unittest.TestCase):
             )
             self.assertTrue(
                 any(message.get("type") == "artifacts" for message in messages)
+            )
+            self.assertTrue(
+                any(
+                    isinstance(payload, dict)
+                    and payload.get("kind") == RuntimeEventKind.JOB_METRICS.value
+                    and isinstance(payload.get("data"), dict)
+                    and isinstance(payload["data"].get("metrics"), dict)
+                    and payload["data"]["metrics"].get("status") == "encoded"
+                    for payload in event_payloads
+                )
             )
             self.assertTrue(
                 runtime_home.output_artifact_path(

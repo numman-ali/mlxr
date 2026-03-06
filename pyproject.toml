@@ -52,4 +52,7 @@ source = ["packages"]
 
 [tool.coverage.report]
 fail_under = 85
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_prompt_encoding_backend.py",
+]

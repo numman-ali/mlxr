@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import base64
 import os
+import queue
 import tempfile
+import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TypeVar
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from httpx import Response
 from mlx_runtime_core import RuntimeHome
+from mlx_runtime_family_ltx.prompt_encoding import PromptEncodingResult
 from mlx_runtime_schemas import (
     ArtifactConversionResult,
     InputHandleRecord,
@@ -167,3 +173,134 @@ def http_headers(
     if fetch_site is not None:
         headers["Sec-Fetch-Site"] = fetch_site
     return headers
+
+
+class FakePromptEncoder:
+    def __init__(
+        self,
+        *,
+        token_count: int = 8,
+        sequence_length: int = 1024,
+        include_audio_context: bool = True,
+    ) -> None:
+        self.token_count = token_count
+        self.sequence_length = sequence_length
+        self.include_audio_context = include_audio_context
+        self.calls: list[tuple[str, int, bool]] = []
+        self.closed = False
+
+    def encode(
+        self,
+        prompt: str,
+        *,
+        max_length: int = 1024,
+        return_audio_context: bool = True,
+    ) -> PromptEncodingResult:
+        self.calls.append((prompt, max_length, return_audio_context))
+        audio_context = (
+            "audio-context"
+            if self.include_audio_context and return_audio_context
+            else None
+        )
+        return PromptEncodingResult(
+            video_context="video-context",
+            audio_context=audio_context,
+            attention_mask="attention-mask",
+            prompt_text=prompt,
+            token_count=self.token_count,
+            sequence_length=self.sequence_length,
+            video_context_shape=(1, self.sequence_length, 3840),
+            attention_mask_shape=(1, self.sequence_length),
+            audio_context_shape=(
+                (1, self.sequence_length, 2048) if audio_context is not None else None
+            ),
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class ThreadMessageQueue(queue.Queue[dict[str, object]]):
+    def close(self) -> None:
+        return None
+
+
+class ThreadManagedProcess:
+    def __init__(
+        self,
+        *,
+        target: object,
+        kwargs: dict[str, object],
+    ) -> None:
+        if not callable(target):
+            raise TypeError("ThreadManagedProcess target must be callable")
+        self._target = target
+        self._kwargs = kwargs
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        self._target(**self._kwargs)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: float | None = None) -> None:
+        self._thread.join(timeout)
+
+    def is_alive(self) -> bool:
+        return self._thread.is_alive()
+
+    def terminate(self) -> None:
+        return None
+
+
+class ThreadProcessContext:
+    def Queue(self) -> ThreadMessageQueue:
+        return ThreadMessageQueue()
+
+    def Process(
+        self,
+        target: object,
+        kwargs: dict[str, object],
+    ) -> ThreadManagedProcess:
+        return ThreadManagedProcess(target=target, kwargs=kwargs)
+
+
+@contextmanager
+def patched_ltx_prompt_encoder(
+    *,
+    token_count: int = 8,
+    sequence_length: int = 1024,
+    include_audio_context: bool = True,
+) -> Iterator[list[FakePromptEncoder]]:
+    from mlx_runtime_family_ltx import adapter as adapter_module
+
+    instances: list[FakePromptEncoder] = []
+
+    def factory(
+        checkpoint_path: Path,
+        text_encoder_path: Path,
+    ) -> FakePromptEncoder:
+        del checkpoint_path, text_encoder_path
+        encoder = FakePromptEncoder(
+            token_count=token_count,
+            sequence_length=sequence_length,
+            include_audio_context=include_audio_context,
+        )
+        instances.append(encoder)
+        return encoder
+
+    with patch.object(adapter_module, "create_prompt_encoder", side_effect=factory):
+        yield instances
+
+
+@contextmanager
+def patched_inline_job_process_context() -> Iterator[None]:
+    from mlx_runtime_server import jobs as jobs_module
+
+    with patch.object(
+        jobs_module,
+        "_job_process_context",
+        return_value=ThreadProcessContext(),
+    ):
+        yield

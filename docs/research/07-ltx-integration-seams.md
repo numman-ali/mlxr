@@ -155,7 +155,7 @@ Platform implication:
 
 ## Current First-Slice Runtime Artifact Shape
 
-The current runtime-backed LTX artifact slice is artifact-first, not execution-complete.
+The current runtime-backed LTX slice now includes truthful artifact conversion plus the first real execution stage, but it is still not generation-complete.
 
 What the repo now treats as canonical for the first truthful fast-path slice:
 
@@ -171,10 +171,16 @@ Portable artifact implications:
 - artifact identity comes from copied component contents plus conversion settings, not provider-cache paths
 - load-time validation now checks that the required payload roles are present and internally consistent before stage execution begins
 
+Execution implications:
+
+- `prompt_encode` now runs through a repo-owned strict-local MLX Gemma path using the artifactized `checkpoint` and `text_encoder` payloads
+- prompt context stays worker-local and becomes the honest seam into later denoise/generate work
+- negative-prompt support is still intentionally excluded for the fast path instead of being silently ignored
+
 Still intentionally out of scope for this slice:
 
-- local Gemma prompt execution
 - temporal upsamplers, x1.5 upsampler, LoRAs, audio-aware branches, and prompt enhancement
+- real denoise/video generation
 - claiming that the LTX artifact shape has already validated the platform across families
 
 ## Comfy Seams

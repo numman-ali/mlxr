@@ -30,6 +30,8 @@ from mlx_runtime_schemas import (
     ResolvedSource,
 )
 
+from .prompt_encoding import PromptEncoder, PromptEncodingResult, create_prompt_encoder
+
 
 @dataclass(frozen=True, slots=True)
 class PreparedComponent:
@@ -41,12 +43,20 @@ class PreparedComponent:
     resolved_ref: str | None
 
 
+@dataclass(slots=True)
+class LoadedLTXRuntimeState:
+    component_paths: dict[str, Path]
+    prompt_encoder: PromptEncoder | None = None
+    prompt_context: PromptEncodingResult | None = None
+
+
 class LTXFamilyAdapter:
     family_id = "ltx"
     _checkpoint_filename = "ltx-2.3-22b-distilled.safetensors"
     _spatial_upsampler_filename = "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
     _text_encoder_dirname = "gemma-3-12b-it-qat-q4_0-unquantized"
     _required_roles = ("checkpoint", "spatial_upsampler", "text_encoder")
+    _runtime_state_key = "_ltx_runtime_state"
 
     def inspect_source(self, source: ResolvedSource) -> FamilyInspection:
         role_candidates = self._role_candidates(source)
@@ -218,6 +228,7 @@ class LTXFamilyAdapter:
         component_paths = self._component_paths(
             artifact.storage_path, artifact.record.components
         )
+        runtime_state = LoadedLTXRuntimeState(component_paths=component_paths)
         return LoadedModelHandle(
             model_id=artifact.record.model_id,
             family=self.family_id,
@@ -231,6 +242,7 @@ class LTXFamilyAdapter:
                 "task": profile.task,
                 "profile": profile.profile,
                 "device": profile.device,
+                self._runtime_state_key: runtime_state,
             },
         )
 
@@ -244,12 +256,42 @@ class LTXFamilyAdapter:
         if isinstance(delay, (float, int)) and delay > 0:
             time.sleep(float(delay))
 
+        runtime_state = self._runtime_state(loaded)
         if stage.stage_id == "prompt_encode":
+            if runtime_state is None:
+                return StageResult(
+                    metrics={
+                        "stage": stage.stage_id,
+                        "status": "scaffold",
+                        "tokens_estimate": len(
+                            str(stage.inputs.get("prompt", "")).split()
+                        ),
+                    }
+                )
+            prompt = self._prompt_text(stage.inputs)
+            self._reject_unsupported_negative_prompt(stage.inputs)
+            prompt_encoder = self._prompt_encoder(runtime_state)
+            prompt_context = prompt_encoder.encode(
+                prompt,
+                max_length=1024,
+                return_audio_context=True,
+            )
+            runtime_state.prompt_context = prompt_context
             return StageResult(
                 metrics={
                     "stage": stage.stage_id,
-                    "status": "scaffold",
-                    "tokens_estimate": len(str(stage.inputs.get("prompt", "")).split()),
+                    "status": "encoded",
+                    "prompt_chars": len(prompt),
+                    "token_count": prompt_context.token_count,
+                    "sequence_length": prompt_context.sequence_length,
+                    "video_context_shape": list(prompt_context.video_context_shape),
+                    "audio_context_shape": (
+                        list(prompt_context.audio_context_shape)
+                        if prompt_context.audio_context_shape is not None
+                        else None
+                    ),
+                    "attention_mask_shape": list(prompt_context.attention_mask_shape),
+                    "audio_context_available": prompt_context.audio_context is not None,
                 }
             )
         if stage.stage_id == "condition_inputs":
@@ -265,6 +307,21 @@ class LTXFamilyAdapter:
                 }
             )
         if stage.stage_id == "generate":
+            if runtime_state is None:
+                return StageResult(
+                    metrics={
+                        "stage": stage.stage_id,
+                        "status": "scaffold",
+                        "frames_requested": stage.params.get(
+                            "num_frames", stage.inputs.get("num_frames")
+                        ),
+                    }
+                )
+            if runtime_state.prompt_context is None:
+                raise ValueError(
+                    "LTX generate stage requires prompt_encode to run successfully first"
+                )
+            prompt_context = runtime_state.prompt_context
             return StageResult(
                 metrics={
                     "stage": stage.stage_id,
@@ -272,6 +329,10 @@ class LTXFamilyAdapter:
                     "frames_requested": stage.params.get(
                         "num_frames", stage.inputs.get("num_frames")
                     ),
+                    "prompt_token_count": prompt_context.token_count,
+                    "sequence_length": prompt_context.sequence_length,
+                    "video_context_shape": list(prompt_context.video_context_shape),
+                    "audio_context_available": prompt_context.audio_context is not None,
                 }
             )
         if stage.stage_id == "encode_output":
@@ -323,7 +384,47 @@ class LTXFamilyAdapter:
         )
 
     def unload(self, loaded: LoadedModelHandle) -> None:
+        runtime_state = self._runtime_state(loaded)
+        if runtime_state is not None:
+            if runtime_state.prompt_encoder is not None:
+                runtime_state.prompt_encoder.close()
+                runtime_state.prompt_encoder = None
+            runtime_state.prompt_context = None
+            loaded.metadata.pop(self._runtime_state_key, None)
         return None
+
+    def _runtime_state(self, loaded: LoadedModelHandle) -> LoadedLTXRuntimeState | None:
+        state = loaded.metadata.get(self._runtime_state_key)
+        if isinstance(state, LoadedLTXRuntimeState):
+            return state
+        return None
+
+    def _prompt_encoder(self, runtime_state: LoadedLTXRuntimeState) -> PromptEncoder:
+        if runtime_state.prompt_encoder is None:
+            runtime_state.prompt_encoder = create_prompt_encoder(
+                checkpoint_path=runtime_state.component_paths["checkpoint"],
+                text_encoder_path=runtime_state.component_paths["text_encoder"],
+            )
+        return runtime_state.prompt_encoder
+
+    def _prompt_text(self, inputs: dict[str, object]) -> str:
+        prompt = inputs.get("prompt", "")
+        if not isinstance(prompt, str):
+            raise ValueError("LTX prompt_encode expects inputs.prompt to be a string")
+        return prompt
+
+    def _reject_unsupported_negative_prompt(self, inputs: dict[str, object]) -> None:
+        negative_prompt = inputs.get("negative_prompt")
+        if negative_prompt in {None, ""}:
+            return
+        if not isinstance(negative_prompt, str):
+            raise ValueError(
+                "LTX prompt_encode expects inputs.negative_prompt to be a string when provided"
+            )
+        if negative_prompt.strip():
+            raise ValueError(
+                "LTX fast-path prompt encoding does not support negative_prompt yet"
+            )
 
     def _role_candidates(self, source: ResolvedSource) -> list[str]:
         file_paths = {record.path for record in source.files}

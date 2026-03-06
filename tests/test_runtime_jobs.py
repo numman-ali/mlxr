@@ -14,6 +14,8 @@ from tests.runtime_test_support import (
     import_input_handle,
     make_local_bundle,
     make_state,
+    patched_inline_job_process_context,
+    patched_ltx_prompt_encoder,
     register_local_ltx_model,
     response_model,
     wait_for_job_terminal_state,
@@ -39,7 +41,11 @@ class RuntimeJobTests(unittest.TestCase):
             root = Path(tmp_dir)
             source_dir = make_local_bundle(root)
             state = make_state(root)
-            with TestClient(create_app(state)) as client:
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(state)) as client,
+            ):
                 register_local_ltx_model(client, source_dir)
                 handle_id = import_input_handle(client, b"conditioning-bytes")
 
@@ -86,7 +92,11 @@ class RuntimeJobTests(unittest.TestCase):
             root = Path(tmp_dir)
             source_dir = make_local_bundle(root)
             state = make_state(root)
-            with TestClient(create_app(state)) as client:
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(state)) as client,
+            ):
                 register_local_ltx_model(client, source_dir)
 
                 first_job = client.post(
@@ -145,12 +155,51 @@ class RuntimeJobTests(unittest.TestCase):
                 terminal = wait_for_job_terminal_state(client, first_job_id)
                 self.assertEqual(terminal["state"], "completed")
 
+    def test_job_fails_when_negative_prompt_is_requested_for_fast_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(root)
+            state = make_state(root)
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(state)) as client,
+            ):
+                register_local_ltx_model(client, source_dir)
+
+                submit = client.post(
+                    "/v1/jobs",
+                    json={
+                        "model_id": "ltx-2.3-fast-local",
+                        "task": "video.generate",
+                        "inputs": {
+                            "prompt": "city skyline",
+                            "negative_prompt": "blurry",
+                        },
+                        "params": {"width": 768, "height": 512, "num_frames": 9},
+                        "output": {"artifact_format": "mp4"},
+                    },
+                )
+                self.assertEqual(submit.status_code, 200, submit.text)
+                job_id = response_model(submit, JobSubmitResult).job_id
+
+                terminal = wait_for_job_terminal_state(client, job_id)
+                self.assertEqual(terminal["state"], "failed")
+                error = terminal.get("error")
+                self.assertIsInstance(error, str)
+                assert isinstance(error, str)
+                self.assertIn("does not support negative_prompt yet", error)
+
     def test_job_cancellation_marks_terminal_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             source_dir = make_local_bundle(root)
             state = make_state(root)
-            with TestClient(create_app(state)) as client:
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(state)) as client,
+            ):
                 register_local_ltx_model(client, source_dir)
                 submit = client.post(
                     "/v1/jobs",
@@ -182,7 +231,11 @@ class RuntimeJobTests(unittest.TestCase):
             source_dir = make_local_bundle(root)
             export_path = root / "exports" / "result.mp4"
             state = make_state(root)
-            with TestClient(create_app(state)) as client:
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(state)) as client,
+            ):
                 register_local_ltx_model(client, source_dir)
                 submit = client.post(
                     "/v1/jobs",
@@ -216,7 +269,11 @@ class RuntimeJobTests(unittest.TestCase):
                     allowed_origins=("http://localhost:3000",),
                 ),
             )
-            with TestClient(create_app(http_state)) as client:
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                TestClient(create_app(http_state)) as client,
+            ):
                 register_local_ltx_model(
                     client,
                     source_dir,
