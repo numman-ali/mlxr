@@ -10,6 +10,7 @@ os.environ.setdefault(
 )
 
 from fastapi.testclient import TestClient
+from ltx import LTXFamilyAdapter
 from mlx_runtime_core import (
     ExecutionProfile,
     FetchPolicy,
@@ -22,7 +23,6 @@ from mlx_runtime_core import (
     SourceMaterialization,
     source_id_for_ref,
 )
-from mlx_runtime_family_ltx import LTXFamilyAdapter
 from mlx_runtime_schemas import (
     ArtifactConversionRequest,
     AuthRequirements,
@@ -355,7 +355,11 @@ class PhaseARuntimeTests(unittest.TestCase):
             self.assertEqual(len(capabilities.json()), 1)
             self.assertEqual(
                 capabilities.json()[0]["tasks"],
-                ["video.generate", "video.condition.image"],
+                [
+                    "video.generate",
+                    "video.condition.image",
+                    "video.condition.audio",
+                ],
             )
             self.assertEqual(
                 capabilities.json()[0]["modalities_out"],

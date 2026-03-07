@@ -422,11 +422,16 @@ class JobManager:
         ):
             raise JobValidationError("num_frames must satisfy the current 8n+1 rule")
         images = request.inputs.get("images")
+        audio = request.inputs.get("audio")
         if request.task == "video.condition.image" and (
             not isinstance(images, list) or not images
         ):
             raise JobValidationError(
                 "video.condition.image requires at least one image input"
+            )
+        if request.task == "video.condition.audio" and not isinstance(audio, dict):
+            raise JobValidationError(
+                "video.condition.audio requires one audio input object"
             )
         if images is not None:
             if not isinstance(images, list):
@@ -455,6 +460,29 @@ class JobManager:
                 if not 0.0 <= strength_value <= 1.0:
                     raise JobValidationError(
                         "images strength must be between 0.0 and 1.0"
+                    )
+        if audio is not None:
+            if not isinstance(audio, dict):
+                raise JobValidationError("audio must be an object when provided")
+            handle_id = audio.get("input_handle")
+            if not isinstance(handle_id, str) or not handle_id:
+                raise JobValidationError(
+                    "audio input requires a non-empty input_handle"
+                )
+            start_time_seconds = audio.get("start_time_seconds", 0.0)
+            if not isinstance(start_time_seconds, (int, float)):
+                raise JobValidationError("audio start_time_seconds must be numeric")
+            if float(start_time_seconds) < 0.0:
+                raise JobValidationError("audio start_time_seconds must be >= 0.0")
+            max_duration_seconds = audio.get("max_duration_seconds")
+            if max_duration_seconds is not None:
+                if not isinstance(max_duration_seconds, (int, float)):
+                    raise JobValidationError(
+                        "audio max_duration_seconds must be numeric when provided"
+                    )
+                if float(max_duration_seconds) <= 0.0:
+                    raise JobValidationError(
+                        "audio max_duration_seconds must be > 0.0 when provided"
                     )
         for handle_id in _collect_input_handles(request.inputs):
             if self.input_store.get(handle_id) is None:

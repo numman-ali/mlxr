@@ -1,10 +1,27 @@
 from __future__ import annotations
 
+import argparse
 import tempfile
 import unittest
 from pathlib import Path
 
-from mlx_runtime_cli.cli import _default_uds_path, build_parser
+from mlx_runtime_cli.cli import (
+    RuntimeClient,
+    _default_uds_path,
+    _generation_params,
+    _media_type_for_path,
+    _references_from_args,
+    build_parser,
+)
+
+
+class _FakeClient(RuntimeClient):
+    def __init__(self) -> None:
+        self.calls: list[tuple[Path, str]] = []
+
+    def import_file(self, path: Path, *, kind: str):  # type: ignore[no-untyped-def]
+        self.calls.append((path, kind))
+        return type("Record", (), {"handle_id": f"{kind}-handle"})()
 
 
 class RuntimeCliGenerateTests(unittest.TestCase):
@@ -69,3 +86,79 @@ class RuntimeCliGenerateTests(unittest.TestCase):
                     os.environ.pop("MLX_RUNTIME_HOME", None)
                 else:
                     os.environ["MLX_RUNTIME_HOME"] = previous
+
+    def test_media_type_for_path_supports_current_image_and_audio_fixtures(
+        self,
+    ) -> None:
+        self.assertEqual(
+            _media_type_for_path(Path("conditioning.ppm"), "image"),
+            "image/x-portable-pixmap",
+        )
+        self.assertEqual(
+            _media_type_for_path(Path("bark.wav"), "audio"),
+            "audio/wav",
+        )
+        self.assertEqual(
+            _media_type_for_path(Path("unknown.bin"), "image"),
+            "application/octet-stream",
+        )
+
+    def test_generation_params_only_emits_explicit_values(self) -> None:
+        args = argparse.Namespace(
+            width=384,
+            height=224,
+            fps=24,
+            seed=1234,
+            num_frames=17,
+        )
+        self.assertEqual(
+            _generation_params(args),
+            {
+                "width": 384,
+                "height": 224,
+                "fps": 24,
+                "seed": 1234,
+                "num_frames": 17,
+            },
+        )
+
+    def test_references_from_args_plan_only_does_not_import_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = Path(tmp_dir) / "conditioning.png"
+            audio_path = Path(tmp_dir) / "bark.wav"
+            image_path.write_bytes(b"png")
+            audio_path.write_bytes(b"wav")
+            client = _FakeClient()
+            args = argparse.Namespace(
+                image=image_path,
+                audio=audio_path,
+                plan_only=True,
+            )
+            references = _references_from_args(client, args)
+            self.assertEqual(client.calls, [])
+            self.assertEqual(
+                [(reference.kind, reference.input_handle) for reference in references],
+                [("image", None), ("audio", None)],
+            )
+
+    def test_references_from_args_binds_imported_handles_for_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = Path(tmp_dir) / "conditioning.png"
+            audio_path = Path(tmp_dir) / "bark.wav"
+            image_path.write_bytes(b"png")
+            audio_path.write_bytes(b"wav")
+            client = _FakeClient()
+            args = argparse.Namespace(
+                image=image_path,
+                audio=audio_path,
+                plan_only=False,
+            )
+            references = _references_from_args(client, args)
+            self.assertEqual(
+                client.calls,
+                [(image_path, "image"), (audio_path, "audio")],
+            )
+            self.assertEqual(
+                [(reference.kind, reference.input_handle) for reference in references],
+                [("image", "image-handle"), ("audio", "audio-handle")],
+            )

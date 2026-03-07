@@ -36,7 +36,7 @@ from mlx_runtime_schemas import (
 )
 from pydantic import BaseModel, Field
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 DEFAULT_RESULTS_DIR = REPO_ROOT / "benchmarks" / "results"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "benchmarks" / "output"
 DEFAULT_CONDITIONING_IMAGE = REPO_ROOT / "benchmarks" / "fixtures" / "conditioning.ppm"

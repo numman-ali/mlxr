@@ -36,6 +36,20 @@ It has two connected tracks:
 
 This repo is not “an LTX Mac port.” LTX is the first proving workload, not the platform identity.
 
+## Repo Layout
+
+The workspace is grouped by role rather than by historical package names:
+
+- `packages/core/` contains shared platform packages such as schemas, runtime core, server, and workflow planning
+- `packages/families/` contains model-family packages; `LTX` currently lives at `packages/families/ltx/` with Python sources under `src/ltx/`
+- `packages/adapters/` contains host or integration adapters such as `comfyui` and `ltx-desktop`
+- `packages/clients/` contains first-party clients such as `runtime-cli`
+
+When moving files or updating imports, keep both layers clean:
+
+- repo paths should communicate the package role clearly
+- Python package names should stay short, semantic, and non-duplicative
+
 ## Agent-Native Operating Model
 
 This repository is operated as an agent-native codebase.

@@ -21,6 +21,16 @@ class ConditioningInput:
     filename: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class AudioConditioningInput:
+    handle_id: str
+    payload_path: Path
+    start_time_seconds: float = 0.0
+    max_duration_seconds: float | None = None
+    media_type: str | None = None
+    filename: str | None = None
+
+
 @dataclass(slots=True)
 class GeneratedVideo:
     frames: npt.NDArray[np.uint8]
@@ -40,6 +50,7 @@ class VideoGenerator(Protocol):
         *,
         prompt_context: PromptEncodingResult,
         conditioning_inputs: tuple[ConditioningInput, ...],
+        audio_conditioning: AudioConditioningInput | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -54,7 +65,7 @@ def create_video_generator(
     checkpoint_path: Path,
     spatial_upsampler_path: Path,
 ) -> VideoGenerator:
-    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    backend_module = import_module("ltx._generation_backend")
     create_backend_video_generator = backend_module.create_video_generator
     return create_backend_video_generator(  # type: ignore[no-any-return]
         checkpoint_path=checkpoint_path,
@@ -63,12 +74,12 @@ def create_video_generator(
 
 
 def encode_mp4_video(video: GeneratedVideo, output_path: Path) -> None:
-    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    backend_module = import_module("ltx._generation_backend")
     encode_backend_mp4_video = backend_module.encode_mp4_video
     encode_backend_mp4_video(video=video, output_path=output_path)
 
 
 def encode_wav_audio(video: GeneratedVideo, output_path: Path) -> None:
-    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    backend_module = import_module("ltx._generation_backend")
     encode_backend_wav_audio = backend_module.encode_wav_audio
     encode_backend_wav_audio(video=video, output_path=output_path)

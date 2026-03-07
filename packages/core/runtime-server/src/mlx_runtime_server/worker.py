@@ -318,34 +318,55 @@ def _resolve_inputs(
     inputs: dict[str, object], input_store: InputStore
 ) -> dict[str, object]:
     resolved_images: list[dict[str, object]] = []
+    resolved_audio: dict[str, object] | None = None
     raw_images = inputs.get("images")
-    if raw_images is None:
-        return {"images": resolved_images}
-    if not isinstance(raw_images, list):
-        raise ValueError("LTX image conditioning inputs must be a list")
-    for item in raw_images:
-        if not isinstance(item, dict):
-            raise ValueError("LTX image conditioning entries must be objects")
-        handle_id = item.get("input_handle")
-        if not isinstance(handle_id, str) or not handle_id:
-            raise ValueError(
-                "LTX image conditioning requires non-empty input_handle values"
+    if raw_images is not None:
+        if not isinstance(raw_images, list):
+            raise ValueError("LTX image conditioning inputs must be a list")
+        for item in raw_images:
+            if not isinstance(item, dict):
+                raise ValueError("LTX image conditioning entries must be objects")
+            handle_id = item.get("input_handle")
+            if not isinstance(handle_id, str) or not handle_id:
+                raise ValueError(
+                    "LTX image conditioning requires non-empty input_handle values"
+                )
+            record = input_store.get(handle_id)
+            if record is None:
+                raise ValueError(f"Unknown input handle '{handle_id}'")
+            payload_path = input_store.payload_path(record)
+            resolved_images.append(
+                {
+                    "input_handle": handle_id,
+                    "payload_path": str(payload_path),
+                    "media_type": record.media_type,
+                    "filename": record.filename,
+                    "frame_index": item.get("frame_index", 0),
+                    "strength": item.get("strength", 1.0),
+                }
             )
+
+    raw_audio = inputs.get("audio")
+    if raw_audio is not None:
+        if not isinstance(raw_audio, dict):
+            raise ValueError("LTX audio conditioning input must be an object")
+        handle_id = raw_audio.get("input_handle")
+        if not isinstance(handle_id, str) or not handle_id:
+            raise ValueError("LTX audio conditioning requires a non-empty input_handle")
         record = input_store.get(handle_id)
         if record is None:
             raise ValueError(f"Unknown input handle '{handle_id}'")
         payload_path = input_store.payload_path(record)
-        resolved_images.append(
-            {
-                "input_handle": handle_id,
-                "payload_path": str(payload_path),
-                "media_type": record.media_type,
-                "filename": record.filename,
-                "frame_index": item.get("frame_index", 0),
-                "strength": item.get("strength", 1.0),
-            }
-        )
-    return {"images": resolved_images}
+        resolved_audio = {
+            "input_handle": handle_id,
+            "payload_path": str(payload_path),
+            "media_type": record.media_type,
+            "filename": record.filename,
+            "start_time_seconds": raw_audio.get("start_time_seconds", 0.0),
+            "max_duration_seconds": raw_audio.get("max_duration_seconds"),
+        }
+
+    return {"images": resolved_images, "audio": resolved_audio}
 
 
 def _begin_memory_measurement() -> MemorySnapshot:

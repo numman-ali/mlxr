@@ -24,7 +24,12 @@ from PIL import Image
 from safetensors import safe_open
 
 from ._audio_vocoder import AudioVocoder
-from .generation import ConditioningInput, GeneratedVideo, VideoGenerator
+from .generation import (
+    AudioConditioningInput,
+    ConditioningInput,
+    GeneratedVideo,
+    VideoGenerator,
+)
 from .prompt_encoding import PromptEncodingResult
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -73,6 +78,11 @@ class _ReferenceImports:
     load_vae_decoder: object
     load_vae_encoder: object
     load_audio_decoder: object
+    audio_encoder_class: object
+    audio_processor_class: object
+    audio_norm_type_enum: object
+    audio_causality_axis_enum: object
+    load_audio_vae_weights: object
     load_vocoder: object
     decode_audio: object
     sanitize_audio_vae_weights: object
@@ -465,7 +475,9 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     _vae_decoder: object | None = None
     _vae_encoder: object | None = None
     _upsampler: object | None = None
+    _audio_encoder: object | None = None
     _audio_decoder: object | None = None
+    _audio_processor: object | None = None
     _vocoder: object | None = None
     _audio_output_sample_rate: int | None = None
     _audio_backend: str | None = None
@@ -475,6 +487,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         *,
         prompt_context: PromptEncodingResult,
         conditioning_inputs: tuple[ConditioningInput, ...],
+        audio_conditioning: AudioConditioningInput | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -507,6 +520,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         stage2_height = padded_shape.internal_height // 32
         stage2_width = padded_shape.internal_width // 32
         audio_frames = int(imports.compute_audio_frames(num_frames, float(fps)))
+        conditioned_audio_waveform: npt.NDArray[np.float32] | None = None
+        conditioned_audio_sample_rate: int | None = None
 
         _debug_progress("ensure_transformer start")
         transformer = self._ensure_transformer(imports, runtime_config, prompt_context)
@@ -525,6 +540,18 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             padded_shape=padded_shape,
             model_dtype=model_dtype,
         )
+        conditioned_audio_latents: object | None = None
+        if audio_conditioning is not None:
+            (
+                conditioned_audio_latents,
+                conditioned_audio_waveform,
+                conditioned_audio_sample_rate,
+            ) = self._encode_audio_conditioning(
+                imports=imports,
+                audio_conditioning=audio_conditioning,
+                audio_frames=audio_frames,
+                model_dtype=model_dtype,
+            )
 
         mx.random.seed(effective_seed)
         timings_ms: dict[str, float] = {}
@@ -542,14 +569,17 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         latents = mx.random.normal(
             (1, 128, latent_frames, stage1_height, stage1_width)
         ).astype(model_dtype)
-        audio_latents = mx.random.normal(
-            (
-                1,
-                imports.audio_latent_channels,
-                audio_frames,
-                imports.audio_mel_bins,
-            )
-        ).astype(model_dtype)
+        if conditioned_audio_latents is None:
+            audio_latents = mx.random.normal(
+                (
+                    1,
+                    imports.audio_latent_channels,
+                    audio_frames,
+                    imports.audio_mel_bins,
+                )
+            ).astype(model_dtype)
+        else:
+            audio_latents = conditioned_audio_latents
         if conditioning_plan.stage1:
             stage1_state = self._apply_conditionings_to_stage(
                 imports=imports,
@@ -572,6 +602,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             sigmas=imports.stage_1_sigmas,
             state=stage1_state,
             runtime_config=runtime_config,
+            freeze_audio=audio_conditioning is not None,
         )
         mx.eval(latents, audio_latents)
         debug_dir = _debug_stage_dump_dir()
@@ -659,10 +690,12 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             latents = stage2_state.latent
             noise_scale = mx.array(float(imports.stage_2_sigmas[0]), dtype=model_dtype)
             one_minus_scale = mx.array(1.0, dtype=model_dtype) - noise_scale
-            audio_latents = (
-                mx.random.normal(audio_latents.shape).astype(model_dtype) * noise_scale
-                + audio_latents * one_minus_scale
-            ).astype(model_dtype)
+            if audio_conditioning is None:
+                audio_latents = (
+                    mx.random.normal(audio_latents.shape).astype(model_dtype)
+                    * noise_scale
+                    + audio_latents * one_minus_scale
+                ).astype(model_dtype)
             mx.eval(latents, audio_latents)
         else:
             stage2_state = None
@@ -672,10 +705,12 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 mx.random.normal(latents.shape).astype(model_dtype) * noise_scale
                 + latents * one_minus_scale
             ).astype(model_dtype)
-            audio_latents = (
-                mx.random.normal(audio_latents.shape).astype(model_dtype) * noise_scale
-                + audio_latents * one_minus_scale
-            ).astype(model_dtype)
+            if audio_conditioning is None:
+                audio_latents = (
+                    mx.random.normal(audio_latents.shape).astype(model_dtype)
+                    * noise_scale
+                    + audio_latents * one_minus_scale
+                ).astype(model_dtype)
             mx.eval(latents, audio_latents)
         latents, audio_latents = _denoise_distilled_audio_video(
             imports=imports,
@@ -689,6 +724,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             sigmas=imports.stage_2_sigmas,
             state=stage2_state,
             runtime_config=runtime_config,
+            freeze_audio=audio_conditioning is not None,
         )
         mx.eval(latents, audio_latents)
         timings_ms["stage2_duration_ms"] = _elapsed_ms(stage2_started)
@@ -704,10 +740,20 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         timings_ms["decode_duration_ms"] = _elapsed_ms(decode_started)
         frames_uint8 = _decode_to_uint8_frames(decoded_video, padded_shape=padded_shape)
         audio_decode_started = time.perf_counter()
-        audio_waveform, audio_sample_rate, audio_backend = self._decode_audio_waveform(
-            imports=imports,
-            audio_latents=audio_latents,
-        )
+        if (
+            conditioned_audio_waveform is not None
+            and conditioned_audio_sample_rate is not None
+        ):
+            audio_waveform = conditioned_audio_waveform
+            audio_sample_rate = conditioned_audio_sample_rate
+            audio_backend = "input_audio_passthrough"
+        else:
+            audio_waveform, audio_sample_rate, audio_backend = (
+                self._decode_audio_waveform(
+                    imports=imports,
+                    audio_latents=audio_latents,
+                )
+            )
         timings_ms["audio_decode_duration_ms"] = _elapsed_ms(audio_decode_started)
         if debug_dir is not None:
             _emit_debug_frame_snapshot(
@@ -754,6 +800,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 ),
                 "audio_backend": audio_backend,
                 "audio_bwe_applied": audio_backend == "mlx_vocoder_with_bwe",
+                "audio_conditioned": audio_conditioning is not None,
             },
         )
 
@@ -762,7 +809,9 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         self._vae_decoder = None
         self._vae_encoder = None
         self._upsampler = None
+        self._audio_encoder = None
         self._audio_decoder = None
+        self._audio_processor = None
         self._vocoder = None
         self._audio_output_sample_rate = None
         self._audio_backend = None
@@ -799,6 +848,9 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             )
             audio_vae_module = importlib.import_module(
                 "mlx_video.models.ltx.audio_vae.audio_vae"
+            )
+            audio_vae_init_module = importlib.import_module(
+                "mlx_video.models.ltx.audio_vae"
             )
             tiling_module = importlib.import_module(
                 "mlx_video.models.ltx.video_vae.tiling"
@@ -840,6 +892,11 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             load_vae_decoder=decoder_module.load_vae_decoder,
             load_vae_encoder=encoder_module.load_vae_encoder,
             load_audio_decoder=generate_module.load_audio_decoder,
+            audio_encoder_class=audio_vae_module.AudioEncoder,
+            audio_processor_class=audio_vae_init_module.AudioProcessor,
+            audio_norm_type_enum=audio_vae_init_module.NormType,
+            audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
+            load_audio_vae_weights=convert_module.load_audio_vae_weights,
             load_vocoder=generate_module.load_vocoder,
             decode_audio=audio_vae_module.decode_audio,
             sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
@@ -984,6 +1041,113 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             self._upsampler = _load_configured_upsampler(self.spatial_upsampler_path)
             mx.eval(self._upsampler.parameters())
         return self._upsampler
+
+    def _ensure_audio_encoder(
+        self, imports: _ReferenceImports
+    ) -> tuple[object, object]:
+        if self._audio_encoder is not None and self._audio_processor is not None:
+            return self._audio_encoder, self._audio_processor
+
+        checkpoint_audio_weights = _load_checkpoint_prefixed_weights(
+            self.checkpoint_path,
+            prefixes=("audio_vae.",),
+        )
+        sanitized = imports.sanitize_audio_vae_weights(checkpoint_audio_weights)
+        checkpoint_root = self.checkpoint_path.parent
+        raw_config = _load_optional_json_config(
+            checkpoint_root / "audio_vae" / "config.json"
+        )
+
+        ch = int(raw_config.get("base_channels", 128))
+        ch_mult = tuple(raw_config.get("ch_mult", (1, 2, 4)))
+        num_res_blocks = int(raw_config.get("num_res_blocks", 2))
+        attn_resolutions = set(raw_config.get("attn_resolutions") or [])
+        resolution = int(raw_config.get("resolution", 256))
+        z_channels = int(raw_config.get("latent_channels", 8))
+        dropout = float(raw_config.get("dropout", 0.0))
+        in_channels = int(raw_config.get("in_channels", 2))
+        norm_type = imports.audio_norm_type_enum(
+            str(raw_config.get("norm_type", "pixel"))
+        )
+        causality_axis = imports.audio_causality_axis_enum(
+            str(raw_config.get("causality_axis", "height"))
+        )
+        mid_block_add_attention = bool(raw_config.get("mid_block_add_attention", True))
+        sample_rate = int(raw_config.get("sample_rate", 16000))
+        mel_hop_length = int(raw_config.get("mel_hop_length", 160))
+        mel_bins = int(raw_config.get("mel_bins", 64))
+        n_fft = int(raw_config.get("n_fft", 1024))
+        is_causal = bool(raw_config.get("is_causal", True))
+
+        encoder = imports.audio_encoder_class(
+            ch=ch,
+            ch_mult=ch_mult,
+            num_res_blocks=num_res_blocks,
+            attn_resolutions=attn_resolutions,
+            dropout=dropout,
+            resamp_with_conv=True,
+            in_channels=in_channels,
+            resolution=resolution,
+            z_channels=z_channels,
+            double_z=bool(raw_config.get("double_z", True)),
+            norm_type=norm_type,
+            causality_axis=causality_axis,
+            mid_block_add_attention=mid_block_add_attention,
+            sample_rate=sample_rate,
+            mel_hop_length=mel_hop_length,
+            n_fft=n_fft,
+            mel_bins=mel_bins,
+            is_causal=is_causal,
+        )
+        encoder_weights = {
+            key.replace("encoder.", ""): value
+            for key, value in sanitized.items()
+            if key.startswith("encoder.")
+        }
+        if encoder_weights:
+            encoder.load_weights(list(encoder_weights.items()), strict=False)
+        if "per_channel_statistics._mean_of_means" in sanitized:
+            encoder.per_channel_statistics._mean_of_means = sanitized[
+                "per_channel_statistics._mean_of_means"
+            ]
+        if "per_channel_statistics._std_of_means" in sanitized:
+            encoder.per_channel_statistics._std_of_means = sanitized[
+                "per_channel_statistics._std_of_means"
+            ]
+        processor = imports.audio_processor_class(
+            sample_rate=sample_rate,
+            mel_bins=mel_bins,
+            mel_hop_length=mel_hop_length,
+            n_fft=n_fft,
+        )
+        mx.eval(encoder.parameters())
+        self._audio_encoder = encoder
+        self._audio_processor = processor
+        return encoder, processor
+
+    def _encode_audio_conditioning(
+        self,
+        *,
+        imports: _ReferenceImports,
+        audio_conditioning: AudioConditioningInput,
+        audio_frames: int,
+        model_dtype: mx.Dtype,
+    ) -> tuple[object, npt.NDArray[np.float32], int]:
+        encoder, processor = self._ensure_audio_encoder(imports)
+        default_duration = None
+        if audio_conditioning.max_duration_seconds is not None:
+            default_duration = audio_conditioning.max_duration_seconds
+        waveform, sample_rate = _decode_conditioning_audio_file(
+            audio_conditioning.payload_path,
+            sample_rate=processor.sample_rate,
+            start_time_seconds=audio_conditioning.start_time_seconds,
+            max_duration_seconds=default_duration,
+        )
+        mel = processor.waveform_to_mel(waveform.T, sample_rate)
+        audio_latents = encoder(mx.array(mel).astype(mx.float32)).astype(model_dtype)
+        audio_latents = _fit_audio_latents(audio_latents, target_frames=audio_frames)
+        mx.eval(audio_latents)
+        return audio_latents, waveform.astype(np.float32), int(sample_rate)
 
     def _ensure_audio_stack(
         self, imports: _ReferenceImports
@@ -1203,6 +1367,7 @@ class LTXPreviewVideoGenerator(VideoGenerator):
         *,
         prompt_context: PromptEncodingResult,
         conditioning_inputs: tuple[ConditioningInput, ...],
+        audio_conditioning: AudioConditioningInput | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -1237,6 +1402,7 @@ class LTXPreviewVideoGenerator(VideoGenerator):
                 height=height,
                 num_frames=num_frames,
             )
+        del audio_conditioning
         frames_uint8 = np.asarray((mx.clip(frames, 0.0, 1.0) * 255.0).astype(mx.uint8))
         return GeneratedVideo(
             frames=frames_uint8,
@@ -1463,6 +1629,81 @@ def _load_checkpoint_prefixed_weights(
             f"LTX checkpoint '{checkpoint_path}' is missing required prefixed weights for {prefixes!r}"
         )
     return selected
+
+
+def _load_optional_json_config(config_path: Path) -> dict[str, object]:
+    if not config_path.is_file():
+        return {}
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"LTX config '{config_path}' must decode to an object")
+    return raw
+
+
+def _decode_conditioning_audio_file(
+    audio_path: Path,
+    *,
+    sample_rate: int,
+    start_time_seconds: float,
+    max_duration_seconds: float | None,
+) -> tuple[npt.NDArray[np.float32], int]:
+    command = [
+        "ffmpeg",
+        "-v",
+        "error",
+    ]
+    if start_time_seconds > 0.0:
+        command.extend(["-ss", str(start_time_seconds)])
+    command.extend(["-i", str(audio_path)])
+    if max_duration_seconds is not None:
+        command.extend(["-t", str(max_duration_seconds)])
+    command.extend(
+        [
+            "-ac",
+            "2",
+            "-ar",
+            str(sample_rate),
+            "-f",
+            "f32le",
+            "pipe:1",
+        ]
+    )
+    result = subprocess.run(command, capture_output=True, check=False)
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"ffmpeg failed to decode conditioning audio: {stderr}")
+    waveform = np.frombuffer(result.stdout, dtype=np.float32)
+    if waveform.size == 0:
+        raise RuntimeError(
+            f"Conditioning audio '{audio_path}' decoded to an empty waveform"
+        )
+    channels = 2
+    usable = waveform.size - (waveform.size % channels)
+    if usable == 0:
+        raise RuntimeError(
+            f"Conditioning audio '{audio_path}' did not decode to stereo PCM frames"
+        )
+    waveform = waveform[:usable].reshape(-1, channels)
+    return waveform.astype(np.float32), sample_rate
+
+
+def _fit_audio_latents(audio_latents: object, *, target_frames: int) -> object:
+    current_frames = int(audio_latents.shape[2])
+    if current_frames == target_frames:
+        return audio_latents
+    if current_frames > target_frames:
+        return audio_latents[:, :, :target_frames, :]
+    pad_frames = target_frames - current_frames
+    padding = mx.zeros(
+        (
+            int(audio_latents.shape[0]),
+            int(audio_latents.shape[1]),
+            pad_frames,
+            int(audio_latents.shape[3]),
+        ),
+        dtype=audio_latents.dtype,
+    )
+    return mx.concatenate((audio_latents, padding), axis=2)
 
 
 def _first_present(mapping: dict[str, object], keys: tuple[str, ...]) -> object | None:
@@ -3045,6 +3286,7 @@ def _denoise_distilled_audio_video(
     sigmas: tuple[float, ...],
     state: object | None,
     runtime_config: _RuntimeModelConfig,
+    freeze_audio: bool = False,
 ) -> tuple[object, object]:
     latents_dtype = latents.dtype
     batch_size, channels, frames, latent_h, latent_w = latents.shape
@@ -3080,7 +3322,11 @@ def _denoise_distilled_audio_video(
         ).astype(latents_dtype)
     else:
         video_timesteps_mask = mx.ones((batch_size, num_tokens), dtype=latents_dtype)
-    audio_timesteps_mask = mx.ones((audio_batch, audio_frames), dtype=latents_dtype)
+    audio_timesteps_mask = (
+        mx.zeros((audio_batch, audio_frames), dtype=latents_dtype)
+        if freeze_audio
+        else mx.ones((audio_batch, audio_frames), dtype=latents_dtype)
+    )
     total_steps = max(len(sigmas) - 1, 0)
     for step_index, (sigma_value, sigma_next_value) in enumerate(
         zip(sigmas[:-1], sigmas[1:]),
@@ -3129,11 +3375,14 @@ def _denoise_distilled_audio_video(
             (batch_size, channels, frames, latent_h, latent_w),
         )
         denoised = imports.to_denoised(latents, velocity, sigma)
-        audio_velocity = mx.reshape(
-            audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
-        )
-        audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
-        audio_denoised = imports.to_denoised(audio_latents, audio_velocity, sigma)
+        if freeze_audio:
+            audio_denoised = audio_latents
+        else:
+            audio_velocity = mx.reshape(
+                audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
+            )
+            audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
+            audio_denoised = imports.to_denoised(audio_latents, audio_velocity, sigma)
         if state is not None:
             denoised = imports.apply_denoise_mask(
                 denoised, state.clean_latent, state.denoise_mask
@@ -3148,12 +3397,18 @@ def _denoise_distilled_audio_video(
                 * (latents.astype(mx.float32) - denoised.astype(mx.float32))
                 / sigma.astype(mx.float32)
             ).astype(latents_dtype)
-            audio_latents = (
-                audio_denoised.astype(mx.float32)
-                + sigma_next.astype(mx.float32)
-                * (audio_latents.astype(mx.float32) - audio_denoised.astype(mx.float32))
-                / sigma.astype(mx.float32)
-            ).astype(latents_dtype)
+            if freeze_audio:
+                audio_latents = audio_denoised.astype(latents_dtype)
+            else:
+                audio_latents = (
+                    audio_denoised.astype(mx.float32)
+                    + sigma_next.astype(mx.float32)
+                    * (
+                        audio_latents.astype(mx.float32)
+                        - audio_denoised.astype(mx.float32)
+                    )
+                    / sigma.astype(mx.float32)
+                ).astype(latents_dtype)
         mx.eval(latents, audio_latents)
     return latents, audio_latents
 

@@ -36,8 +36,8 @@ Do not use this skill for the common implementation path. The default repo loop 
 
 Load these code paths only when you need the implementation seam:
 
-- `packages/model-family-ltx/src/mlx_runtime_family_ltx/_prompt_encoding_backend.py`
-- `packages/model-family-ltx/src/mlx_runtime_family_ltx/_generation_backend.py`
+- `packages/families/ltx/src/ltx/_prompt_encoding_backend.py`
+- `packages/families/ltx/src/ltx/_generation_backend.py`
 - `scripts/ltx_debug_smoke.py`
 
 ## Rules

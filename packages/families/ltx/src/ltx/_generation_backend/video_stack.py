@@ -1,0 +1,462 @@
+# mypy: ignore-errors
+from __future__ import annotations
+
+import importlib
+import types
+from pathlib import Path
+
+import mlx.core as mx
+import mlx.nn as nn
+
+from .._audio_vocoder import AudioVocoder
+from .config import (
+    _decoder_initial_feature_channels,
+    _first_present,
+    _runtime_vae_config,
+    _runtime_vocoder_config,
+    _validate_upsampler_layout,
+)
+from .reference_imports import _reference_path_on_sys_path
+
+
+class _WrappedCausalConv3d(nn.Module):
+    def __init__(
+        self,
+        *,
+        decoder_module: types.ModuleType,
+        in_channels: int,
+        out_channels: int,
+        spatial_padding_mode: object,
+    ) -> None:
+        super().__init__()
+        self.conv = decoder_module.CausalConv3d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            spatial_padding_mode=spatial_padding_mode,
+        )
+
+    def __call__(self, x: mx.array, *, causal: bool = False) -> mx.array:
+        return self.conv(x, causal=causal)
+
+
+class _ConfiguredVideoDecoder(nn.Module):
+    def __init__(
+        self,
+        *,
+        decoder_module: types.ModuleType,
+        in_channels: int,
+        out_channels: int,
+        patch_size: int,
+        decoder_blocks: tuple[tuple[str, object], ...],
+        base_channels: int,
+        spatial_padding_mode: object,
+        timestep_conditioning: bool,
+        causal_decoder: bool,
+    ) -> None:
+        super().__init__()
+        self._decoder_module = decoder_module
+        self.patch_size = patch_size
+        self.in_channels = in_channels
+        self.timestep_conditioning = timestep_conditioning
+        self.causal_decoder = causal_decoder
+        self.decode_noise_scale = 0.025
+        self.decode_timestep = 0.05
+        self.latents_mean = mx.zeros((in_channels,))
+        self.latents_std = mx.ones((in_channels,))
+
+        feature_channels = _decoder_initial_feature_channels(
+            base_channels=base_channels,
+            decoder_blocks=decoder_blocks,
+        )
+        self.conv_in = _WrappedCausalConv3d(
+            decoder_module=decoder_module,
+            in_channels=in_channels,
+            out_channels=feature_channels,
+            spatial_padding_mode=spatial_padding_mode,
+        )
+
+        self.up_blocks: dict[int, object] = {}
+        for index, (block_name, raw_params) in enumerate(reversed(decoder_blocks)):
+            params = (
+                raw_params
+                if isinstance(raw_params, dict)
+                else {"num_layers": raw_params}
+            )
+            block, feature_channels = self._make_block(
+                block_name=block_name,
+                block_config=params,
+                in_channels=feature_channels,
+                spatial_padding_mode=spatial_padding_mode,
+            )
+            self.up_blocks[index] = block
+
+        final_out_channels = out_channels * patch_size * patch_size
+        self.conv_out = _WrappedCausalConv3d(
+            decoder_module=decoder_module,
+            in_channels=feature_channels,
+            out_channels=final_out_channels,
+            spatial_padding_mode=spatial_padding_mode,
+        )
+        self.act = nn.SiLU()
+        self._final_feature_channels = feature_channels
+
+        if timestep_conditioning:
+            self.timestep_scale_multiplier = mx.array(1000.0)
+            self.last_time_embedder = decoder_module.PixArtAlphaTimestepEmbedder(
+                embedding_dim=feature_channels * 2
+            )
+            self.last_scale_shift_table = mx.zeros((2, feature_channels))
+
+    def _make_block(
+        self,
+        *,
+        block_name: str,
+        block_config: dict[str, object],
+        in_channels: int,
+        spatial_padding_mode: object,
+    ) -> tuple[object, int]:
+        decoder_module = self._decoder_module
+        if block_name == "res_x":
+            num_layers = int(block_config.get("num_layers", 1))
+            return (
+                decoder_module.ResBlockGroup(
+                    in_channels,
+                    num_layers,
+                    spatial_padding_mode,
+                    self.timestep_conditioning,
+                ),
+                in_channels,
+            )
+
+        reduction = int(block_config.get("multiplier", 1))
+        if reduction < 1:
+            raise ValueError(
+                f"LTX decoder block '{block_name}' has invalid multiplier {reduction}"
+            )
+        residual = bool(block_config.get("residual", False))
+        if block_name == "compress_all":
+            stride = (2, 2, 2)
+        elif block_name == "compress_time":
+            stride = (2, 1, 1)
+        elif block_name == "compress_space":
+            stride = (1, 2, 2)
+        else:
+            raise ValueError(f"Unsupported LTX decoder block '{block_name}'")
+        return (
+            decoder_module.DepthToSpaceUpsample(
+                dims=3,
+                in_channels=in_channels,
+                stride=stride,
+                residual=residual,
+                out_channels_reduction_factor=reduction,
+                spatial_padding_mode=spatial_padding_mode,
+            ),
+            in_channels // reduction,
+        )
+
+    def denormalize(self, x: mx.array) -> mx.array:
+        dtype = x.dtype
+        mean = self.latents_mean.astype(mx.float32).reshape(1, -1, 1, 1, 1)
+        std = self.latents_std.astype(mx.float32).reshape(1, -1, 1, 1, 1)
+        return (x * std + mean).astype(dtype)
+
+    def pixel_norm(self, x: mx.array, eps: float = 1e-8) -> mx.array:
+        return x / mx.sqrt(mx.mean(x**2, axis=1, keepdims=True) + eps)
+
+    def __call__(
+        self,
+        sample: mx.array,
+        *,
+        causal: bool = False,
+        timestep: mx.array | None = None,
+        debug: bool = False,
+        chunked_conv: bool = False,
+    ) -> mx.array:
+        del debug
+        effective_causal = causal or self.causal_decoder
+        batch_size = int(sample.shape[0])
+        if self.timestep_conditioning:
+            noise = mx.random.normal(sample.shape) * self.decode_noise_scale
+            sample = noise + (1.0 - self.decode_noise_scale) * sample
+        sample = self.denormalize(sample)
+
+        if timestep is None and self.timestep_conditioning:
+            timestep = mx.full((batch_size,), self.decode_timestep)
+
+        scaled_timestep = None
+        if self.timestep_conditioning and timestep is not None:
+            scaled_timestep = timestep * self.timestep_scale_multiplier
+
+        x = self.conv_in(sample, causal=effective_causal)
+        for block in self.up_blocks.values():
+            if isinstance(block, self._decoder_module.ResBlockGroup):
+                x = block(x, causal=effective_causal, timestep=scaled_timestep)
+            elif isinstance(block, self._decoder_module.DepthToSpaceUpsample):
+                x = block(x, causal=effective_causal, chunked_conv=chunked_conv)
+            else:
+                x = block(x, causal=effective_causal)
+
+        x = self.pixel_norm(x)
+        if self.timestep_conditioning and scaled_timestep is not None:
+            embedded_timestep = self.last_time_embedder(
+                scaled_timestep.flatten(),
+                hidden_dtype=x.dtype,
+            )
+            embedded_timestep = embedded_timestep.reshape(
+                batch_size,
+                2,
+                self._final_feature_channels,
+                1,
+                1,
+                1,
+            )
+            ada_values = (
+                self.last_scale_shift_table[None, :, :, None, None, None]
+                + embedded_timestep
+            )
+            shift = ada_values[:, 0]
+            scale = ada_values[:, 1]
+            x = x * (1 + scale) + shift
+
+        x = self.act(x)
+        x = self.conv_out(x, causal=effective_causal)
+        return self._decoder_module.unpatchify(
+            x,
+            patch_size_hw=self.patch_size,
+            patch_size_t=1,
+        )
+
+    def decode_tiled(
+        self,
+        sample: mx.array,
+        *,
+        tiling_config: object | None = None,
+        tiling_mode: str = "auto",
+        causal: bool = False,
+        timestep: mx.array | None = None,
+        debug: bool = False,
+        on_frames_ready: object | None = None,
+    ) -> mx.array:
+        effective_causal = causal or self.causal_decoder
+        if tiling_config is None:
+            tiling_config = self._decoder_module.TilingConfig.default()
+
+        _, _, frames, latent_h, latent_w = sample.shape
+        needs_spatial_tiling = False
+        needs_temporal_tiling = False
+        spatial_scale = 32
+        temporal_scale = 8
+
+        if getattr(tiling_config, "spatial_config", None) is not None:
+            spatial_config = tiling_config.spatial_config
+            tile_size_latent = spatial_config.tile_size_in_pixels // spatial_scale
+            if latent_h > tile_size_latent or latent_w > tile_size_latent:
+                needs_spatial_tiling = True
+
+        if getattr(tiling_config, "temporal_config", None) is not None:
+            temporal_config = tiling_config.temporal_config
+            tile_size_latent = temporal_config.tile_size_in_frames // temporal_scale
+            if frames > tile_size_latent:
+                needs_temporal_tiling = True
+
+        use_chunked_conv = tiling_mode in (
+            "conservative",
+            "none",
+            "auto",
+            "default",
+            "spatial",
+        )
+        if not needs_spatial_tiling and not needs_temporal_tiling:
+            decoded = self(
+                sample,
+                causal=effective_causal,
+                timestep=timestep,
+                debug=debug,
+                chunked_conv=use_chunked_conv,
+            )
+            if on_frames_ready is not None:
+                try:
+                    on_frames_ready(decoded, 0)
+                except Exception:
+                    return decoded
+            return decoded
+
+        return self._decoder_module.decode_with_tiling(
+            decoder_fn=self,
+            latents=sample,
+            tiling_config=tiling_config,
+            spatial_scale=32,
+            temporal_scale=8,
+            causal=effective_causal,
+            timestep=timestep,
+            chunked_conv=use_chunked_conv,
+            on_frames_ready=on_frames_ready,
+        )
+
+
+def _load_configured_vae_decoder(checkpoint_path: Path) -> _ConfiguredVideoDecoder:
+    vae_config = _runtime_vae_config(checkpoint_path)
+    with _reference_path_on_sys_path():
+        decoder_module = importlib.import_module(
+            "mlx_video.models.ltx.video_vae.decoder"
+        )
+
+    spatial_padding_mode = decoder_module.PaddingModeType(
+        vae_config.spatial_padding_mode
+    )
+    decoder = _ConfiguredVideoDecoder(
+        decoder_module=decoder_module,
+        in_channels=vae_config.latent_channels,
+        out_channels=vae_config.out_channels,
+        patch_size=vae_config.patch_size,
+        decoder_blocks=vae_config.decoder_blocks,
+        base_channels=vae_config.base_channels,
+        spatial_padding_mode=spatial_padding_mode,
+        timestep_conditioning=vae_config.timestep_conditioning,
+        causal_decoder=vae_config.causal_decoder,
+    )
+
+    weights = mx.load(str(checkpoint_path))
+    decoder_weights: dict[str, object] = {}
+    for key, value in weights.items():
+        if not key.startswith("vae.decoder."):
+            continue
+        new_key = key[len("vae.decoder.") :]
+        if value.ndim == 5 and ".conv.weight" in new_key:
+            value = mx.transpose(value, (0, 2, 3, 4, 1))
+        if ".conv.weight" in new_key or ".conv.bias" in new_key:
+            if ".conv.conv.weight" not in new_key and ".conv.conv.bias" not in new_key:
+                new_key = new_key.replace(".conv.weight", ".conv.conv.weight")
+                new_key = new_key.replace(".conv.bias", ".conv.conv.bias")
+        decoder_weights[new_key] = value
+    mean = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.mean-of-means",
+            "vae.per_channel_statistics.mean",
+            "per_channel_statistics.mean-of-means",
+            "per_channel_statistics.mean",
+            "latents_mean",
+        ),
+    )
+    std = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.std-of-means",
+            "vae.per_channel_statistics.std",
+            "per_channel_statistics.std-of-means",
+            "per_channel_statistics.std",
+            "latents_std",
+        ),
+    )
+    if mean is None or std is None:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' is missing VAE per-channel statistics"
+        )
+    expected_shape = (vae_config.latent_channels,)
+    if tuple(int(size) for size in mean.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid latents_mean shape "
+            f"{tuple(int(size) for size in mean.shape)!r}; expected {expected_shape!r}"
+        )
+    if tuple(int(size) for size in std.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid latents_std shape "
+            f"{tuple(int(size) for size in std.shape)!r}; expected {expected_shape!r}"
+        )
+    decoder_weights["latents_mean"] = mean
+    decoder_weights["latents_std"] = std
+    decoder.load_weights(list(decoder_weights.items()), strict=True)
+    return decoder
+
+
+def _load_configured_upsampler(weights_path: Path) -> object:
+    with _reference_path_on_sys_path():
+        upsampler_module = importlib.import_module("mlx_video.models.ltx.upsampler")
+
+    _validate_upsampler_layout(weights_path)
+    raw_weights = mx.load(str(weights_path))
+    sample_key = "res_blocks.0.conv1.weight"
+    mid_channels = (
+        int(raw_weights[sample_key].shape[0]) if sample_key in raw_weights else 1024
+    )
+    upsampler = upsampler_module.LatentUpsampler(
+        in_channels=128,
+        mid_channels=mid_channels,
+        num_blocks_per_stage=4,
+    )
+
+    sanitized: dict[str, object] = {}
+    for key, value in raw_weights.items():
+        new_key = key
+        if value.ndim == 5 and "conv" in key and "weight" in key:
+            value = mx.transpose(value, (0, 2, 3, 4, 1))
+        if value.ndim == 4 and (
+            ("conv" in key and "weight" in key) or key == "upsampler.0.weight"
+        ):
+            value = mx.transpose(value, (0, 2, 3, 1))
+        if key.startswith("upsampler.0."):
+            new_key = key.replace("upsampler.0.", "upsampler.conv.")
+        sanitized[new_key] = value
+
+    upsampler.load_weights(list(sanitized.items()), strict=False)
+    return upsampler
+
+
+def _load_runtime_vocoder(
+    *,
+    checkpoint_path: Path,
+    checkpoint_weights: dict[str, mx.array],
+    sanitize_vocoder_weights: object,
+) -> tuple[object, int, str]:
+    runtime_vocoder_config = _runtime_vocoder_config(checkpoint_path)
+
+    raw_base_weights = {
+        key[len("vocoder.vocoder.") :]: value
+        for key, value in checkpoint_weights.items()
+        if key.startswith("vocoder.vocoder.")
+    }
+    if not raw_base_weights:
+        raw_base_weights = {
+            key[len("vocoder.") :]: value
+            for key, value in checkpoint_weights.items()
+            if key.startswith("vocoder.")
+            and not key.startswith("vocoder.bwe_generator.")
+        }
+    if not raw_base_weights:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' is missing base vocoder weights"
+        )
+
+    sanitized_weights = sanitize_vocoder_weights(raw_base_weights)
+    sanitized_weights = {
+        key: value
+        for key, value in sanitized_weights.items()
+        if not key.endswith(".filter")
+    }
+    vocoder = AudioVocoder(
+        resblock_kernel_sizes=list(runtime_vocoder_config.resblock_kernel_sizes),
+        upsample_rates=list(runtime_vocoder_config.upsample_rates),
+        upsample_kernel_sizes=list(runtime_vocoder_config.upsample_kernel_sizes),
+        resblock_dilation_sizes=[
+            list(block) for block in runtime_vocoder_config.resblock_dilation_sizes
+        ],
+        upsample_initial_channel=runtime_vocoder_config.upsample_initial_channel,
+        stereo=runtime_vocoder_config.stereo,
+        resblock=runtime_vocoder_config.resblock,
+        output_sample_rate=runtime_vocoder_config.output_sample_rate,
+        activation=runtime_vocoder_config.activation,
+        use_tanh_at_final=runtime_vocoder_config.use_tanh_at_final,
+        apply_final_activation=runtime_vocoder_config.apply_final_activation,
+        use_bias_at_final=runtime_vocoder_config.use_bias_at_final,
+    )
+    vocoder.load_weights(list(sanitized_weights.items()), strict=False)
+    backend_label = (
+        "mlx_vocoder_amp1_base_only"
+        if runtime_vocoder_config.uses_bwe
+        else "mlx_vocoder"
+    )
+    return vocoder, runtime_vocoder_config.output_sample_rate, backend_label

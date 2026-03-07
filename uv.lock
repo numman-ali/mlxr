@@ -25,12 +25,12 @@ dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.10.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "mlx-runtime-cli", editable = "packages/runtime-cli" },
-    { name = "mlx-runtime-core", editable = "packages/runtime-core" },
-    { name = "mlx-runtime-family-ltx", editable = "packages/model-family-ltx" },
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
-    { name = "mlx-runtime-server", editable = "packages/runtime-server" },
-    { name = "mlx-runtime-workflows", editable = "packages/runtime-workflows" },
+    { name = "mlx-runtime-cli", editable = "packages/clients/runtime-cli" },
+    { name = "mlx-runtime-core", editable = "packages/core/runtime-core" },
+    { name = "mlx-runtime-family-ltx", editable = "packages/families/ltx" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
+    { name = "mlx-runtime-server", editable = "packages/core/runtime-server" },
+    { name = "mlx-runtime-workflows", editable = "packages/core/runtime-workflows" },
     { name = "mypy", specifier = ">=1.18.0" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "pydantic", specifier = ">=2.10.0" },
@@ -913,7 +913,7 @@ wheels = [
 [[package]]
 name = "mlx-runtime-cli"
 version = "0.1.0"
-source = { editable = "packages/runtime-cli" }
+source = { editable = "packages/clients/runtime-cli" }
 dependencies = [
     { name = "httpx" },
     { name = "mlx-runtime-core" },
@@ -925,16 +925,16 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.0" },
-    { name = "mlx-runtime-core", editable = "packages/runtime-core" },
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
-    { name = "mlx-runtime-workflows", editable = "packages/runtime-workflows" },
+    { name = "mlx-runtime-core", editable = "packages/core/runtime-core" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
+    { name = "mlx-runtime-workflows", editable = "packages/core/runtime-workflows" },
     { name = "pydantic", specifier = ">=2.10.0" },
 ]
 
 [[package]]
 name = "mlx-runtime-core"
 version = "0.1.0"
-source = { editable = "packages/runtime-core" }
+source = { editable = "packages/core/runtime-core" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "mlx-runtime-schemas" },
@@ -943,13 +943,13 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.36.0" },
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
 ]
 
 [[package]]
 name = "mlx-runtime-family-ltx"
 version = "0.1.0"
-source = { editable = "packages/model-family-ltx" }
+source = { editable = "packages/families/ltx" }
 dependencies = [
     { name = "mlx" },
     { name = "mlx-runtime-core" },
@@ -966,9 +966,9 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "mlx", specifier = ">=0.22.0" },
-    { name = "mlx-runtime-core", editable = "packages/runtime-core" },
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
-    { name = "mlx-runtime-workflows", editable = "packages/runtime-workflows" },
+    { name = "mlx-runtime-core", editable = "packages/core/runtime-core" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
+    { name = "mlx-runtime-workflows", editable = "packages/core/runtime-workflows" },
     { name = "mlx-vlm" },
     { name = "numpy" },
     { name = "pillow" },
@@ -980,7 +980,7 @@ requires-dist = [
 [[package]]
 name = "mlx-runtime-schemas"
 version = "0.1.0"
-source = { editable = "packages/shared-schemas" }
+source = { editable = "packages/core/shared-schemas" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -991,7 +991,7 @@ requires-dist = [{ name = "pydantic", specifier = ">=2.10.0" }]
 [[package]]
 name = "mlx-runtime-server"
 version = "0.1.0"
-source = { editable = "packages/runtime-server" }
+source = { editable = "packages/core/runtime-server" }
 dependencies = [
     { name = "fastapi" },
     { name = "mlx-runtime-core" },
@@ -1004,17 +1004,17 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "mlx-runtime-core", editable = "packages/runtime-core" },
-    { name = "mlx-runtime-family-ltx", editable = "packages/model-family-ltx" },
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
-    { name = "mlx-runtime-workflows", editable = "packages/runtime-workflows" },
+    { name = "mlx-runtime-core", editable = "packages/core/runtime-core" },
+    { name = "mlx-runtime-family-ltx", editable = "packages/families/ltx" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
+    { name = "mlx-runtime-workflows", editable = "packages/core/runtime-workflows" },
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]
 
 [[package]]
 name = "mlx-runtime-workflows"
 version = "0.1.0"
-source = { editable = "packages/runtime-workflows" }
+source = { editable = "packages/core/runtime-workflows" }
 dependencies = [
     { name = "mlx-runtime-schemas" },
     { name = "pydantic" },
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "mlx-runtime-schemas", editable = "packages/shared-schemas" },
+    { name = "mlx-runtime-schemas", editable = "packages/core/shared-schemas" },
     { name = "pydantic", specifier = ">=2.10.0" },
 ]
 

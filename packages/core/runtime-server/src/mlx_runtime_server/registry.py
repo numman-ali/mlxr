@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from ltx import LTXFamilyAdapter, LTXWorkflowStrategy
 from mlx_runtime_core import (
     HuggingFaceProviderAdapter,
     LocalFileProviderAdapter,
     RuntimeRegistry,
 )
-from mlx_runtime_family_ltx import LTXFamilyAdapter, LTXWorkflowStrategy
 from mlx_runtime_workflows import WorkflowPlanner, WorkflowStrategyRegistry
 
 

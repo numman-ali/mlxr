@@ -171,6 +171,9 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--image", type=Path, help="Optional trusted local image reference"
     )
+    parser.add_argument(
+        "--audio", type=Path, help="Optional trusted local audio reference"
+    )
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--num-frames", type=int)
@@ -215,15 +218,33 @@ def _references_from_args(
                     role="reference",
                 )
             )
-            return references
-        record = client.import_file(Path(args.image), kind="image")
-        references.append(
-            WorkflowReference(
-                input_handle=record.handle_id,
-                kind="image",
-                role="reference",
+        else:
+            record = client.import_file(Path(args.image), kind="image")
+            references.append(
+                WorkflowReference(
+                    input_handle=record.handle_id,
+                    kind="image",
+                    role="reference",
+                )
             )
-        )
+    if args.audio is not None:
+        if args.plan_only:
+            references.append(
+                WorkflowReference(
+                    input_handle=None,
+                    kind="audio",
+                    role="reference",
+                )
+            )
+        else:
+            record = client.import_file(Path(args.audio), kind="audio")
+            references.append(
+                WorkflowReference(
+                    input_handle=record.handle_id,
+                    kind="audio",
+                    role="reference",
+                )
+            )
     return references
 
 
@@ -234,7 +255,17 @@ def _media_type_for_path(path: Path, kind: str) -> str:
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
             ".png": "image/png",
+            ".ppm": "image/x-portable-pixmap",
             ".webp": "image/webp",
+        }.get(suffix, "application/octet-stream")
+    if kind == "audio":
+        return {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".flac": "audio/flac",
+            ".ogg": "audio/ogg",
         }.get(suffix, "application/octet-stream")
     return "application/octet-stream"
 

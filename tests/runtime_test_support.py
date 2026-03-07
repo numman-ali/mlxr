@@ -17,9 +17,9 @@ from unittest.mock import patch
 import numpy as np
 from fastapi.testclient import TestClient
 from httpx import Response
+from ltx.generation import AudioConditioningInput, GeneratedVideo
+from ltx.prompt_encoding import PromptEncodingResult
 from mlx_runtime_core import RuntimeHome
-from mlx_runtime_family_ltx.generation import GeneratedVideo
-from mlx_runtime_family_ltx.prompt_encoding import PromptEncodingResult
 from mlx_runtime_schemas import (
     ArtifactConversionResult,
     InputHandleRecord,
@@ -263,6 +263,7 @@ class FakeVideoGenerator:
         *,
         prompt_context: PromptEncodingResult,
         conditioning_inputs: tuple[object, ...],
+        audio_conditioning: AudioConditioningInput | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -278,6 +279,7 @@ class FakeVideoGenerator:
                 "fps": fps,
                 "seed": seed,
                 "conditioning_count": len(conditioning_inputs),
+                "audio_conditioned": audio_conditioning is not None,
             }
         )
         effective_seed = 0 if seed is None else seed
@@ -390,7 +392,7 @@ def patched_ltx_prompt_encoder(
     sequence_length: int = 1024,
     include_audio_context: bool = True,
 ) -> Iterator[list[FakePromptEncoder]]:
-    from mlx_runtime_family_ltx import adapter as adapter_module
+    from ltx import adapter as adapter_module
 
     instances: list[FakePromptEncoder] = []
 
@@ -417,7 +419,7 @@ def patched_ltx_video_generator(
     backend: str = "ltx_test_distilled_generator",
     include_audio: bool = False,
 ) -> Iterator[list[FakeVideoGenerator]]:
-    from mlx_runtime_family_ltx import adapter as adapter_module
+    from ltx import adapter as adapter_module
 
     instances: list[FakeVideoGenerator] = []
 

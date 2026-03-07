@@ -32,7 +32,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 f"The current LTX workflow strategy does not support {unsupported} references yet"
             )
 
-        task = "video.condition.image" if by_kind.get("image") else "video.generate"
+        task = _selected_task(by_kind)
         if task not in capability.tasks:
             raise ValueError(
                 f"Model '{context.model.model_id}' does not support workflow task '{task}'"
@@ -101,7 +101,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 f"Model '{context.model.model_id}' does not support task '{plan.selected_task}'"
             )
         inputs: dict[str, object] = {"prompt": plan.resolved_prompt}
-        if plan.selected_task == "video.condition.image":
+        if plan.selected_task in {"video.condition.image", "video.condition.audio"}:
             images: list[dict[str, object]] = []
             for reference in intent.references:
                 if reference.kind != "image":
@@ -131,10 +131,51 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                     }
                 )
             if not images:
+                if plan.selected_task == "video.condition.image":
+                    raise ValueError(
+                        "Image-conditioned workflow execution requires at least one bound image reference"
+                    )
+            else:
+                inputs["images"] = images
+
+        if plan.selected_task == "video.condition.audio":
+            audio_references = [
+                reference
+                for reference in intent.references
+                if reference.kind == "audio"
+            ]
+            if len(audio_references) != 1:
                 raise ValueError(
-                    "Image-conditioned workflow execution requires at least one bound image reference"
+                    "Audio-conditioned workflow execution requires exactly one bound audio reference"
                 )
-            inputs["images"] = images
+            audio_reference = audio_references[0]
+            if audio_reference.input_handle is None:
+                raise ValueError(
+                    "Audio-conditioned workflow execution requires a bound audio input handle"
+                )
+            start_time_seconds = audio_reference.metadata.get("start_time_seconds", 0.0)
+            max_duration_seconds = audio_reference.metadata.get("max_duration_seconds")
+            if not isinstance(start_time_seconds, (int, float)):
+                raise ValueError("Workflow audio start_time_seconds must be numeric")
+            start_time_value = float(start_time_seconds)
+            if start_time_value < 0.0:
+                raise ValueError("Workflow audio start_time_seconds must be >= 0.0")
+            max_duration_value: float | None = None
+            if max_duration_seconds is not None:
+                if not isinstance(max_duration_seconds, (int, float)):
+                    raise ValueError(
+                        "Workflow audio max_duration_seconds must be numeric when provided"
+                    )
+                max_duration_value = float(max_duration_seconds)
+                if max_duration_value <= 0.0:
+                    raise ValueError(
+                        "Workflow audio max_duration_seconds must be > 0.0 when provided"
+                    )
+            inputs["audio"] = {
+                "input_handle": audio_reference.input_handle,
+                "start_time_seconds": start_time_value,
+                "max_duration_seconds": max_duration_value,
+            }
 
         extensions = dict(intent.extensions)
         ltx_extensions = dict(extensions.get("ltx", {}))
@@ -202,8 +243,16 @@ def _pipeline_variant(capability: CapabilityDescriptor) -> str | None:
 
 def _supported_reference_kinds(capability: CapabilityDescriptor) -> list[str]:
     conditioning = capability.conditioning
-    supported = ["text"]
+    supported: list[str] = []
     for kind in ("image", "video", "audio", "lora"):
         if conditioning.get(kind):
             supported.append(kind)
     return supported
+
+
+def _selected_task(by_kind: dict[str, list[WorkflowReference]]) -> str:
+    if by_kind.get("audio"):
+        return "video.condition.audio"
+    if by_kind.get("image"):
+        return "video.condition.image"
+    return "video.generate"

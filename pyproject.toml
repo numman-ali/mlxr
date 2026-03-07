@@ -3,12 +3,12 @@ default-groups = ["dev"]
 
 [tool.uv.workspace]
 members = [
-    "packages/model-family-ltx",
-    "packages/runtime-cli",
-    "packages/runtime-core",
-    "packages/runtime-server",
-    "packages/runtime-workflows",
-    "packages/shared-schemas",
+    "packages/families/ltx",
+    "packages/clients/runtime-cli",
+    "packages/core/runtime-core",
+    "packages/core/runtime-server",
+    "packages/core/runtime-workflows",
+    "packages/core/shared-schemas",
 ]
 
 [tool.uv.sources]
@@ -58,7 +58,9 @@ data_file = "tmp/.coverage"
 fail_under = 85
 omit = [
     "tests/*",
-    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_audio_vocoder.py",
-    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_prompt_encoding_backend.py",
-    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_generation_backend.py",
+    "packages/families/ltx/src/ltx/_audio_vocoder.py",
+    "packages/families/ltx/src/ltx/_generation_backend_legacy.py",
+    "packages/families/ltx/src/ltx/_prompt_encoding_backend_legacy.py",
+    "packages/families/ltx/src/ltx/_prompt_encoding_backend/*",
+    "packages/families/ltx/src/ltx/_generation_backend/*",
 ]

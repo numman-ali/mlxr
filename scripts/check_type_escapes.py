@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TARGET_ROOTS = (
-    Path("packages/runtime-server"),
-    Path("packages/model-family-ltx"),
+    Path("packages/core/runtime-server"),
+    Path("packages/families/ltx"),
     Path("tests"),
 )
 

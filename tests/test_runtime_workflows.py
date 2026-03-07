@@ -78,7 +78,9 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 result = response_model(response, WorkflowPlanResult)
                 self.assertEqual(result.plan.selected_task, "video.condition.image")
 
-    def test_workflow_plan_rejects_audio_reference_until_supported(self) -> None:
+    def test_workflow_plan_selects_audio_conditioning_when_audio_reference_exists(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             state = make_state(root)
@@ -101,8 +103,9 @@ class RuntimeWorkflowTests(unittest.TestCase):
                         "output": {"artifact_format": "mp4"},
                     },
                 )
-                self.assertEqual(response.status_code, 400)
-                self.assertIn("does not support audio references yet", response.text)
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response_model(response, WorkflowPlanResult)
+                self.assertEqual(result.plan.selected_task, "video.condition.audio")
 
     def test_workflow_plan_rejects_unsupported_lora_reference(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -185,6 +188,54 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 result = response_model(response, WorkflowRunResult)
                 terminal = wait_for_job_terminal_state(client, result.submit.job_id)
                 self.assertEqual(terminal["state"], "completed")
+
+    def test_workflow_run_supports_audio_conditioning_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(root)
+            state = make_state(root)
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(include_audio=True) as generators,
+                TestClient(create_app(state)) as client,
+            ):
+                register_local_ltx_model(client, source_dir)
+                audio_handle = import_input_handle(
+                    client,
+                    b"RIFFfake",
+                    media_type="audio/wav",
+                )
+
+                response = client.post(
+                    "/v1/workflows/run",
+                    json={
+                        "intent": {
+                            "model_id": "ltx-2.3-fast-local",
+                            "prompt": "happy dog barking in a park",
+                            "references": [
+                                {
+                                    "input_handle": audio_handle,
+                                    "kind": "audio",
+                                }
+                            ],
+                            "params": {
+                                "width": 96,
+                                "height": 64,
+                                "num_frames": 9,
+                                "fps": 12,
+                                "seed": 17,
+                            },
+                            "output": {"artifact_format": "mp4"},
+                        }
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response_model(response, WorkflowRunResult)
+                terminal = wait_for_job_terminal_state(client, result.submit.job_id)
+                self.assertEqual(terminal["state"], "completed")
+                self.assertTrue(generators)
+                self.assertTrue(generators[0].calls[0]["audio_conditioned"])
 
     def test_workflow_run_rejects_client_supplied_plan_field(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
