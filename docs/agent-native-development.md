@@ -46,7 +46,8 @@ This startup order is part of the repo contract, not optional ceremony.
 5. Run the local harness.
 6. If the task touches runtime behavior, inspect logs as part of validation.
 7. If the task changes repo-level truth, update docs in the same pass.
-8. Commit once the repo is green.
+8. Do a fresh-eyes review pass on the diff before commit.
+9. Commit once the repo is green.
 
 ## How To Decide What To Do Next
 
@@ -61,6 +62,16 @@ Priority order:
 
 Do not stall waiting for more direction when the next step is discoverable from the repo.
 
+## Workflow Ownership Split
+
+When work touches execution flow, keep the boundary explicit:
+
+- the core workflow layer owns stage ordering, scheduler integration, lifecycle state, telemetry, and runtime-managed artifacts
+- family adapters own truthful workflow templates, stage implementations, capability constraints, and fail-closed compatibility checks
+- host adapters own UX, capability-driven request shaping, and runtime-client mapping
+
+If a change crosses those boundaries, name the split before coding instead of letting the implementation decide it by accident.
+
 ## What Codex Owns By Default
 
 - formatting
@@ -71,6 +82,7 @@ Do not stall waiting for more direction when the next step is discoverable from 
 - local runtime bring-up
 - log inspection
 - regression detection from local signals
+- fresh-eyes review before commit
 
 ## When To Escalate
 
@@ -93,9 +105,26 @@ Minimum expectation:
 - framing change: update `README.md`
 - operating-model change: update `AGENTS.md` and this doc
 
+For family-onboarding or workflow-boundary work, also update:
+
+- `docs/workflow-orchestration-design.md`
+- `docs/family-bringup/`
+- the relevant skill doc if the specialized workflow changed
+
 ## Commit Discipline
 
 - commit from green, not “almost green”
 - keep commit messages crisp and behavior-oriented
 - prefer multiple clean commits over one mixed commit when the boundaries are real
 - do not leave the repo in a state where the next agent must rediscover why something is broken
+
+## Fresh-Eyes Review Gate
+
+Before commit, review the diff as if you did not write it.
+
+At minimum, check:
+
+- whether reusable workflow logic drifted into a host or family adapter
+- whether claims got ahead of evidence
+- whether docs, skills, and open questions moved with the new truth
+- whether the host stayed thin and the family stayed honest

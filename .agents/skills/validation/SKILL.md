@@ -14,6 +14,8 @@ Use this skill for the narrow slice that sits beyond the normal dev loop:
 
 Do not use this skill for the common implementation path. The default loop still lives in `AGENTS.md`, `MEMORY.md`, and `docs/dev-harness.md`.
 
+For real `LTX-2.3` fidelity bring-up and stage-local smoke debugging, use the dedicated `ltx-fidelity-debugging` skill instead of stretching this generic validation overlay.
+
 ## Default workflow
 
 1. Run the repo harness first:

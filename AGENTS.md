@@ -30,7 +30,7 @@ This repository is the implementation and research home for a local-first MLX ru
 It has two connected tracks:
 
 1. Platform track
-   Build a reusable runtime with provider resolution, provenance, portable artifacts, machine-local build cache, scheduling, security, and multiple host surfaces.
+   Build a reusable runtime with provider resolution, provenance, portable artifacts, machine-local build cache, workflow orchestration, scheduling, security, and multiple host surfaces.
 2. Product track
    Prove the platform on `LTX-2.3 Fast` first, then validate it across additional families before claiming stability.
 
@@ -115,6 +115,7 @@ When explaining repo status, architecture, tradeoffs, or implementation progress
 - Prefer readable, modular seams over clever convenience code.
 - Prefer inversion of control, typed interfaces, and explicit boundaries over hard-wired concrete coupling.
 - Prefer repo-enforced quality rules over “remember not to do that next time.”
+- For external SDKs, provider CLIs, auth flows, and hosted-service integrations, validate current official docs and live behavior before narrowing the repo around an assumption from local wrapper code.
 
 When uncertain:
 
@@ -142,6 +143,7 @@ Do not assume any of the following unless the docs or measurements have been ref
 - Preferred macOS transport: Unix domain socket
 - Canonical external shape: local job-oriented daemon
 - Execution shape: control-plane daemon plus workers
+- Workflow layer: core runtime-owned orchestration between scheduler, family adapters, and host adapters
 - Host strategy: thin adapters
 - Native hotspot seam: `MLX compile`, `mx.fast.*`, custom Metal kernels, `MLX` extensions
 - Swift role: early at the host boundary, not as the v1 family bring-up language
@@ -154,9 +156,12 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not reintroduce raw file paths into the generic HTTP contract.
 - Do not blur source references, portable artifacts, and machine-local build cache.
 - Do not let host adapters own inference logic.
+- Do not let family adapters or host adapters become the de facto home for reusable workflow orchestration.
 - Do not treat benchmark-free claims as settled architecture.
 - Do not move hotspots into native code before profiling evidence exists.
 - Do not let compatibility facades become the de facto core API.
+- Do not let model-family bridges silently default or reshape through critical config or weight mismatches; fail closed when the checkpoint contract is uncertain.
+- Do not treat pipeline completion as visual correctness on model-family bring-up; promote claims only after stage-local and human-visible validation.
 
 ## Mandatory Dev Loop
 
@@ -167,7 +172,8 @@ Every non-trivial code change should follow this loop:
 3. Run the local harness.
 4. If the change affects runtime behavior, inspect logs as part of validation.
 5. Update docs if repo truth changed.
-6. Commit only from a green state.
+6. Do a fresh-eyes review pass on your own diff before commit.
+7. Commit only from a green state.
 
 The default quality gate for this repo is the local harness, not intuition.
 
@@ -183,6 +189,7 @@ A change is not done until all of the following are true:
 - package builds pass
 - runtime logs were checked when runtime behavior changed
 - docs were updated when repo truth changed
+- fresh-eyes review was completed before commit
 - remaining uncertainty is called out explicitly instead of hidden
 
 ## Where To Start
@@ -207,6 +214,21 @@ If the task is performance-specific:
 - read [05-optimization-playbook.md](/Users/numman/Repos/mlxr/docs/research/05-optimization-playbook.md)
 - read [08-acceleration-techniques-survey.md](/Users/numman/Repos/mlxr/docs/research/08-acceleration-techniques-survey.md)
 - read [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md)
+
+If the task is family-bring-up-specific:
+
+- read [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
+- read [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md)
+- use the repo-owned `.agents/skills/family-bringup/` workflow
+
+If the task is LTX-fidelity-specific:
+
+- read [10-ltx-fidelity-debug-playbook.md](/Users/numman/Repos/mlxr/docs/research/10-ltx-fidelity-debug-playbook.md)
+- use the repo-owned `.agents/skills/ltx-fidelity-debugging/` workflow
+
+If the task is LTX-capability-specific:
+
+- read [11-ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/research/11-ltx-capability-matrix.md)
 
 ## Source Of Truth Order
 
@@ -236,6 +258,7 @@ Good work in this repo usually does one or more of these:
 - clarifies portability boundaries
 - upgrades measurement quality
 - turns host-specific logic into shared runtime logic
+- keeps reusable workflow sequencing in the core workflow layer instead of scattering it across hosts or families
 - makes a new family easier to onboard without warping the platform
 - improves agent legibility through modularity, separation of concerns, and explicit dependency seams
 - reduces the need for unsafe typing escape hatches such as avoidable `typing.cast` or broad `Any` in runtime code
@@ -246,6 +269,7 @@ Patterns to avoid in this repo usually look like:
 - claiming universality without validation
 - hiding unresolved questions
 - jumping to native code before profiling
+- teaching a host adapter to orchestrate family stages the core runtime should own
 - letting a compatibility facade become the de facto core API
 - solving design friction with type escapes or implicit coupling instead of fixing the seam
 - relying on reviewer memory for preventable bad practices instead of encoding them into harness or hook checks
@@ -272,7 +296,7 @@ Create or use a skill when:
 
 Do not move the core repo doctrine out of `AGENTS.md`. Skills are just-in-time capability overlays, not the primary operating guide.
 
-Repo-owned skills should live under `skills/`.
+Repo-owned skills should live under `.agents/skills/` so Codex can discover them natively. Use `.codex/` for project-local Codex config, not as the repo skill directory.
 
 ## Supporting Docs
 
@@ -280,6 +304,8 @@ Use these support docs when you need the deeper operational details:
 
 - [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
 - [dev-harness.md](/Users/numman/Repos/mlxr/docs/dev-harness.md)
+- [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
+- [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md)
 - [skill-policy.md](/Users/numman/Repos/mlxr/docs/skill-policy.md)
 
 ## Policy For Updating This File

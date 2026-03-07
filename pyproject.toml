@@ -7,6 +7,7 @@ members = [
     "packages/runtime-cli",
     "packages/runtime-core",
     "packages/runtime-server",
+    "packages/runtime-workflows",
     "packages/shared-schemas",
 ]
 
@@ -16,6 +17,7 @@ mlx-runtime-core = { workspace = true }
 mlx-runtime-family-ltx = { workspace = true }
 mlx-runtime-schemas = { workspace = true }
 mlx-runtime-server = { workspace = true }
+mlx-runtime-workflows = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -27,6 +29,7 @@ dev = [
     "mlx-runtime-family-ltx",
     "mlx-runtime-schemas",
     "mlx-runtime-server",
+    "mlx-runtime-workflows",
     "mypy>=1.18.0",
     "pre-commit>=4.3.0",
     "pydantic>=2.10.0",
@@ -55,5 +58,7 @@ data_file = "tmp/.coverage"
 fail_under = 85
 omit = [
     "tests/*",
+    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_audio_vocoder.py",
     "packages/model-family-ltx/src/mlx_runtime_family_ltx/_prompt_encoding_backend.py",
+    "packages/model-family-ltx/src/mlx_runtime_family_ltx/_generation_backend.py",
 ]

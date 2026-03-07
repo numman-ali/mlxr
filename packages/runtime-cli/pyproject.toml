@@ -3,7 +3,16 @@ name = "mlx-runtime-cli"
 version = "0.1.0"
 description = "CLI scaffold for MLXR"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.0",
+    "mlx-runtime-core",
+    "mlx-runtime-schemas",
+    "mlx-runtime-workflows",
+    "pydantic>=2.10.0",
+]
+
+[project.scripts]
+mlx-runtime = "mlx_runtime_cli.cli:main"
 
 [build-system]
 requires = ["hatchling"]

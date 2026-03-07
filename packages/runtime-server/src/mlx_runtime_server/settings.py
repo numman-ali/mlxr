@@ -26,6 +26,7 @@ class ServerSettings:
     http_port: int = 46321
     http_bearer_token: str | None = None
     allowed_origins: tuple[str, ...] = ()
+    uds_path: str | None = None
 
     @classmethod
     def from_env(cls) -> "ServerSettings":
@@ -37,6 +38,7 @@ class ServerSettings:
             http_port=http_port,
             http_bearer_token=os.environ.get("MLX_RUNTIME_HTTP_TOKEN"),
             allowed_origins=_split_csv(os.environ.get("MLX_RUNTIME_ALLOWED_ORIGINS")),
+            uds_path=os.environ.get("MLX_RUNTIME_UDS_PATH"),
         )
 
     def validate_startup(self) -> None:

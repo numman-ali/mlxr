@@ -8,7 +8,9 @@ Status: guidance for when repo work should stay in `AGENTS.md` versus move into 
 
 Skills are just-in-time overlays for workflows that need extra procedural structure, bundled references, scripts, or assets.
 
-Repo-owned skills should live under `skills/` so the repo remains the source of truth for its own specialized operating overlays.
+Repo-owned skills should live under `.agents/skills/` so Codex can discover them natively from the repo. Use `.codex/` for project-local Codex config, not as the skill directory.
+
+The core workflow-orchestration split between runtime core, family adapters, and host adapters is repo doctrine, so it belongs in docs and `AGENTS.md`, not only inside a skill.
 
 ## Keep In `AGENTS.md`
 
@@ -36,12 +38,15 @@ Examples in this repo:
 
 - runtime debugging and log triage
 - benchmark execution and validation
+- family bring-up and workflow-boundary planning
 - release hygiene
 - specialized research workflows
 
 Current repo-owned narrow skill:
 
 - `validation`: runtime validation, log triage, and benchmark-discipline overlay
+- `family-bringup`: new-family onboarding, workflow-boundary planning, and truthful first-slice framing
+- `ltx-fidelity-debugging`: real-weight LTX fidelity bring-up, safe smoke runs, and stage-debug workflow
 
 ## Skill Design Rules
 

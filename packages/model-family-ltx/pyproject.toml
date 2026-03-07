@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "mlx-runtime-core",
     "mlx-runtime-schemas",
+    "mlx-runtime-workflows",
     "mlx>=0.22.0",
     "mlx-vlm",
     "numpy",

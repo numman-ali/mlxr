@@ -1,0 +1,7 @@
+interface:
+  display_name: "Validation"
+  short_description: "MLXR runtime debugging and benchmark validation"
+  default_prompt: "Use $validation to inspect runtime logs, benchmark strength, and whether a result is strong enough to treat as repo truth."
+
+policy:
+  allow_implicit_invocation: true

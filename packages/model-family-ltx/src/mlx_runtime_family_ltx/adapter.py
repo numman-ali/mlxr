@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import mlx.core as mx
 from mlx_runtime_core import (
     ArtifactPayloadItem,
     ConversionPlan,
@@ -36,6 +37,7 @@ from .generation import (
     VideoGenerator,
     create_video_generator,
     encode_mp4_video,
+    encode_wav_audio,
 )
 from .prompt_encoding import PromptEncoder, PromptEncodingResult, create_prompt_encoder
 
@@ -80,6 +82,15 @@ class LTXFamilyAdapter:
                 "required_source_roles": list(self._required_roles),
                 "role_candidates": role_candidates,
                 "bundle_ready": "bundle" in role_candidates,
+                "implemented_tasks": ["video.generate", "video.condition.image"],
+                "upstream_tasks": [
+                    "video.generate",
+                    "video.condition.image",
+                    "video.condition.video",
+                    "video.condition.audio",
+                    "video.interpolate",
+                    "video.retake",
+                ],
             },
         )
 
@@ -137,7 +148,7 @@ class LTXFamilyAdapter:
             family_variant="fast",
             tasks=["video.generate", "video.condition.image"],
             modalities_in=["text", "image"],
-            modalities_out=["video"],
+            modalities_out=["video", "audio"],
             constraints={
                 "width": {"multiple_of": 32},
                 "height": {"multiple_of": 32},
@@ -154,7 +165,7 @@ class LTXFamilyAdapter:
                 "segment_events": False,
                 "token_deltas": False,
             },
-            artifacts_out=["mp4"],
+            artifacts_out=["mp4", "wav"],
             scheduler_class="media_video_dit",
             hardware_tiers=[
                 HardwareTier(
@@ -192,6 +203,34 @@ class LTXFamilyAdapter:
                 "precision": plan.precision,
                 "primary_component_role": "checkpoint",
                 "source_count": len(sources),
+                "implemented_surface": {
+                    "tasks": ["video.generate", "video.condition.image"],
+                    "pipeline_variants": ["distilled_two_stage"],
+                    "artifact_formats": ["mp4", "wav"],
+                    "audio_output_modes": ["muxed_mp4", "wav"],
+                },
+                "upstream_surface": {
+                    "tasks": [
+                        "video.generate",
+                        "video.condition.image",
+                        "video.condition.video",
+                        "video.condition.audio",
+                        "video.interpolate",
+                        "video.retake",
+                    ],
+                    "pipeline_variants": [
+                        "distilled_two_stage",
+                        "one_stage",
+                        "two_stage",
+                        "two_stage_hq",
+                    ],
+                    "control_variants": [
+                        "ic_lora",
+                        "union_ic_lora",
+                        "distilled_lora",
+                    ],
+                },
+                "capability_matrix_doc": "docs/research/11-ltx-capability-matrix.md",
             },
         )
         record = PortableArtifactRecord(
@@ -302,6 +341,17 @@ class LTXFamilyAdapter:
                     ),
                     "attention_mask_shape": list(prompt_context.attention_mask_shape),
                     "audio_context_available": prompt_context.audio_context is not None,
+                    "context_representation": prompt_context.context_representation,
+                    "caption_proj_before_connector": (
+                        prompt_context.caption_proj_before_connector
+                    ),
+                    "rope_type": prompt_context.rope_type,
+                    "double_precision_rope": prompt_context.double_precision_rope,
+                    "connector_apply_gated_attention": (
+                        prompt_context.connector_apply_gated_attention
+                    ),
+                    "transformer_context_dim": prompt_context.transformer_context_dim,
+                    "config_source": prompt_context.config_source,
                 }
             )
         if stage.stage_id == "condition_inputs":
@@ -343,6 +393,10 @@ class LTXFamilyAdapter:
                 raise ValueError(
                     "LTX generate stage requires prompt_encode to run successfully first"
                 )
+            if runtime_state.prompt_encoder is not None:
+                runtime_state.prompt_encoder.close()
+                runtime_state.prompt_encoder = None
+                mx.clear_cache()
             generator = self._video_generator(runtime_state)
             generated_video = generator.generate(
                 prompt_context=runtime_state.prompt_context,
@@ -354,20 +408,21 @@ class LTXFamilyAdapter:
                 seed=self._seed(stage),
             )
             runtime_state.generated_video = generated_video
-            return StageResult(
-                metrics={
-                    "stage": stage.stage_id,
-                    "status": "generated",
-                    "frames_generated": int(generated_video.frames.shape[0]),
-                    "width": int(generated_video.frames.shape[2]),
-                    "height": int(generated_video.frames.shape[1]),
-                    "fps": generated_video.fps,
-                    "seed": generated_video.seed,
-                    "backend": generated_video.backend,
-                    "conditioning_count": generated_video.conditioning_count,
-                    "prompt_signature": generated_video.prompt_signature,
-                }
-            )
+            metrics = {
+                "stage": stage.stage_id,
+                "status": "generated",
+                "frames_generated": int(generated_video.frames.shape[0]),
+                "width": int(generated_video.frames.shape[2]),
+                "height": int(generated_video.frames.shape[1]),
+                "fps": generated_video.fps,
+                "seed": generated_video.seed,
+                "backend": generated_video.backend,
+                "conditioning_count": generated_video.conditioning_count,
+                "prompt_signature": generated_video.prompt_signature,
+            }
+            for key, value in generated_video.metadata.items():
+                metrics[key] = value
+            return StageResult(metrics=metrics)
         if stage.stage_id == "encode_output":
             artifact_id = self._require_str(
                 stage.params.get("artifact_id"), "artifact_id"
@@ -382,17 +437,28 @@ class LTXFamilyAdapter:
             filename = f"{artifact_id}.{artifact_format}"
             output_path = Path(output_dir) / filename
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            if artifact_format != "mp4":
-                raise ValueError(
-                    f"LTX encode_output only supports runtime-managed mp4 artifacts, got '{artifact_format}'"
-                )
             if runtime_state is None or runtime_state.generated_video is None:
                 raise ValueError(
                     "LTX encode_output requires generate to run successfully first"
                 )
-            encode_mp4_video(runtime_state.generated_video, output_path)
+            if artifact_format == "mp4":
+                encode_mp4_video(runtime_state.generated_video, output_path)
+            elif artifact_format == "wav":
+                encode_wav_audio(runtime_state.generated_video, output_path)
+            else:
+                raise ValueError(
+                    "LTX encode_output only supports runtime-managed mp4 or wav "
+                    f"artifacts, got '{artifact_format}'"
+                )
             generated_video = runtime_state.generated_video
             runtime_state.generated_video = None
+            audio_channels = 0
+            if generated_video.audio_waveform is not None:
+                audio_channels = (
+                    int(generated_video.audio_waveform.shape[1])
+                    if generated_video.audio_waveform.ndim == 2
+                    else 1
+                )
             return StageResult(
                 artifacts=[
                     ArtifactHandle(
@@ -403,6 +469,9 @@ class LTXFamilyAdapter:
                             "media_type": self._media_type_for_format(artifact_format),
                             "size_bytes": output_path.stat().st_size,
                             "storage_key": storage_key,
+                            "audio_present": generated_video.audio_waveform is not None,
+                            "audio_sample_rate": generated_video.audio_sample_rate,
+                            "audio_channels": audio_channels,
                         },
                     )
                 ],
@@ -413,6 +482,11 @@ class LTXFamilyAdapter:
                     "frames_encoded": int(generated_video.frames.shape[0]),
                     "fps": generated_video.fps,
                     "backend": generated_video.backend,
+                    "pipeline_kind": generated_video.metadata.get("pipeline_kind"),
+                    "artifact_format": artifact_format,
+                    "audio_present": generated_video.audio_waveform is not None,
+                    "audio_sample_rate": generated_video.audio_sample_rate,
+                    "audio_channels": audio_channels,
                 },
             )
 

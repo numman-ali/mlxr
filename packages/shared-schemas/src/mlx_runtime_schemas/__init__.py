@@ -18,6 +18,7 @@ from .jobs import (
 from .models import (
     ArtifactConversionRequest,
     ArtifactConversionResult,
+    ArtifactConversionTimingsMs,
     CapabilityDescriptor,
     ExtensionSchemaDescriptor,
     HardwareTier,
@@ -35,10 +36,21 @@ from .sources import (
     SourceAuth,
     SourceFileRecord,
     SourceInspectionResult,
+    SourceInspectionTimingsMs,
     SourceMaterializationRequest,
     SourcePolicy,
     SourceRef,
     SourceRegistrationRecord,
+)
+from .workflows import (
+    WorkflowIntent,
+    WorkflowPlan,
+    WorkflowPlanResult,
+    WorkflowPreferences,
+    WorkflowReference,
+    WorkflowRunRequest,
+    WorkflowRunResult,
+    WorkflowStageSpec,
 )
 
 __all__ = [
@@ -47,6 +59,7 @@ __all__ = [
     "ArtifactExportResult",
     "ArtifactConversionRequest",
     "ArtifactConversionResult",
+    "ArtifactConversionTimingsMs",
     "AuthRequirements",
     "CapabilityDescriptor",
     "ExtensionSchemaDescriptor",
@@ -74,8 +87,17 @@ __all__ = [
     "SourceAuth",
     "SourceFileRecord",
     "SourceInspectionResult",
+    "SourceInspectionTimingsMs",
     "SourceMaterializationRequest",
     "SourcePolicy",
     "SourceRef",
     "SourceRegistrationRecord",
+    "WorkflowIntent",
+    "WorkflowPlan",
+    "WorkflowPlanResult",
+    "WorkflowPreferences",
+    "WorkflowReference",
+    "WorkflowRunRequest",
+    "WorkflowRunResult",
+    "WorkflowStageSpec",
 ]

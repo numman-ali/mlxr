@@ -16,6 +16,15 @@ class PromptEncodingResult:
     video_context_shape: tuple[int, ...]
     attention_mask_shape: tuple[int, ...]
     audio_context_shape: tuple[int, ...] | None = None
+    context_representation: str = "post_connector"
+    caption_proj_before_connector: bool = False
+    rope_type: str = "interleaved"
+    double_precision_rope: bool = False
+    connector_apply_gated_attention: bool = False
+    transformer_context_dim: int | None = None
+    transformer_apply_gated_attention: bool | None = None
+    transformer_cross_attention_adaln: bool | None = None
+    config_source: str | None = None
 
 
 class PromptEncoder(Protocol):

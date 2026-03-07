@@ -8,6 +8,7 @@ dependencies = [
     "mlx-runtime-core",
     "mlx-runtime-family-ltx",
     "mlx-runtime-schemas",
+    "mlx-runtime-workflows",
     "uvicorn>=0.30.0",
 ]
 

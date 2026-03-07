@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from importlib import import_module
 from pathlib import Path
 from typing import Protocol
 
@@ -28,6 +29,9 @@ class GeneratedVideo:
     backend: str
     conditioning_count: int
     prompt_signature: str
+    audio_waveform: npt.NDArray[np.float32] | None = None
+    audio_sample_rate: int | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 class VideoGenerator(Protocol):
@@ -50,17 +54,21 @@ def create_video_generator(
     checkpoint_path: Path,
     spatial_upsampler_path: Path,
 ) -> VideoGenerator:
-    from ._generation_backend import (
-        create_video_generator as create_backend_video_generator,
-    )
-
-    return create_backend_video_generator(
+    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    create_backend_video_generator = backend_module.create_video_generator
+    return create_backend_video_generator(  # type: ignore[no-any-return]
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
     )
 
 
 def encode_mp4_video(video: GeneratedVideo, output_path: Path) -> None:
-    from ._generation_backend import encode_mp4_video as encode_backend_mp4_video
-
+    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    encode_backend_mp4_video = backend_module.encode_mp4_video
     encode_backend_mp4_video(video=video, output_path=output_path)
+
+
+def encode_wav_audio(video: GeneratedVideo, output_path: Path) -> None:
+    backend_module = import_module("mlx_runtime_family_ltx._generation_backend")
+    encode_backend_wav_audio = backend_module.encode_wav_audio
+    encode_backend_wav_audio(video=video, output_path=output_path)

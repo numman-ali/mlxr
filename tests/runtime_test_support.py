@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import os
 import queue
@@ -13,9 +14,11 @@ from pathlib import Path
 from typing import TypeVar
 from unittest.mock import patch
 
+import numpy as np
 from fastapi.testclient import TestClient
 from httpx import Response
 from mlx_runtime_core import RuntimeHome
+from mlx_runtime_family_ltx.generation import GeneratedVideo
 from mlx_runtime_family_ltx.prompt_encoding import PromptEncodingResult
 from mlx_runtime_schemas import (
     ArtifactConversionResult,
@@ -228,6 +231,106 @@ class FakePromptEncoder:
             audio_context_shape=(
                 (1, self.sequence_length, 2048) if audio_context is not None else None
             ),
+            context_representation="post_connector",
+            caption_proj_before_connector=True,
+            rope_type="split",
+            double_precision_rope=True,
+            connector_apply_gated_attention=True,
+            transformer_context_dim=3840,
+            transformer_apply_gated_attention=True,
+            transformer_cross_attention_adaln=True,
+            config_source="fake://prompt-config",
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeVideoGenerator:
+    def __init__(
+        self,
+        *,
+        backend: str = "ltx_test_distilled_generator",
+        include_audio: bool = False,
+    ) -> None:
+        self.backend = backend
+        self.include_audio = include_audio
+        self.calls: list[dict[str, object]] = []
+        self.closed = False
+
+    def generate(
+        self,
+        *,
+        prompt_context: PromptEncodingResult,
+        conditioning_inputs: tuple[object, ...],
+        width: int,
+        height: int,
+        num_frames: int,
+        fps: int,
+        seed: int | None = None,
+    ) -> GeneratedVideo:
+        self.calls.append(
+            {
+                "prompt": prompt_context.prompt_text,
+                "width": width,
+                "height": height,
+                "num_frames": num_frames,
+                "fps": fps,
+                "seed": seed,
+                "conditioning_count": len(conditioning_inputs),
+            }
+        )
+        effective_seed = 0 if seed is None else seed
+        frames = np.zeros((num_frames, height, width, 3), dtype=np.uint8)
+        width_ramp = np.linspace(0, 255, width, dtype=np.uint8)
+        height_ramp = np.linspace(0, 255, height, dtype=np.uint8)
+        for index in range(num_frames):
+            frames[index, :, :, 0] = (width_ramp + index * 17) % 255
+            frames[index, :, :, 1] = height_ramp[:, None]
+            frames[index, :, :, 2] = (effective_seed + index * 13) % 255
+        prompt_signature = hashlib.sha256(
+            prompt_context.prompt_text.encode("utf-8")
+        ).hexdigest()[:12]
+        audio_waveform: np.ndarray | None = None
+        audio_sample_rate: int | None = None
+        if self.include_audio:
+            sample_rate = 24000
+            sample_count = max(
+                sample_rate // 2, int(sample_rate * num_frames / max(fps, 1))
+            )
+            time_axis = np.linspace(
+                0.0, 1.0, sample_count, endpoint=False, dtype=np.float32
+            )
+            left = np.sin(2.0 * np.pi * 220.0 * time_axis).astype(np.float32)
+            right = np.sin(2.0 * np.pi * 330.0 * time_axis).astype(np.float32)
+            audio_waveform = np.stack((left, right), axis=1).astype(np.float32)
+            audio_sample_rate = sample_rate
+        return GeneratedVideo(
+            frames=frames,
+            fps=fps,
+            seed=effective_seed,
+            backend=self.backend,
+            conditioning_count=len(conditioning_inputs),
+            prompt_signature=prompt_signature,
+            audio_waveform=audio_waveform,
+            audio_sample_rate=audio_sample_rate,
+            metadata={
+                "pipeline_kind": "distilled_two_stage",
+                "stage1_duration_ms": 12.5,
+                "upsample_duration_ms": 3.25,
+                "stage2_duration_ms": 9.75,
+                "decode_duration_ms": 4.0,
+                "audio_decode_duration_ms": 2.0 if self.include_audio else 0.0,
+                "tiling_mode": "none",
+                "output_width": width,
+                "output_height": height,
+                "output_frames": num_frames,
+                "internal_width": width,
+                "internal_height": height,
+                "audio_present": self.include_audio,
+                "audio_sample_rate": audio_sample_rate,
+                "audio_channels": 2 if self.include_audio else 0,
+            },
         )
 
     def close(self) -> None:
@@ -305,6 +408,32 @@ def patched_ltx_prompt_encoder(
         return encoder
 
     with patch.object(adapter_module, "create_prompt_encoder", side_effect=factory):
+        yield instances
+
+
+@contextmanager
+def patched_ltx_video_generator(
+    *,
+    backend: str = "ltx_test_distilled_generator",
+    include_audio: bool = False,
+) -> Iterator[list[FakeVideoGenerator]]:
+    from mlx_runtime_family_ltx import adapter as adapter_module
+
+    instances: list[FakeVideoGenerator] = []
+
+    def factory(
+        checkpoint_path: Path,
+        spatial_upsampler_path: Path,
+    ) -> FakeVideoGenerator:
+        del checkpoint_path, spatial_upsampler_path
+        generator = FakeVideoGenerator(
+            backend=backend,
+            include_audio=include_audio,
+        )
+        instances.append(generator)
+        return generator
+
+    with patch.object(adapter_module, "create_video_generator", side_effect=factory):
         yield instances
 
 

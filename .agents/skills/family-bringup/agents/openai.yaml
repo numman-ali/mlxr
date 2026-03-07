@@ -1,0 +1,7 @@
+interface:
+  display_name: "Family Bring-Up"
+  short_description: "New-family onboarding and workflow-boundary planning"
+  default_prompt: "Use $family-bringup to define the first truthful slice for a family, separate core workflow from family and host responsibilities, and tighten the validation ladder before code drifts."
+
+policy:
+  allow_implicit_invocation: true

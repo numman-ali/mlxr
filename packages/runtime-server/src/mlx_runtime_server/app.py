@@ -35,6 +35,10 @@ from mlx_runtime_schemas import (
     SourceInspectionResult,
     SourceRef,
     SourceRegistrationRecord,
+    WorkflowIntent,
+    WorkflowPlanResult,
+    WorkflowRunRequest,
+    WorkflowRunResult,
 )
 
 from .jobs import (
@@ -259,6 +263,52 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
             return runtime.catalog.get_model(model_id)
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/v1/workflows/plan", response_model=WorkflowPlanResult)
+    def plan_workflow(intent: WorkflowIntent) -> WorkflowPlanResult:
+        try:
+            result = runtime.workflow_service.plan(intent)
+            logger.info(
+                "Workflow planned model_id=%s family=%s task=%s",
+                result.plan.model_id,
+                result.plan.family,
+                result.plan.selected_task,
+            )
+            return result
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/v1/workflows/run", response_model=WorkflowRunResult)
+    def run_workflow(
+        workflow_request: WorkflowRunRequest, request: Request
+    ) -> WorkflowRunResult:
+        guard_mutation(request)
+        try:
+            result = runtime.workflow_service.run(
+                workflow_request.intent,
+                workflow_request.plan,
+            )
+            logger.info(
+                "Workflow submitted model_id=%s family=%s task=%s job_id=%s",
+                result.plan.model_id,
+                result.plan.family,
+                result.plan.selected_task,
+                result.submit.job_id,
+            )
+            return result
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except JobConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (
+            CatalogValidationError,
+            FileNotFoundError,
+            ValueError,
+            JobValidationError,
+        ) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/v1/capabilities", response_model=list[CapabilityDescriptor])
     def list_capabilities() -> list[CapabilityDescriptor]:

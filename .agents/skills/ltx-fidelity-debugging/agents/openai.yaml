@@ -1,0 +1,7 @@
+interface:
+  display_name: "LTX Fidelity Debugging"
+  short_description: "LTX-2.3 smoke and stage-debug fidelity workflow"
+  default_prompt: "Use $ltx-fidelity-debugging to run clean-lifecycle smokes, inspect stage snapshots, and decide the next fidelity fix without overclaiming the result."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 from mlx_runtime_schemas import (
     ArtifactConversionRequest,
     ArtifactConversionResult,
+    ArtifactConversionTimingsMs,
     CapabilityDescriptor,
     FamilyInspectionResult,
     ModelRecord,
     PortableArtifactRecord,
     ProviderInspectionResult,
     SourceInspectionResult,
+    SourceInspectionTimingsMs,
     SourceRef,
     SourceRegistrationRecord,
 )
@@ -61,14 +64,24 @@ class RuntimeCatalog:
         self.models = ModelManifestStore(runtime_home)
 
     def inspect_source(self, source_ref: SourceRef) -> SourceInspectionResult:
+        started_at = time.perf_counter()
         provider = self._provider(source_ref.provider)
+        resolve_started_at = time.perf_counter()
         resolved = provider.resolve(source_ref)
+        resolve_ms = _elapsed_ms(resolve_started_at)
+        provider_inspect_started_at = time.perf_counter()
         inspection = provider.inspect(resolved)
+        provider_inspect_ms = _elapsed_ms(provider_inspect_started_at)
+        provenance_started_at = time.perf_counter()
         provenance = provider.provenance(resolved)
+        provenance_ms = _elapsed_ms(provenance_started_at)
         family_inspection = None
+        family_inspect_ms: float | None = None
         if source_ref.family_hint:
             family = self._family(source_ref.family_hint)
+            family_inspect_started_at = time.perf_counter()
             family_result = family.inspect_source(resolved)
+            family_inspect_ms = _elapsed_ms(family_inspect_started_at)
             family_inspection = FamilyInspectionResult(
                 family=family_result.family,
                 variant=family_result.variant,
@@ -84,6 +97,13 @@ class RuntimeCatalog:
             ),
             provenance=provenance,
             family_inspection=family_inspection,
+            timings_ms=SourceInspectionTimingsMs(
+                resolve_ms=resolve_ms,
+                provider_inspect_ms=provider_inspect_ms,
+                family_inspect_ms=family_inspect_ms,
+                provenance_ms=provenance_ms,
+                total_ms=_elapsed_ms(started_at),
+            ),
         )
 
     def register_source(self, source_ref: SourceRef) -> SourceRegistrationRecord:
@@ -124,23 +144,30 @@ class RuntimeCatalog:
     def convert_artifact(
         self, request: ArtifactConversionRequest
     ) -> ArtifactConversionResult:
+        started_at = time.perf_counter()
         family_id, source_records = self._resolve_conversion_sources(request)
         family = self._family(family_id)
         conversion_sources: dict[str, ConversionSource] = {}
+        fetch_ms_by_role: dict[str, float] = {}
+        fetch_total_started_at = time.perf_counter()
         for role, source_record in source_records.items():
             provider = self._provider(source_record.source.provider)
             fetch_policy = family.fetch_policy_for_conversion(
                 role, source_record.resolved_source
             )
+            fetch_started_at = time.perf_counter()
             materialization = provider.fetch(
                 source_record.resolved_source, fetch_policy
             )
+            fetch_ms_by_role[role] = _elapsed_ms(fetch_started_at)
             conversion_sources[role] = ConversionSource(
                 role=role,
                 source_id=source_record.source_id,
                 source=source_record.source,
                 materialization=materialization,
             )
+        fetch_total_ms = _elapsed_ms(fetch_total_started_at)
+        family_convert_started_at = time.perf_counter()
         artifact = family.convert(
             conversion_sources,
             ConversionPlan(
@@ -150,7 +177,10 @@ class RuntimeCatalog:
                 options=request.options,
             ),
         )
+        family_convert_ms = _elapsed_ms(family_convert_started_at)
+        persist_started_at = time.perf_counter()
         persisted_artifact = self._persist_artifact(artifact)
+        persist_ms = _elapsed_ms(persist_started_at)
 
         existing_model = self.models.get(request.model_id)
         if existing_model is not None and existing_model.artifact is not None:
@@ -174,7 +204,15 @@ class RuntimeCatalog:
         )
         persisted_model = self.models.save(model_record)
         return ArtifactConversionResult(
-            artifact=persisted_artifact, model=persisted_model
+            artifact=persisted_artifact,
+            model=persisted_model,
+            timings_ms=ArtifactConversionTimingsMs(
+                fetch_ms_by_role=fetch_ms_by_role,
+                fetch_total_ms=fetch_total_ms,
+                family_convert_ms=family_convert_ms,
+                persist_ms=persist_ms,
+                total_ms=_elapsed_ms(started_at),
+            ),
         )
 
     def list_artifacts(self) -> list[PortableArtifactRecord]:
@@ -321,3 +359,7 @@ class RuntimeCatalog:
                 f"Artifact payload path '{relative_path}' must be relative and stay within the artifact root"
             )
         return relative_path
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.perf_counter() - started_at) * 1000.0, 3)

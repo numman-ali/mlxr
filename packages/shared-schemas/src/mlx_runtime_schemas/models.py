@@ -116,6 +116,15 @@ class ArtifactConversionRequest(BaseModel):
         return self
 
 
+class ArtifactConversionTimingsMs(BaseModel):
+    fetch_ms_by_role: dict[str, float] = Field(default_factory=dict)
+    fetch_total_ms: float
+    family_convert_ms: float
+    persist_ms: float
+    total_ms: float
+
+
 class ArtifactConversionResult(BaseModel):
     artifact: PortableArtifactRecord
     model: ModelRecord
+    timings_ms: ArtifactConversionTimingsMs | None = None

@@ -155,7 +155,7 @@ Platform implication:
 
 ## Current First-Slice Runtime Artifact Shape
 
-The current runtime-backed LTX slice now includes truthful artifact conversion plus the first real execution stage, but it is still not generation-complete.
+The current runtime-backed LTX slice now includes truthful artifact conversion plus a real generation path that has cleared the first dog-specific visual gates, but it is still not quality-validated at recommended or HQ profiles.
 
 What the repo now treats as canonical for the first truthful fast-path slice:
 
@@ -175,15 +175,51 @@ Execution implications:
 
 - `prompt_encode` now runs through a repo-owned strict-local MLX Gemma path using the artifactized `checkpoint` and `text_encoder` payloads
 - `condition_inputs` now resolves imported image handles into worker-local conditioning inputs before generation
-- prompt context stays worker-local and becomes the honest seam into later denoise/generate work
-- the current runtime path now emits real runtime-managed `mp4` artifacts plus per-stage timing and memory telemetry, while keeping the generation backend explicitly narrow
+- prompt context stays worker-local and is now an explicit post-connector contract into denoise/generate work
+- the current runtime path now emits real runtime-managed `mp4` and `wav` artifacts plus per-stage timing and memory telemetry, while keeping the generation backend explicitly narrow
+- the current runtime path now restores audible checkpoint-backed audio through a repo-owned MLX `AMP1` base-vocoder bridge instead of the older silent-ish fallback path
+- the bridge now fails closed on prompt/generation config drift, missing VAE per-channel statistics, and unsupported x2 upsampler layouts instead of silently approximating them
+- the current fixed-seed dog validation ladder now passes a clear-dog `384x224 / 17f / 24fps` rung and a coherent `768x512 / 33f / 24fps` rung using the repo-owned smoke/debug workflow
 - negative-prompt support is still intentionally excluded for the fast path instead of being silently ignored
 
 Still intentionally out of scope for this slice:
 
-- temporal upsamplers, x1.5 upsampler, LoRAs, audio-aware branches, and prompt enhancement
-- checkpoint-faithful denoise/video generation
+- audio-conditioned input, reference-video input, temporal upsamplers, x1.5 upsampler, LoRAs, and prompt enhancement
+- recommended-resolution and HQ profile validation
 - claiming that the LTX artifact shape has already validated the platform across families
+- full `LTX-2.3` BWE audio parity beyond the now-audible base-vocoder bridge
+
+## Workflow Ownership Split Exposed By LTX
+
+LTX is now the first family that clearly forces a repo-level workflow layer instead of an adapter-local pipeline story.
+
+### Core workflow layer
+
+The core runtime should own:
+
+- selection of the `LTX` workflow template from task and profile
+- stage ordering across `inspect`, `convert`, `load`, `condition_inputs`, `prompt_encode`, staged generation, decode, encode, and export
+- scheduler reservations, lifecycle events, cancellation points, and telemetry collection
+- runtime-managed input handles, output artifacts, and truthful job-state reporting
+
+### LTX family adapter
+
+The LTX adapter should own:
+
+- declaration of the truthful fast-path workflow and optional branches
+- family-specific stage implementations and worker-local state handoff
+- required source roles and artifact payload validation
+- fail-closed behavior when prompt, transformer, VAE, or upsampler contracts drift
+
+### Host adapters
+
+Desktop, CLI, and Comfy-facing integrations should own:
+
+- user-facing profile selection and request ergonomics
+- import and export helpers where a trusted local flow is appropriate
+- presentation of progress and artifacts back to the host product
+
+They should not own reusable stage sequencing, pipeline lifecycle, or private copies of family compatibility logic.
 
 ## Comfy Seams
 
@@ -218,6 +254,7 @@ Platform implication:
 | provider resolution and provenance | yes | all families need it |
 | portable artifact manifests | yes | all families need it |
 | stage-aware scheduler | yes | LTX pressures it hardest, but it is not LTX-only |
+| workflow-template selection and lifecycle orchestration | yes | LTX makes it obvious, but future families need the same core-owned layer |
 | handle-based image or audio imports | yes | applies beyond LTX |
 | PyAV output replacement with Apple-native path | mostly yes | value extends to other media families |
 | Gemma-specific prompt encoding | no | LTX-specific or family-specific |

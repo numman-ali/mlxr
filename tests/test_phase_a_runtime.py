@@ -255,6 +255,10 @@ class PhaseARuntimeTests(unittest.TestCase):
                 "family_hint": "ltx",
             }
 
+            inspect_response = client.post("/v1/sources/inspect", json=payload)
+            self.assertEqual(inspect_response.status_code, 200)
+            self.assertIsNotNone(inspect_response.json()["timings_ms"])
+
             first = client.post("/v1/sources/register", json=payload)
             second = client.post("/v1/sources/register", json=payload)
 
@@ -303,6 +307,9 @@ class PhaseARuntimeTests(unittest.TestCase):
             artifact_digest = body["artifact"]["artifact_digest"]
 
             self.assertEqual(body["model"]["model_id"], "ltx-2.3-fast-local")
+            self.assertIsNotNone(body["timings_ms"])
+            self.assertIn("family_convert_ms", body["timings_ms"])
+            self.assertIn("fetch_ms_by_role", body["timings_ms"])
             self.assertEqual(
                 body["artifact"]["capability"]["scheduler_class"], "media_video_dit"
             )
@@ -349,6 +356,14 @@ class PhaseARuntimeTests(unittest.TestCase):
             self.assertEqual(
                 capabilities.json()[0]["tasks"],
                 ["video.generate", "video.condition.image"],
+            )
+            self.assertEqual(
+                capabilities.json()[0]["modalities_out"],
+                ["video", "audio"],
+            )
+            self.assertEqual(
+                capabilities.json()[0]["artifacts_out"],
+                ["mp4", "wav"],
             )
 
             restarted = make_state(root)
@@ -489,6 +504,9 @@ class PhaseARuntimeTests(unittest.TestCase):
             )
 
             self.assertIsNotNone(inspection.family_inspection)
+            self.assertIsNotNone(inspection.timings_ms)
+            assert inspection.timings_ms is not None
+            self.assertIsNotNone(inspection.timings_ms.family_inspect_ms)
             self.assertEqual(provider.fetch_calls, [])
 
     def test_convert_uses_family_fetch_policy_for_selective_materialization(

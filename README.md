@@ -7,6 +7,7 @@ This repository is the planning and implementation workspace for `MLXR`, a local
 The current scope we can defend is narrower and more honest than the first draft:
 
 - universal across host surfaces: CLI, native API, desktop adapters, Comfy-style adapters, and embedded first-party access
+- one core workflow-orchestration layer between scheduler, family adapters, and host adapters
 - broad across local generative and multimodal families on Apple Silicon
 - provider-extensible by architecture, but not provider-universal in v1 implementation
 - not yet frozen as a final architecture or public API
@@ -20,7 +21,7 @@ The platform target is:
 - a shared Apple Silicon runtime for local generative and multimodal workloads
 - one canonical native job API
 - one shared source, artifact, provenance, and scheduling model
-- one runtime that can serve multiple product surfaces without each host owning inference logic
+- one core workflow layer that can serve multiple product surfaces without each host owning inference logic or stage sequencing
 
 The first product proving path is `LTX-2.3 Fast` text-to-video and image-to-video, but LTX urgency is no longer allowed to freeze the universal runtime design prematurely.
 
@@ -42,6 +43,7 @@ These items remain provisional until the benchmark matrix and cross-family valid
 - [Product requirements](docs/01-product-requirements.md)
 - [Universal runtime design](docs/02-universal-mlx-runtime-design.md)
 - [Phased delivery plan](docs/03-phased-delivery-plan.md)
+- [Workflow orchestration design](docs/workflow-orchestration-design.md)
 - [Capability schema](docs/capability-schema.md)
 - [Benchmark matrix](docs/benchmark-matrix.md)
 - [Provider and provenance model](docs/provider-and-provenance-model.md)
@@ -138,7 +140,11 @@ Repo operating docs:
 - [MEMORY.md](MEMORY.md)
 - [agent-native-development.md](docs/agent-native-development.md)
 - [dev-harness.md](docs/dev-harness.md)
+- [workflow-orchestration-design.md](docs/workflow-orchestration-design.md)
+- [family-bringup/README.md](docs/family-bringup/README.md)
 - [skill-policy.md](docs/skill-policy.md)
+
+Repo-owned Codex skills live under `.agents/skills/`. Use `.codex/` only for project-local Codex config overrides.
 
 Fresh Codex sessions are expected to bootstrap from the repo itself:
 

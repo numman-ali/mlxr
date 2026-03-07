@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import uvicorn
 from mlx_runtime_core import RuntimeHome
 
 from .app import create_app
 from .settings import ServerSettings
 from .state import RuntimeState
+
+
+def _uds_socket_path(settings: ServerSettings, runtime_home: RuntimeHome) -> Path:
+    if settings.uds_path is not None:
+        return Path(settings.uds_path).expanduser()
+    return runtime_home.temp_dir / "control-plane.sock"
 
 
 def main() -> None:
@@ -19,9 +27,9 @@ def main() -> None:
 
     runtime_home = RuntimeHome.from_env()
     runtime_home.ensure_layout()
-    socket_dir = runtime_home.temp_dir
+    socket_path = _uds_socket_path(settings, runtime_home)
+    socket_dir = socket_path.parent
     socket_dir.mkdir(parents=True, exist_ok=True)
-    socket_path = socket_dir / "control-plane.sock"
     if socket_path.exists():
         socket_path.unlink()
     uvicorn.run(app, uds=str(socket_path))

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from pathlib import Path
 from typing import Any, Protocol
 
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import HfApi, get_token, snapshot_download
 from huggingface_hub.errors import (
     GatedRepoError,
     HfHubHTTPError,
@@ -167,6 +166,10 @@ class LocalFileProviderAdapter:
 
 class HuggingFaceProviderAdapter:
     provider_id = "huggingface"
+    _default_auth_message = (
+        "Use `hf auth login` on this machine or set `HF_TOKEN`; "
+        "`auth.token_ref='hf-default'` resolves the default Hugging Face login."
+    )
 
     def __init__(self, api: ModelInfoClient | None = None) -> None:
         self._api = api or HfApi()
@@ -220,7 +223,7 @@ class HuggingFaceProviderAdapter:
             auth_requirements=AuthRequirements(
                 required=access_state in {"gated", "private"},
                 supported=["hf-default"],
-                message="Set HF_TOKEN and use auth.token_ref='hf-default' for gated or private repos",
+                message=self._default_auth_message,
             ),
             files=files,
             metadata={
@@ -256,7 +259,7 @@ class HuggingFaceProviderAdapter:
         return AuthRequirements(
             required=token_ref is not None,
             supported=["hf-default"],
-            message="Set HF_TOKEN and use auth.token_ref='hf-default' for gated or private repos",
+            message=self._default_auth_message,
         )
 
     def fetch(
@@ -361,7 +364,10 @@ class HuggingFaceProviderAdapter:
             raise ValueError(
                 "Hugging Face provider only supports auth.token_ref='hf-default'"
             )
-        token = os.environ.get("HF_TOKEN")
+        token = get_token()
         if not token:
-            raise ValueError("HF_TOKEN must be set when auth.token_ref='hf-default'")
+            raise ValueError(
+                "No default Hugging Face login is available. "
+                "Run `hf auth login` on this machine or set HF_TOKEN."
+            )
         return token

@@ -72,6 +72,14 @@ class ProviderInspectionResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class SourceInspectionTimingsMs(BaseModel):
+    resolve_ms: float
+    provider_inspect_ms: float
+    family_inspect_ms: float | None = None
+    provenance_ms: float
+    total_ms: float
+
+
 class FamilyInspectionResult(BaseModel):
     family: str
     variant: str | None = None
@@ -85,6 +93,7 @@ class SourceInspectionResult(BaseModel):
     provider_inspection: ProviderInspectionResult
     provenance: ProvenanceRecord
     family_inspection: FamilyInspectionResult | None = None
+    timings_ms: SourceInspectionTimingsMs | None = None
 
 
 class SourceRegistrationRecord(BaseModel):

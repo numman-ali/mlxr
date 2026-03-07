@@ -17,6 +17,7 @@ from tests.runtime_test_support import (
     make_state,
     patched_inline_job_process_context,
     patched_ltx_prompt_encoder,
+    patched_ltx_video_generator,
     register_local_ltx_model,
     response_model,
     wait_for_job_terminal_state,
@@ -49,6 +50,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(include_audio=True),
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -106,10 +108,65 @@ class RuntimeJobTests(unittest.TestCase):
                     any(
                         event.data.get("stage_id") == "generate"
                         and isinstance(event.data.get("memory"), dict)
+                        and isinstance(event.data.get("metrics"), dict)
+                        and event.data["metrics"].get("pipeline_kind")
+                        == "distilled_two_stage"
+                        and event.data["metrics"].get("stage1_duration_ms") is not None
                         and event.data["memory"].get("telemetry_available") is True
                         for event in metric_events
                     )
                 )
+
+    def test_job_submit_supports_wav_output_when_audio_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(root)
+            state = make_state(root)
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(include_audio=True),
+                TestClient(create_app(state)) as client,
+            ):
+                register_local_ltx_model(client, source_dir)
+
+                submit = client.post(
+                    "/v1/jobs",
+                    json={
+                        "model_id": "ltx-2.3-fast-local",
+                        "task": "video.generate",
+                        "inputs": {"prompt": "golden retriever in a park"},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                            "fps": 12,
+                            "seed": 17,
+                        },
+                        "output": {"artifact_format": "wav"},
+                        "extensions": {"simulate_delay_seconds": 0.02},
+                    },
+                )
+                self.assertEqual(submit.status_code, 200, submit.text)
+                job_id = response_model(submit, JobSubmitResult).job_id
+
+                terminal = wait_for_job_terminal_state(client, job_id)
+                self.assertEqual(terminal["state"], "completed")
+                artifact_id = first_artifact_id(terminal)
+
+                output_record = client.get(f"/v1/outputs/{artifact_id}")
+                self.assertEqual(output_record.status_code, 200)
+                self.assertEqual(
+                    output_record.json()["artifact_format"],
+                    "wav",
+                )
+                self.assertEqual(
+                    output_record.json()["media_type"],
+                    "audio/wav",
+                )
+                download = client.get(f"/v1/outputs/{artifact_id}/download")
+                self.assertEqual(download.status_code, 200)
+                self.assertEqual(download.content[:4], b"RIFF")
 
     def test_job_validation_and_admission_rejection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -119,6 +176,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(),
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -203,6 +261,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(),
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -242,6 +301,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(),
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -282,6 +342,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(),
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -324,6 +385,7 @@ class RuntimeJobTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(),
                 TestClient(create_app(http_state)) as client,
             ):
                 register_local_ltx_model(
