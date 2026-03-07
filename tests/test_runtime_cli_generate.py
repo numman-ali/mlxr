@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mlx_runtime_cli.cli import build_parser
+from mlx_runtime_cli.cli import _default_uds_path, build_parser
 
 
 class RuntimeCliGenerateTests(unittest.TestCase):
@@ -50,3 +50,22 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             )
             self.assertEqual(parsed.image, image_path)
             self.assertTrue(parsed.plan_only)
+
+    def test_default_uds_path_uses_runtime_home_temp_socket(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = Path(tmp_dir) / "runtime-home"
+            previous = None
+            import os
+
+            previous = os.environ.get("MLX_RUNTIME_HOME")
+            os.environ["MLX_RUNTIME_HOME"] = str(runtime_home)
+            try:
+                self.assertEqual(
+                    _default_uds_path(),
+                    runtime_home / "temp" / "control-plane.sock",
+                )
+            finally:
+                if previous is None:
+                    os.environ.pop("MLX_RUNTIME_HOME", None)
+                else:
+                    os.environ["MLX_RUNTIME_HOME"] = previous

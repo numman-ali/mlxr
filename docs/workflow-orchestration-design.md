@@ -1,16 +1,16 @@
 # Workflow Orchestration Design
 
-Status: working platform doctrine for the workflow layer. Implement against this now, but treat the exact workflow schema as provisional until more than one family has validated it.
+Status: working platform doctrine for the workflow-planning layer. Implement against this now, but treat the exact workflow schema as provisional until more than one family has validated it.
 
 ## Purpose
 
-This doc defines the workflow layer that sits between the scheduler, model-family adapters, and host adapters.
+This doc defines the workflow-planning layer that sits between the scheduler, model-family adapters, and host adapters.
 
-`MLXR` now treats this layer as part of the core runtime, not as incidental glue inside one family or one host.
+`MLXR` now treats shared workflow planning as part of the core runtime, not as incidental glue inside one family or one host.
 
 The immediate pressure came from `LTX-2.3 Fast`, but the point of the layer is broader:
 
-- keep stage sequencing and lifecycle truth in one place
+- keep workflow intent and family-dispatched planning in one place
 - let families declare truthful workflows without becoming mini-schedulers
 - keep hosts thin even when tasks are multi-stage and long-running
 
@@ -19,27 +19,27 @@ The immediate pressure came from `LTX-2.3 Fast`, but the point of the layer is b
 ```text
 Host request
   -> control plane resolves source, artifact, and capability
-  -> core workflow layer selects a workflow template
-  -> scheduler reserves resources per stage
+  -> core workflow-planning layer selects a workflow template
+  -> current runtime converts that plan into the existing job lifecycle
   -> worker runs family-owned stage implementations
-  -> core workflow layer records state, telemetry, artifacts, and failures
+  -> scheduler and job system record state, telemetry, artifacts, and failures
   -> host consumes job events and output handles
 ```
 
-The workflow layer is where `MLXR` decides what happens next, what resources are reserved, what evidence is recorded, and what the host is allowed to claim about progress.
+The current workflow-planning layer is where `MLXR` decides what family/task/profile path to take and what the host is allowed to claim about the selected path. Full stage-graph interpretation, reservation ownership, and lifecycle control are still the next tranche.
 
 ## Why This Is Core MLXR
 
-Without a core workflow layer, the same mistakes repeat in different forms:
+Without a core workflow-planning layer, the same mistakes repeat in different forms:
 
 - hosts start owning stage order, warm-state assumptions, and failure handling
 - families hide reusable lifecycle logic inside private adapter code
 - scheduler decisions drift away from the actual execution graph
 - job progress becomes a UI story instead of a runtime truth
 
-The workflow layer exists to stop that drift.
+The workflow-planning layer exists to stop that drift.
 
-It is the runtime-owned bridge between:
+It is the runtime-owned planning bridge between:
 
 - scheduler truth
 - family-specific execution stages
@@ -47,14 +47,13 @@ It is the runtime-owned bridge between:
 
 ## Responsibility Split
 
-### Core workflow layer owns
+### Core workflow-planning layer owns
 
 - workflow-template selection from family, task, and profile
-- stage ordering, optional-branch rules, and lifecycle transitions
-- scheduler reservations, admission, cancellation, and retries where supported
-- runtime-managed inputs, outputs, state handoff, and artifact ownership
-- generic telemetry, failure taxonomy, and event emission
+- intent normalization and preference handling
+- conversion from workflow plans into the current primitive job lifecycle
 - the rule that hosts consume workflows, not invent them
+- the roadmap seam for future stage-graph interpretation in core
 
 ### Family adapters own
 
@@ -75,7 +74,7 @@ Hosts do not own inference logic, scheduler policy, or reusable stage sequencing
 
 ## Workflow Template Contract
 
-Each family should be able to declare a workflow template that the core runtime can interpret without host-specific knowledge.
+Each family should be able to declare a workflow template that the core runtime can plan against without host-specific knowledge.
 
 At minimum, a workflow template should name:
 
@@ -87,7 +86,7 @@ At minimum, a workflow template should name:
 - output artifact kinds and completion conditions
 - failure categories or fail-closed boundaries that matter to the host
 
-The workflow layer interprets the template. The family adapter supplies the family truth inside it.
+The current runtime uses the template for planning and request shaping. The family adapter supplies the family truth inside it. A later tranche will move template interpretation and stage-graph execution deeper into core.
 
 ## Stage Vocabulary
 

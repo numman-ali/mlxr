@@ -30,7 +30,7 @@ This repository is the implementation and research home for a local-first MLX ru
 It has two connected tracks:
 
 1. Platform track
-   Build a reusable runtime with provider resolution, provenance, portable artifacts, machine-local build cache, workflow orchestration, scheduling, security, and multiple host surfaces.
+   Build a reusable runtime with provider resolution, provenance, portable artifacts, machine-local build cache, workflow planning, scheduling, security, and multiple host surfaces.
 2. Product track
    Prove the platform on `LTX-2.3 Fast` first, then validate it across additional families before claiming stability.
 
@@ -143,7 +143,7 @@ Do not assume any of the following unless the docs or measurements have been ref
 - Preferred macOS transport: Unix domain socket
 - Canonical external shape: local job-oriented daemon
 - Execution shape: control-plane daemon plus workers
-- Workflow layer: core runtime-owned orchestration between scheduler, family adapters, and host adapters
+- Workflow layer: core runtime-owned workflow planning between scheduler, family adapters, and host adapters
 - Host strategy: thin adapters
 - Native hotspot seam: `MLX compile`, `mx.fast.*`, custom Metal kernels, `MLX` extensions
 - Swift role: early at the host boundary, not as the v1 family bring-up language
@@ -156,7 +156,7 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not reintroduce raw file paths into the generic HTTP contract.
 - Do not blur source references, portable artifacts, and machine-local build cache.
 - Do not let host adapters own inference logic.
-- Do not let family adapters or host adapters become the de facto home for reusable workflow orchestration.
+- Do not let family adapters or host adapters become the de facto home for reusable workflow planning.
 - Do not treat benchmark-free claims as settled architecture.
 - Do not move hotspots into native code before profiling evidence exists.
 - Do not let compatibility facades become the de facto core API.
@@ -258,7 +258,7 @@ Good work in this repo usually does one or more of these:
 - clarifies portability boundaries
 - upgrades measurement quality
 - turns host-specific logic into shared runtime logic
-- keeps reusable workflow sequencing in the core workflow layer instead of scattering it across hosts or families
+- keeps reusable workflow planning in the core workflow layer instead of scattering it across hosts or families
 - makes a new family easier to onboard without warping the platform
 - improves agent legibility through modularity, separation of concerns, and explicit dependency seams
 - reduces the need for unsafe typing escape hatches such as avoidable `typing.cast` or broad `Any` in runtime code

@@ -66,7 +66,7 @@ Do not stall waiting for more direction when the next step is discoverable from 
 
 When work touches execution flow, keep the boundary explicit:
 
-- the core workflow layer owns stage ordering, scheduler integration, lifecycle state, telemetry, and runtime-managed artifacts
+- the core workflow-planning layer owns intent normalization, family-dispatched planning, and conversion into the primitive runtime job API
 - family adapters own truthful workflow templates, stage implementations, capability constraints, and fail-closed compatibility checks
 - host adapters own UX, capability-driven request shaping, and runtime-client mapping
 

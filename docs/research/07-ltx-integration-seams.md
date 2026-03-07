@@ -191,9 +191,9 @@ Still intentionally out of scope for this slice:
 
 ## Workflow Ownership Split Exposed By LTX
 
-LTX is now the first family that clearly forces a repo-level workflow layer instead of an adapter-local pipeline story.
+LTX is now the first family that clearly forces a repo-level workflow-planning layer instead of an adapter-local pipeline story.
 
-### Core workflow layer
+### Core workflow-planning layer
 
 The core runtime should own:
 

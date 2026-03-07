@@ -11,7 +11,11 @@ from mlx_runtime_schemas import (
     WorkflowPlanResult,
 )
 
-from .contracts import FamilyWorkflowStrategy, WorkflowPlanningContext
+from .contracts import (
+    FamilyWorkflowStrategy,
+    WorkflowNotSupportedError,
+    WorkflowPlanningContext,
+)
 
 
 @dataclass(slots=True)
@@ -22,7 +26,12 @@ class WorkflowStrategyRegistry:
         self._strategies[strategy.family_id] = strategy
 
     def get(self, family_id: str) -> FamilyWorkflowStrategy:
-        return self._strategies[family_id]
+        try:
+            return self._strategies[family_id]
+        except KeyError as exc:
+            raise WorkflowNotSupportedError(
+                f"No workflow strategy is registered for family '{family_id}'"
+            ) from exc
 
     def has(self, family_id: str) -> bool:
         return family_id in self._strategies

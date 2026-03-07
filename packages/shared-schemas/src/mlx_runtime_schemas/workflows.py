@@ -1,30 +1,42 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .jobs import JobOutputPolicy, JobSubmitResult
 from .models import CapabilityDescriptor
 
 
 class WorkflowReference(BaseModel):
-    input_handle: str
-    kind: str
+    model_config = ConfigDict(extra="forbid")
+
+    input_handle: str | None = None
+    kind: Literal["image", "video", "audio", "lora"]
     role: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_handle(self) -> "WorkflowReference":
+        if self.input_handle is not None and not self.input_handle.strip():
+            raise ValueError("Workflow reference input_handle must be non-empty")
+        return self
+
 
 class WorkflowPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     natural_audio: bool = False
     no_music: bool = False
     enhance_prompt: bool = False
-    quality: str = "auto"
+    quality: Literal["auto", "fast", "balanced", "high"] = "auto"
     duration_seconds: float | None = None
     orientation: str | None = None
 
 
 class WorkflowIntent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     model_id: str
     prompt: str
     video_prompt: str | None = None
@@ -43,6 +55,8 @@ class WorkflowIntent(BaseModel):
 
 
 class WorkflowStageSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     stage_id: str
     stage_type: str
     summary: str | None = None
@@ -54,6 +68,8 @@ class WorkflowStageSpec(BaseModel):
 
 
 class WorkflowPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     model_id: str
     family: str
     scheduler_class: str | None = None
@@ -70,15 +86,20 @@ class WorkflowPlan(BaseModel):
 
 
 class WorkflowPlanResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     capability: CapabilityDescriptor
     plan: WorkflowPlan
 
 
 class WorkflowRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     intent: WorkflowIntent
-    plan: WorkflowPlan | None = None
 
 
 class WorkflowRunResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     plan: WorkflowPlan
     submit: JobSubmitResult

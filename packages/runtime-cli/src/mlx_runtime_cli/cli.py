@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 import httpx
+from mlx_runtime_core import RuntimeHome
 from mlx_runtime_schemas import (
     InputHandleRecord,
     JobOutputPolicy,
@@ -18,13 +20,21 @@ from mlx_runtime_schemas import (
     WorkflowRunResult,
 )
 
+WorkflowQuality = Literal["auto", "fast", "balanced", "high"]
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="First-party thin CLI for MLXR")
     parser.add_argument(
         "--runtime-url",
-        default="http://127.0.0.1:8000",
-        help="Runtime base URL when using loopback HTTP.",
+        default=None,
+        help="Optional loopback HTTP base URL. If omitted, the CLI uses the default UDS runtime path.",
+    )
+    parser.add_argument(
+        "--uds-path",
+        type=Path,
+        default=None,
+        help="Optional explicit Unix-domain socket path for the runtime daemon.",
     )
     parser.add_argument(
         "--http-token",
@@ -48,7 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    client = RuntimeClient(base_url=str(args.runtime_url), http_token=args.http_token)
+    client = RuntimeClient(
+        base_url=str(args.runtime_url) if args.runtime_url else None,
+        uds_path=Path(args.uds_path) if args.uds_path is not None else None,
+        http_token=args.http_token,
+    )
     if args.command == "generate":
         return _run_generate_command(client, args)
     parser.error(f"Unknown command '{args.command}'")
@@ -56,11 +70,28 @@ def main(argv: list[str] | None = None) -> int:
 
 
 class RuntimeClient:
-    def __init__(self, *, base_url: str, http_token: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str | None,
+        uds_path: Path | None,
+        http_token: str | None = None,
+    ) -> None:
         headers: dict[str, str] = {}
         if http_token:
             headers["Authorization"] = f"Bearer {http_token}"
-        self._client = httpx.Client(base_url=base_url.rstrip("/"), headers=headers)
+        resolved_base_url = (
+            base_url.rstrip("/") if base_url else None
+        ) or "http://mlxr"
+        transport: httpx.BaseTransport | None = None
+        if base_url is None:
+            resolved_uds_path = (uds_path or _default_uds_path()).expanduser().resolve()
+            transport = httpx.HTTPTransport(uds=str(resolved_uds_path))
+        self._client = httpx.Client(
+            base_url=resolved_base_url,
+            headers=headers,
+            transport=transport,
+        )
 
     def close(self) -> None:
         self._client.close()
@@ -111,7 +142,7 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
                 natural_audio=bool(args.natural_audio),
                 no_music=bool(args.no_music),
                 enhance_prompt=bool(args.enhance_prompt),
-                quality=str(args.quality),
+                quality=cast(WorkflowQuality, args.quality),
             ),
             output=JobOutputPolicy(artifact_format=str(args.artifact_format)),
         )
@@ -176,6 +207,15 @@ def _references_from_args(
 ) -> list[WorkflowReference]:
     references: list[WorkflowReference] = []
     if args.image is not None:
+        if args.plan_only:
+            references.append(
+                WorkflowReference(
+                    input_handle=None,
+                    kind="image",
+                    role="reference",
+                )
+            )
+            return references
         record = client.import_file(Path(args.image), kind="image")
         references.append(
             WorkflowReference(
@@ -197,3 +237,11 @@ def _media_type_for_path(path: Path, kind: str) -> str:
             ".webp": "image/webp",
         }.get(suffix, "application/octet-stream")
     return "application/octet-stream"
+
+
+def _default_uds_path() -> Path:
+    raw = os.environ.get("MLX_RUNTIME_UDS_PATH")
+    if raw:
+        return Path(raw)
+    runtime_home = RuntimeHome.from_env()
+    return runtime_home.temp_dir / "control-plane.sock"

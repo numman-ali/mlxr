@@ -22,7 +22,10 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
         by_kind = _references_by_kind(references)
         warnings: list[str] = []
 
-        unsupported_kinds = [kind for kind in ("audio", "video") if by_kind.get(kind)]
+        supported_kinds = set(_supported_reference_kinds(capability))
+        unsupported_kinds = sorted(
+            kind for kind in by_kind if kind not in supported_kinds
+        )
         if unsupported_kinds:
             unsupported = ", ".join(sorted(unsupported_kinds))
             raise ValueError(
@@ -100,17 +103,36 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
         inputs: dict[str, object] = {"prompt": plan.resolved_prompt}
         if plan.selected_task == "video.condition.image":
             images: list[dict[str, object]] = []
-            for reference in plan.references:
+            for reference in intent.references:
                 if reference.kind != "image":
                     continue
+                if reference.input_handle is None:
+                    raise ValueError(
+                        "Image-conditioned workflow execution requires bound input handles"
+                    )
                 frame_index = reference.metadata.get("frame_index", 0)
                 strength = reference.metadata.get("strength", 1.0)
+                if not isinstance(frame_index, int) or frame_index < 0:
+                    raise ValueError(
+                        "Workflow image frame_index must be a non-negative integer"
+                    )
+                if not isinstance(strength, (int, float)):
+                    raise ValueError("Workflow image strength must be numeric")
+                strength_value = float(strength)
+                if not (0.0 <= strength_value <= 1.0):
+                    raise ValueError(
+                        "Workflow image strength must be between 0.0 and 1.0"
+                    )
                 images.append(
                     {
                         "input_handle": reference.input_handle,
-                        "frame_index": int(frame_index),
-                        "strength": float(strength),
+                        "frame_index": frame_index,
+                        "strength": strength_value,
                     }
+                )
+            if not images:
+                raise ValueError(
+                    "Image-conditioned workflow execution requires at least one bound image reference"
                 )
             inputs["images"] = images
 
@@ -152,10 +174,12 @@ def _references_by_kind(
 
 def _resolved_prompt(intent: WorkflowIntent) -> str:
     parts = [intent.prompt.strip()]
-    if intent.video_prompt:
-        parts.append(f"Video details: {intent.video_prompt.strip()}")
-    if intent.audio_prompt:
-        parts.append(f"Audio details: {intent.audio_prompt.strip()}")
+    video_prompt = intent.video_prompt.strip() if intent.video_prompt else ""
+    audio_prompt = intent.audio_prompt.strip() if intent.audio_prompt else ""
+    if video_prompt:
+        parts.append(f"Video details: {video_prompt}")
+    if audio_prompt:
+        parts.append(f"Audio details: {audio_prompt}")
     return "\n".join(part for part in parts if part)
 
 

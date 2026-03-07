@@ -7,7 +7,7 @@ This repository is the planning and implementation workspace for `MLXR`, a local
 The current scope we can defend is narrower and more honest than the first draft:
 
 - universal across host surfaces: CLI, native API, desktop adapters, Comfy-style adapters, and embedded first-party access
-- one core workflow-orchestration layer between scheduler, family adapters, and host adapters
+- one core workflow-planning layer between scheduler, family adapters, and host adapters
 - broad across local generative and multimodal families on Apple Silicon
 - provider-extensible by architecture, but not provider-universal in v1 implementation
 - not yet frozen as a final architecture or public API
@@ -21,7 +21,7 @@ The platform target is:
 - a shared Apple Silicon runtime for local generative and multimodal workloads
 - one canonical native job API
 - one shared source, artifact, provenance, and scheduling model
-- one core workflow layer that can serve multiple product surfaces without each host owning inference logic or stage sequencing
+- one core workflow-planning layer that can serve multiple product surfaces without each host owning intent handling or family-specific request shaping
 
 The first product proving path is `LTX-2.3 Fast` text-to-video and image-to-video, but LTX urgency is no longer allowed to freeze the universal runtime design prematurely.
 

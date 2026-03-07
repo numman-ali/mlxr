@@ -48,6 +48,7 @@ class RuntimeState:
             catalog=self.catalog,
             planner=self.workflow_planner,
             job_manager=self.job_manager,
+            input_store=self.input_store,
         )
         self.log_path = configure_control_plane_logging(self.runtime_home)
         get_control_plane_logger().info(

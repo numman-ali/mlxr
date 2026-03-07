@@ -40,6 +40,7 @@ from mlx_runtime_schemas import (
     WorkflowRunRequest,
     WorkflowRunResult,
 )
+from mlx_runtime_workflows import WorkflowNotSupportedError
 
 from .jobs import (
     TERMINAL_STATES,
@@ -277,6 +278,8 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
             return result
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except WorkflowNotSupportedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
         except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -286,10 +289,7 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
     ) -> WorkflowRunResult:
         guard_mutation(request)
         try:
-            result = runtime.workflow_service.run(
-                workflow_request.intent,
-                workflow_request.plan,
-            )
+            result = runtime.workflow_service.run(workflow_request.intent)
             logger.info(
                 "Workflow submitted model_id=%s family=%s task=%s job_id=%s",
                 result.plan.model_id,
@@ -300,6 +300,8 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
             return result
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except WorkflowNotSupportedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
         except JobConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (

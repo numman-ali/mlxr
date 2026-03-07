@@ -8,7 +8,7 @@ This document defines what is still unknown, what must be measured, and what con
 
 - one canonical runtime
 - native job API as the source of truth
-- core-owned workflow orchestration between scheduler, family adapters, and hosts
+- core-owned workflow planning between scheduler, family adapters, and hosts
 - Python-first family bring-up and workers
 - thin host adapters
 - LTX first as a proving workload
@@ -22,7 +22,7 @@ Everything else below remains provisional until the listed measurements exist.
 | Which provider set is enough for stable v1? | architecture now models more than the implementation does | benchmark Hugging Face plus local bundles; decide whether second provider is required or explicitly deferred | blocks provider-scope freeze |
 | What exactly is portable versus machine-local in the storage model? | exporter and compile behavior still make portability easy to overclaim | artifact portability tests across machines and MLX versions | blocks storage-contract freeze |
 | Which worker topology is best? | control-plane plus workers is chosen, but worker granularity is still open | compare per-family warm workers against more isolated per-job workers on memory, latency, and failure recovery | blocks execution-topology freeze |
-| What is the minimum workflow-template contract that survives more than LTX? | LTX proves the need for a core workflow layer, but the reusable template shape is still only exercised on one hard media family | run one image diffusion family and one non-generation family through the same workflow-orchestration split without host-owned stage sequencing | blocks workflow-contract freeze |
+| What is the minimum workflow-template contract that survives more than LTX? | LTX proves the need for a core workflow-planning layer, but the reusable template shape is still only exercised on one hard media family | run one image diffusion family and one non-generation family through the same workflow-planning split without host-owned request shaping | blocks workflow-contract freeze |
 | What is the canonical Apple-native output path? | current PyAV path is clearly not the final Apple-optimized answer | benchmark generic path versus `VideoToolbox`-oriented path and copy counts | blocks media-output guidance freeze |
 | How much Swift should ship in the first product slice? | Swift matters earlier, but exact packaging and SDK boundaries are still open | spike launcher or embedded host path against daemon-only path | blocks host-SDK freeze |
 | Which MLX extension or upstream changes are worth carrying? | low-level work should be benchmark-driven, not hand-wavy | hotspot traces plus stock-versus-extension benchmarks | blocks low-level roadmap freeze |

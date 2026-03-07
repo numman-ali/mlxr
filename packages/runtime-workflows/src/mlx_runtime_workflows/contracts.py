@@ -18,6 +18,14 @@ class WorkflowPlanningContext:
     capability: CapabilityDescriptor
 
 
+class WorkflowError(Exception):
+    pass
+
+
+class WorkflowNotSupportedError(WorkflowError):
+    pass
+
+
 class FamilyWorkflowStrategy(Protocol):
     family_id: str
 
