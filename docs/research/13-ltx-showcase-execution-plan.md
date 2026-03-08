@@ -112,7 +112,8 @@ Current dog-showcase truth:
 Current natural-audio showcase truth:
 
 - the newer negative-guidance/rescaled-CFG path recovers the 10-second dog scene
-- the stronger video-plus-audio Gemini pass still classifies the previously generated 10-second nature and vintage clips as visual matches with music-like audio
+- the rerun `nature_documentary` receipt at `tmp/showcase-runs/20260308T035528Z-showcase-nature-documentary/` still comes back as a visual match with piano-like music
+- the rerun `vintage_old_school` receipt at `tmp/showcase-runs/20260308T035838Z-showcase-vintage-old-school/` still comes back as a visual match with nostalgic instrumental music
 - the blocker is no longer “weak review tooling”; it is broadening the newer text-first natural-audio behavior beyond the dog scene
 
 Current score-friendly showcase truth:

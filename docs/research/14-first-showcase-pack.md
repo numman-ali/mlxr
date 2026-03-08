@@ -51,6 +51,13 @@ The dog row comes from the newer negative-guidance/rescaled-CFG path. The other 
 
 At the time of writing, the natural dog row is green, but the nature-documentary and natural-vintage rows still need to clear the newer guidance path on the same Gemini review bar.
 
+Follow-up rerun truth:
+
+- `tmp/showcase-runs/20260308T035528Z-showcase-nature-documentary/` still comes back as a visual match with piano-like music
+- `tmp/showcase-runs/20260308T035838Z-showcase-vintage-old-school/` still comes back as a visual match with nostalgic instrumental music
+
+So this remains the best available mixed pack, not evidence that natural-audio realism is broadly solved.
+
 ## Receipts by scene
 
 ### Dog In Park
