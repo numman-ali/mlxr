@@ -10,8 +10,7 @@ os.environ.setdefault(
 )
 
 from fastapi.testclient import TestClient
-from ltx import LTXFamilyAdapter
-from mlx_runtime_core import (
+from mlxr.core.runtime import (
     ExecutionProfile,
     FetchPolicy,
     LocalFileProviderAdapter,
@@ -23,7 +22,7 @@ from mlx_runtime_core import (
     SourceMaterialization,
     source_id_for_ref,
 )
-from mlx_runtime_schemas import (
+from mlxr.core.schemas import (
     ArtifactConversionRequest,
     AuthRequirements,
     ProvenanceRecord,
@@ -31,8 +30,9 @@ from mlx_runtime_schemas import (
     SourceFileRecord,
     SourceRef,
 )
-from mlx_runtime_server.app import create_app
-from mlx_runtime_server.state import RuntimeState
+from mlxr.core.server.app import create_app
+from mlxr.core.server.state import RuntimeState
+from mlxr.families.ltx import LTXFamilyAdapter
 from pydantic import ValidationError
 
 from tests.runtime_test_support import (

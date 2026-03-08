@@ -12,17 +12,14 @@ from unittest.mock import patch
 
 import mlx.core as mx
 import numpy as np
-from ltx import LTXFamilyAdapter
-from ltx._generation_backend.conditioning import _resolve_padded_shape
-from ltx._generation_backend.reference_imports import _REFERENCE_MLX_VIDEO_ROOT
-from mlx_runtime_core import (
+from mlxr.core.runtime import (
     ExecutionProfile,
     ExecutionStage,
     LoadedModelHandle,
     PortableArtifact,
     RuntimeHome,
 )
-from mlx_runtime_schemas import (
+from mlxr.core.schemas import (
     CapabilityDescriptor,
     InputHandleRecord,
     JobOutputPolicy,
@@ -37,9 +34,14 @@ from mlx_runtime_schemas import (
     RuntimeEvent,
     RuntimeEventKind,
 )
-from mlx_runtime_server.settings import ServerSettings
-from mlx_runtime_server.store import InputStore, JobStore, OutputStore
-from mlx_runtime_server.worker import run_job_worker
+from mlxr.core.server.settings import ServerSettings
+from mlxr.core.server.store import InputStore, JobStore, OutputStore
+from mlxr.core.server.worker import run_job_worker
+from mlxr.families.ltx import LTXFamilyAdapter
+from mlxr.families.ltx._generation_backend.conditioning import _resolve_padded_shape
+from mlxr.families.ltx._generation_backend.reference_imports import (
+    _REFERENCE_MLX_VIDEO_ROOT,
+)
 from safetensors.numpy import save_file
 
 from tests.runtime_test_support import (
@@ -465,7 +467,7 @@ class RuntimeUnitTests(unittest.TestCase):
             )
 
             with patch(
-                "ltx.adapter.create_prompt_encoder",
+                "mlxr.families.ltx.adapter.create_prompt_encoder",
                 side_effect=RuntimeError("Local MLX LTX prompt encoder unavailable."),
             ):
                 with self.assertRaisesRegex(
@@ -482,7 +484,7 @@ class RuntimeUnitTests(unittest.TestCase):
                     )
 
     def test_ltx_prompt_backend_builds_v2_layout_from_current_config(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -540,7 +542,7 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(layout.config_source, "memory://ltx-v2-config")
 
     def test_ltx_prompt_backend_binary_mask_keeps_only_valid_tokens(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -554,7 +556,7 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(masked[:, 2:, :].tolist(), [[[0.0, 0.0], [0.0, 0.0]]])
 
     def test_ltx_prompt_backend_builds_left_padded_gemma_masks(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -592,7 +594,7 @@ class RuntimeUnitTests(unittest.TestCase):
         )
 
     def test_ltx_prompt_backend_connector_rope_cache_uses_official_shapes(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -622,7 +624,7 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(sin_freq.shape, (1, 32, 8, 64))
 
     def test_ltx_prompt_backend_prefers_dedicated_connector_source(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -646,7 +648,7 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertIn(checkpoint_path, sources)
 
     def test_ltx_generation_reference_backend_requires_vae_statistics(self) -> None:
-        from ltx import _generation_backend as backend
+        from mlxr.families.ltx import _generation_backend as backend
 
         checkpoint_metadata = {
             "transformer": {
@@ -703,8 +705,8 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(padded.internal_height % 64, 0)
 
     def test_ltx_generation_prompt_contract_rejects_runtime_mismatch(self) -> None:
-        from ltx import _generation_backend as backend
-        from ltx.prompt_encoding import PromptEncodingResult
+        from mlxr.families.ltx import _generation_backend as backend
+        from mlxr.families.ltx.prompt_encoding import PromptEncodingResult
 
         prompt_context = PromptEncodingResult(
             video_context=SimpleNamespace(shape=(1, 1024, 4096), dtype="bf16"),
@@ -758,8 +760,8 @@ class RuntimeUnitTests(unittest.TestCase):
             backend._assert_prompt_runtime_contract(prompt_context, runtime_config)
 
     def test_ltx_generation_all_valid_attention_mask_is_omitted(self) -> None:
-        from ltx import _generation_backend as backend
-        from ltx.prompt_encoding import PromptEncodingResult
+        from mlxr.families.ltx import _generation_backend as backend
+        from mlxr.families.ltx.prompt_encoding import PromptEncodingResult
 
         prompt_context = PromptEncodingResult(
             video_context=mx.zeros((1, 4, 4096), dtype=mx.bfloat16),
@@ -775,8 +777,8 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertIsNone(backend._attention_mask(prompt_context))
 
     def test_ltx_generation_prompt_contract_rejects_partial_prompt_mask(self) -> None:
-        from ltx import _generation_backend as backend
-        from ltx.prompt_encoding import PromptEncodingResult
+        from mlxr.families.ltx import _generation_backend as backend
+        from mlxr.families.ltx.prompt_encoding import PromptEncodingResult
 
         prompt_context = PromptEncodingResult(
             video_context=mx.zeros((1, 4, 4096), dtype=mx.bfloat16),
@@ -829,7 +831,7 @@ class RuntimeUnitTests(unittest.TestCase):
             backend._assert_prompt_runtime_contract(prompt_context, runtime_config)
 
     def test_ltx_prompt_backend_extracts_v2_projection_weights(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -861,7 +863,7 @@ class RuntimeUnitTests(unittest.TestCase):
     def test_ltx_prompt_backend_rejects_v2_projection_without_audio_weights(
         self,
     ) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -904,10 +906,10 @@ class RuntimeUnitTests(unittest.TestCase):
                 return_value=[Path("/tmp/ltx.safetensors")],
             ),
             patch(
-                "ltx._prompt_encoding_backend.mx.load",
+                "mlxr.families.ltx._prompt_encoding_backend.mx.load",
                 return_value=weights,
             ),
-            patch("ltx._prompt_encoding_backend.mx.clear_cache"),
+            patch("mlxr.families.ltx._prompt_encoding_backend.mx.clear_cache"),
         ):
             with self.assertRaisesRegex(
                 ValueError,
@@ -916,7 +918,7 @@ class RuntimeUnitTests(unittest.TestCase):
                 encoder._load_connector_weights()
 
     def test_ltx_prompt_backend_rejects_missing_audio_connector_weights(self) -> None:
-        from ltx import _prompt_encoding_backend as backend
+        from mlxr.families.ltx import _prompt_encoding_backend as backend
 
         if backend._RUNTIME_IMPORT_ERROR is not None:
             self.skipTest("LTX prompt backend dependencies are unavailable")
@@ -960,10 +962,10 @@ class RuntimeUnitTests(unittest.TestCase):
                 return_value=[Path("/tmp/ltx.safetensors")],
             ),
             patch(
-                "ltx._prompt_encoding_backend.mx.load",
+                "mlxr.families.ltx._prompt_encoding_backend.mx.load",
                 return_value=weights,
             ),
-            patch("ltx._prompt_encoding_backend.mx.clear_cache"),
+            patch("mlxr.families.ltx._prompt_encoding_backend.mx.clear_cache"),
         ):
             with self.assertRaisesRegex(
                 ValueError,
@@ -1145,7 +1147,9 @@ class RuntimeUnitTests(unittest.TestCase):
             self.assertIn(b"ftyp", output_path.read_bytes()[:32])
 
     def test_ltx_runtime_vae_encoder_rejects_missing_encoder_weights(self) -> None:
-        from ltx._generation_backend.video_stack import _load_runtime_vae_encoder
+        from mlxr.families.ltx._generation_backend.video_stack import (
+            _load_runtime_vae_encoder,
+        )
 
         checkpoint_metadata = {
             "transformer": {

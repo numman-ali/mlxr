@@ -36,7 +36,7 @@ Runs the required pre-commit gate:
 
 - `ruff format --check packages tests scripts`
 - `ruff check packages tests scripts`
-- `mypy --strict packages tests scripts`
+- `python scripts/run_mypy.py`
 - `python scripts/check_type_escapes.py`
 - `coverage run scripts/run_unittests.py -v`
 - `coverage report` with the current repo floor set to `85%` line coverage across `packages/`
@@ -69,7 +69,7 @@ Use it when:
 ## Tooling Policy
 
 - `ruff` is the formatter and linter
-- `mypy --strict` is the type gate
+- `scripts/run_mypy.py` is the type gate; it checks the shared `mlxr.*` namespace packages as packages and then checks `tests/` and `scripts/` as file targets
 - `check_type_escapes.py` forbids `typing.cast` and explicit `Any` in the agent-facing runtime and test surfaces covered by the script
 - `unittest` is the current test runner
 - `scripts/run_unittests.py` discovers both repo-level `tests/` and package-local `packages/*/*/tests/`

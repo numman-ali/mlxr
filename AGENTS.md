@@ -41,9 +41,18 @@ This repo is not “an LTX Mac port.” LTX is the first proving workload, not t
 The workspace is grouped by role rather than by historical package names:
 
 - `packages/core/` contains shared platform packages such as schemas, runtime core, server, and workflow planning
-- `packages/families/` contains model-family packages; `LTX` currently lives at `packages/families/ltx/` with Python sources under `src/ltx/`
+- `packages/families/` contains model-family packages; `LTX` currently lives at `packages/families/ltx/` with Python sources under `src/mlxr/families/ltx/`
 - `packages/adapters/` contains host or integration adapters such as `comfyui` and `ltx-desktop`
 - `packages/clients/` contains first-party clients such as `runtime-cli`
+
+Python imports should now use the shared `mlxr.*` namespace:
+
+- `mlxr.core.*` for shared platform packages
+- `mlxr.families.*` for model families
+- `mlxr.clients.*` for first-party clients
+- `mlxr.adapters.*` for host or integration adapters as they are re-based
+
+The shared `mlxr`, `mlxr.core`, `mlxr.families`, `mlxr.clients`, and `mlxr.adapters` roots are implicit namespace packages. Do not add `__init__.py` files just to make those roots importable.
 
 Tests should mirror ownership too:
 

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mlx_runtime_cli.cli import (
+from mlxr.clients.cli.cli import (
     RuntimeClient,
     _default_uds_path,
     _generation_params,
@@ -16,7 +16,7 @@ from mlx_runtime_cli.cli import (
     _wait_for_terminal_job,
     build_parser,
 )
-from mlx_runtime_schemas import (
+from mlxr.core.schemas import (
     ArtifactExportResult,
     InputHandleRecord,
     JobOutputPolicy,

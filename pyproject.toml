@@ -47,6 +47,8 @@ extend-select = ["I"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+namespace_packages = true
+explicit_package_bases = true
 files = ["packages", "tests", "scripts"]
 
 [tool.coverage.run]
@@ -58,9 +60,9 @@ data_file = "tmp/.coverage"
 fail_under = 85
 omit = [
     "tests/*",
-    "packages/families/ltx/src/ltx/_audio_vocoder.py",
-    "packages/families/ltx/src/ltx/_generation_backend_legacy.py",
-    "packages/families/ltx/src/ltx/_prompt_encoding_backend_legacy.py",
-    "packages/families/ltx/src/ltx/_prompt_encoding_backend/*",
-    "packages/families/ltx/src/ltx/_generation_backend/*",
+    "packages/families/ltx/src/mlxr/families/ltx/_audio_vocoder.py",
+    "packages/families/ltx/src/mlxr/families/ltx/_generation_backend_legacy.py",
+    "packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend_legacy.py",
+    "packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/*",
+    "packages/families/ltx/src/mlxr/families/ltx/_generation_backend/*",
 ]

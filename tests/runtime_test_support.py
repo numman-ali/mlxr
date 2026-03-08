@@ -17,18 +17,18 @@ from unittest.mock import patch
 import numpy as np
 from fastapi.testclient import TestClient
 from httpx import Response
-from ltx.generation import AudioConditioningInput, GeneratedVideo
-from ltx.prompt_encoding import PromptEncodingResult
-from mlx_runtime_core import RuntimeHome
-from mlx_runtime_schemas import (
+from mlxr.core.runtime import RuntimeHome
+from mlxr.core.schemas import (
     ArtifactConversionResult,
     InputHandleRecord,
     JobRecord,
     SourceRegistrationRecord,
 )
-from mlx_runtime_server.registry import default_runtime_registry
-from mlx_runtime_server.settings import ServerSettings
-from mlx_runtime_server.state import RuntimeState
+from mlxr.core.server.registry import default_runtime_registry
+from mlxr.core.server.settings import ServerSettings
+from mlxr.core.server.state import RuntimeState
+from mlxr.families.ltx.generation import AudioConditioningInput, GeneratedVideo
+from mlxr.families.ltx.prompt_encoding import PromptEncodingResult
 from PIL import Image
 from pydantic import BaseModel
 
@@ -413,7 +413,7 @@ def patched_ltx_prompt_encoder(
     sequence_length: int = 1024,
     include_audio_context: bool = True,
 ) -> Iterator[list[FakePromptEncoder]]:
-    from ltx import adapter as adapter_module
+    from mlxr.families.ltx import adapter as adapter_module
 
     instances: list[FakePromptEncoder] = []
 
@@ -440,7 +440,7 @@ def patched_ltx_video_generator(
     backend: str = "ltx_test_distilled_generator",
     include_audio: bool = False,
 ) -> Iterator[list[FakeVideoGenerator]]:
-    from ltx import adapter as adapter_module
+    from mlxr.families.ltx import adapter as adapter_module
 
     instances: list[FakeVideoGenerator] = []
 
@@ -462,7 +462,7 @@ def patched_ltx_video_generator(
 
 @contextmanager
 def patched_inline_job_process_context() -> Iterator[None]:
-    from mlx_runtime_server import jobs as jobs_module
+    from mlxr.core.server import jobs as jobs_module
 
     with patch.object(
         jobs_module,

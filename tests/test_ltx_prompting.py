@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ltx.prompting import (
+from mlxr.families.ltx.prompting import (
     PromptShapingOptions,
     shape_text_first_prompt_bundle,
 )

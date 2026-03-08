@@ -12,7 +12,7 @@ from safetensors.numpy import save_file
 
 class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_generation_backend_reads_nested_bwe_vocoder_contract(self) -> None:
-        from ltx import _generation_backend as backend
+        from mlxr.families.ltx import _generation_backend as backend
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             checkpoint_path = Path(tmp_dir) / "ltx-checkpoint.safetensors"
@@ -91,7 +91,9 @@ class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_generation_backend_uses_bwe_vocoder_when_checkpoint_has_full_contract(
         self,
     ) -> None:
-        from ltx._generation_backend.video_stack import _load_runtime_vocoder
+        from mlxr.families.ltx._generation_backend.video_stack import (
+            _load_runtime_vocoder,
+        )
 
         def sanitize(weights: dict[str, mx.array]) -> dict[str, mx.array]:
             sanitized: dict[str, mx.array] = {}
@@ -187,7 +189,9 @@ class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_generation_backend_bwe_loader_fails_closed_on_missing_stft_buffers(
         self,
     ) -> None:
-        from ltx._generation_backend.video_stack import _load_runtime_vocoder
+        from mlxr.families.ltx._generation_backend.video_stack import (
+            _load_runtime_vocoder,
+        )
 
         def sanitize(weights: dict[str, mx.array]) -> dict[str, mx.array]:
             sanitized: dict[str, mx.array] = {}
@@ -259,7 +263,9 @@ class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_generation_backend_bwe_loader_fails_closed_on_wrong_stft_shapes(
         self,
     ) -> None:
-        from ltx._generation_backend.video_stack import _load_runtime_vocoder
+        from mlxr.families.ltx._generation_backend.video_stack import (
+            _load_runtime_vocoder,
+        )
 
         def sanitize(weights: dict[str, mx.array]) -> dict[str, mx.array]:
             sanitized: dict[str, mx.array] = {}
@@ -351,7 +357,7 @@ class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_audio_bwe_wrapper_uses_batch_channel_time_waveform_contract(
         self,
     ) -> None:
-        from ltx._audio_bwe import AudioVocoderWithBWE
+        from mlxr.families.ltx._audio_bwe import AudioVocoderWithBWE
 
         class FakeBaseVocoder:
             def __call__(self, mel_spec: mx.array) -> mx.array:
@@ -399,7 +405,7 @@ class LTXAudioBWETests(unittest.TestCase):
         self.assertEqual(bwe_generator.last_input_shape, (1, 2, 2, 64))
 
     def test_ltx_audio_bwe_hann_filter_has_expected_shape(self) -> None:
-        from ltx._audio_bwe import _hann_sinc_filter1d
+        from mlxr.families.ltx._audio_bwe import _hann_sinc_filter1d
 
         filter_ = _hann_sinc_filter1d(ratio=3)
 
@@ -410,7 +416,7 @@ class LTXAudioBWETests(unittest.TestCase):
     def test_ltx_audio_bwe_resampler_upsamples_batch_channel_time_waveform(
         self,
     ) -> None:
-        from ltx._audio_bwe import _WaveformResampler
+        from mlxr.families.ltx._audio_bwe import _WaveformResampler
 
         resampler = _WaveformResampler(
             input_sample_rate=16000,
@@ -423,7 +429,7 @@ class LTXAudioBWETests(unittest.TestCase):
         self.assertEqual(upsampled.shape, (1, 2, 15))
 
     def test_ltx_audio_mel_stft_returns_expected_shapes(self) -> None:
-        from ltx._audio_bwe import AudioMelSTFT
+        from mlxr.families.ltx._audio_bwe import AudioMelSTFT
 
         mel_stft = AudioMelSTFT(
             filter_length=4,
@@ -444,7 +450,7 @@ class LTXAudioBWETests(unittest.TestCase):
         self.assertEqual(energy.shape, (1, 3))
 
     def test_ltx_audio_mel_stft_rejects_wrong_rank(self) -> None:
-        from ltx._audio_bwe import AudioMelSTFT
+        from mlxr.families.ltx._audio_bwe import AudioMelSTFT
 
         mel_stft = AudioMelSTFT(
             filter_length=4,
@@ -457,7 +463,7 @@ class LTXAudioBWETests(unittest.TestCase):
             mel_stft.mel_spectrogram(mx.ones((1, 2, 3), dtype=mx.float32))
 
     def test_ltx_audio_vocoder_rejects_unsupported_activation(self) -> None:
-        from ltx._audio_vocoder import AudioVocoder
+        from mlxr.families.ltx._audio_vocoder import AudioVocoder
 
         with self.assertRaisesRegex(ValueError, "Unsupported LTX vocoder activation"):
             AudioVocoder(

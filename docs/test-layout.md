@@ -58,7 +58,7 @@ Package-local unit tests should live under the package root, adjacent to `src/`,
 That means:
 
 - yes: `packages/families/ltx/tests/unit/generation/test_audio_runtime.py`
-- no: `packages/families/ltx/src/ltx/_generation_backend/test_audio_runtime.py`
+- no: `packages/families/ltx/src/mlxr/families/ltx/_generation_backend/test_audio_runtime.py`
 
 Root-level `tests/` should be reserved for:
 

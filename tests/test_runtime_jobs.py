@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from mlx_runtime_schemas import JobSubmitResult, RuntimeEventKind
-from mlx_runtime_server.app import create_app
-from mlx_runtime_server.settings import ServerSettings
+from mlxr.core.schemas import JobSubmitResult, RuntimeEventKind
+from mlxr.core.server.app import create_app
+from mlxr.core.server.settings import ServerSettings
 
 from tests.runtime_test_support import (
     http_headers,

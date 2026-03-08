@@ -8,13 +8,15 @@ from unittest.mock import patch
 
 import mlx.core as mx
 import numpy as np
-from ltx._generation_backend.runtime_helpers import _normalize_audio_mel_layout
+from mlxr.families.ltx._generation_backend.runtime_helpers import (
+    _normalize_audio_mel_layout,
+)
 from safetensors.numpy import save_file
 
 
 class LTXAudioRuntimeTests(unittest.TestCase):
     def test_ltx_generation_runtime_config_infers_current_22b_flags(self) -> None:
-        from ltx import _generation_backend as backend
+        from mlxr.families.ltx import _generation_backend as backend
 
         checkpoint_metadata = {
             "transformer": {
@@ -109,7 +111,9 @@ class LTXAudioRuntimeTests(unittest.TestCase):
     def test_ltx_runtime_imports_derive_audio_latent_mel_bins_from_transformer_contract(
         self,
     ) -> None:
-        from ltx._generation_backend.distilled import LTXDistilledVideoGenerator
+        from mlxr.families.ltx._generation_backend.distilled import (
+            LTXDistilledVideoGenerator,
+        )
 
         checkpoint_metadata = {
             "transformer": {
@@ -166,7 +170,7 @@ class LTXAudioRuntimeTests(unittest.TestCase):
     def test_ltx_runtime_model_config_rejects_inconsistent_audio_output_geometry(
         self,
     ) -> None:
-        from ltx._generation_backend.config import _runtime_model_config
+        from mlxr.families.ltx._generation_backend.config import _runtime_model_config
 
         checkpoint_metadata = {
             "transformer": {
@@ -223,7 +227,7 @@ class LTXAudioRuntimeTests(unittest.TestCase):
     def test_ltx_audio_processor_waveform_to_mel_returns_canonical_layout(
         self,
     ) -> None:
-        from ltx._generation_backend.audio_processor import AudioProcessor
+        from mlxr.families.ltx._generation_backend.audio_processor import AudioProcessor
 
         processor = AudioProcessor(
             sample_rate=16000,
@@ -245,7 +249,7 @@ class LTXAudioRuntimeTests(unittest.TestCase):
         self.assertEqual(mel.dtype, np.float32)
 
     def test_ltx_audio_processor_rejects_wrong_sample_rate(self) -> None:
-        from ltx._generation_backend.audio_processor import AudioProcessor
+        from mlxr.families.ltx._generation_backend.audio_processor import AudioProcessor
 
         processor = AudioProcessor(
             sample_rate=16000,
@@ -259,8 +263,8 @@ class LTXAudioRuntimeTests(unittest.TestCase):
             processor.waveform_to_mel(waveform, sample_rate=24000)
 
     def test_ltx_owned_decode_audio_composes_decoder_and_vocoder(self) -> None:
-        from ltx._generation_backend.audio_render import decode_audio
-        from ltx._generation_backend.types import MLXArray
+        from mlxr.families.ltx._generation_backend.audio_render import decode_audio
+        from mlxr.families.ltx._generation_backend.types import MLXArray
 
         class _Stats:
             def __init__(self) -> None:
@@ -306,8 +310,10 @@ class LTXAudioRuntimeTests(unittest.TestCase):
     def test_ltx_audio_stack_passes_raw_audio_vae_weights_to_decoder_loader(
         self,
     ) -> None:
-        from ltx._generation_backend import runtime_helpers as helpers
-        from ltx._generation_backend.distilled import LTXDistilledVideoGenerator
+        from mlxr.families.ltx._generation_backend import runtime_helpers as helpers
+        from mlxr.families.ltx._generation_backend.distilled import (
+            LTXDistilledVideoGenerator,
+        )
 
         class _FakeDecoder:
             def parameters(self) -> tuple[object, ...]:

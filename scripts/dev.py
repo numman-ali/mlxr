@@ -34,7 +34,7 @@ def cmd_lint() -> None:
 
 
 def cmd_typecheck() -> None:
-    run_command(["mypy", "--strict", *TARGETS])
+    run_command([sys.executable, "scripts/run_mypy.py"])
 
 
 def cmd_test() -> None:
@@ -48,7 +48,7 @@ def cmd_build() -> None:
 def cmd_verify() -> None:
     run_command(["ruff", "format", "--check", *TARGETS])
     run_command(["ruff", "check", *TARGETS])
-    run_command(["mypy", "--strict", *TARGETS])
+    run_command([sys.executable, "scripts/run_mypy.py"])
     run_command([sys.executable, "scripts/check_type_escapes.py"])
     Path("tmp").mkdir(parents=True, exist_ok=True)
     run_command(["coverage", "erase"])

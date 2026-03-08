@@ -64,7 +64,7 @@ Internally, `MLXR` may split that into:
 
 The current repo-owned implementation of that shaping lives in:
 
-- `packages/families/ltx/src/ltx/prompting.py`
+- `packages/families/ltx/src/mlxr/families/ltx/prompting.py`
 
 and is shared by:
 

@@ -12,9 +12,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
-import mlx_runtime_cli.benchmark_ltx as benchmark_ltx
+import mlxr.clients.cli.benchmark_ltx as benchmark_ltx
 from fastapi.testclient import TestClient
-from mlx_runtime_cli.benchmark_ltx import (
+from mlxr.clients.cli.benchmark_ltx import (
     DEFAULT_CONDITIONING_IMAGE,
     BenchmarkEnvironment,
     ConversionStepResult,
@@ -33,7 +33,7 @@ from mlx_runtime_cli.benchmark_ltx import (
     run_scenario_with_api,
     write_benchmark_result,
 )
-from mlx_runtime_schemas import (
+from mlxr.core.schemas import (
     ArtifactConversionRequest,
     JobRecord,
     JobState,
@@ -41,7 +41,7 @@ from mlx_runtime_schemas import (
     RuntimeEventKind,
     SourceRef,
 )
-from mlx_runtime_server.app import create_app
+from mlxr.core.server.app import create_app
 
 from tests.runtime_test_support import (
     make_local_bundle,
@@ -305,17 +305,17 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         )
 
         with patch(
-            "mlx_runtime_cli.benchmark_ltx.subprocess.run",
+            "mlxr.clients.cli.benchmark_ltx.subprocess.run",
             return_value=SimpleNamespace(stdout="12345\n"),
         ):
             self.assertEqual(benchmark_ltx._system_memory_bytes(), 12345)
         with patch(
-            "mlx_runtime_cli.benchmark_ltx.subprocess.run",
+            "mlxr.clients.cli.benchmark_ltx.subprocess.run",
             side_effect=FileNotFoundError("sysctl missing"),
         ):
             self.assertIsNone(benchmark_ltx._system_memory_bytes())
         with patch(
-            "mlx_runtime_cli.benchmark_ltx.importlib.metadata.version",
+            "mlxr.clients.cli.benchmark_ltx.importlib.metadata.version",
             side_effect=PackageNotFoundError,
         ):
             self.assertIsNone(benchmark_ltx._package_version("missing-package"))
@@ -395,11 +395,11 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         )
 
         with patch(
-            "mlx_runtime_cli.benchmark_ltx._source_entries_for_mode",
+            "mlxr.clients.cli.benchmark_ltx._source_entries_for_mode",
             return_value=(source_entry,),
         ):
             with patch(
-                "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                "mlxr.clients.cli.benchmark_ltx._inspect_source",
                 return_value=(
                     InspectStepResult(
                         role="bundle",
@@ -425,11 +425,11 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
 
             with (
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                    "mlxr.clients.cli.benchmark_ltx._inspect_source",
                     return_value=inspect_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._register_source",
+                    "mlxr.clients.cli.benchmark_ltx._register_source",
                     return_value=(
                         RegisterStepResult(
                             role="bundle",
@@ -454,15 +454,15 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
 
             with (
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                    "mlxr.clients.cli.benchmark_ltx._inspect_source",
                     return_value=inspect_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._register_source",
+                    "mlxr.clients.cli.benchmark_ltx._register_source",
                     return_value=register_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._convert_artifact",
+                    "mlxr.clients.cli.benchmark_ltx._convert_artifact",
                     return_value=(
                         ConversionStepResult(
                             request=ArtifactConversionRequest(
@@ -489,19 +489,19 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
 
             with (
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                    "mlxr.clients.cli.benchmark_ltx._inspect_source",
                     return_value=inspect_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._register_source",
+                    "mlxr.clients.cli.benchmark_ltx._register_source",
                     return_value=register_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._convert_artifact",
+                    "mlxr.clients.cli.benchmark_ltx._convert_artifact",
                     return_value=convert_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._import_conditioning_input",
+                    "mlxr.clients.cli.benchmark_ltx._import_conditioning_input",
                     return_value=(
                         InputImportStepResult(
                             fixture_path=str(DEFAULT_CONDITIONING_IMAGE),
@@ -525,23 +525,23 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
 
             with (
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                    "mlxr.clients.cli.benchmark_ltx._inspect_source",
                     return_value=inspect_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._register_source",
+                    "mlxr.clients.cli.benchmark_ltx._register_source",
                     return_value=register_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._convert_artifact",
+                    "mlxr.clients.cli.benchmark_ltx._convert_artifact",
                     return_value=convert_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._import_conditioning_input",
+                    "mlxr.clients.cli.benchmark_ltx._import_conditioning_input",
                     return_value=import_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._run_job_once",
+                    "mlxr.clients.cli.benchmark_ltx._run_job_once",
                     side_effect=[failed_run],
                 ),
             ):
@@ -565,23 +565,23 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
             )
             with (
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._inspect_source",
+                    "mlxr.clients.cli.benchmark_ltx._inspect_source",
                     return_value=inspect_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._register_source",
+                    "mlxr.clients.cli.benchmark_ltx._register_source",
                     return_value=register_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._convert_artifact",
+                    "mlxr.clients.cli.benchmark_ltx._convert_artifact",
                     return_value=convert_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._import_conditioning_input",
+                    "mlxr.clients.cli.benchmark_ltx._import_conditioning_input",
                     return_value=import_ok,
                 ),
                 patch(
-                    "mlx_runtime_cli.benchmark_ltx._run_job_once",
+                    "mlxr.clients.cli.benchmark_ltx._run_job_once",
                     side_effect=[successful_run, warm_failed_run],
                 ),
             ):
@@ -622,7 +622,7 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         self.assertEqual(submit_failure.failure_category, "admission_rejection")
 
         with patch(
-            "mlx_runtime_cli.benchmark_ltx._wait_for_job_terminal_state",
+            "mlxr.clients.cli.benchmark_ltx._wait_for_job_terminal_state",
             return_value=(None, None, "timed out"),
         ):
             timeout_result = benchmark_ltx._run_job_once(
@@ -690,11 +690,11 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         )
         with (
             patch(
-                "mlx_runtime_cli.benchmark_ltx._wait_for_job_terminal_state",
+                "mlxr.clients.cli.benchmark_ltx._wait_for_job_terminal_state",
                 return_value=(completed_record, 1.0, None),
             ),
             patch(
-                "mlx_runtime_cli.benchmark_ltx._timed_request",
+                "mlxr.clients.cli.benchmark_ltx._timed_request",
                 side_effect=[
                     (submit_ok, 1.0),
                     (httpx.Response(500, text="events failed"), 1.0),
@@ -719,11 +719,11 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         )
         with (
             patch(
-                "mlx_runtime_cli.benchmark_ltx._wait_for_job_terminal_state",
+                "mlxr.clients.cli.benchmark_ltx._wait_for_job_terminal_state",
                 return_value=(failed_record, 1.0, None),
             ),
             patch(
-                "mlx_runtime_cli.benchmark_ltx._timed_request",
+                "mlxr.clients.cli.benchmark_ltx._timed_request",
                 side_effect=[
                     (submit_ok, 1.0),
                     (
@@ -782,14 +782,14 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         )
         with (
             patch(
-                "mlx_runtime_cli.benchmark_ltx.subprocess.Popen",
+                "mlxr.clients.cli.benchmark_ltx.subprocess.Popen",
                 return_value=FakeProcess(),
             ),
-            patch("mlx_runtime_cli.benchmark_ltx.httpx.HTTPTransport"),
+            patch("mlxr.clients.cli.benchmark_ltx.httpx.HTTPTransport"),
             patch(
-                "mlx_runtime_cli.benchmark_ltx.httpx.Client", return_value=fake_client
+                "mlxr.clients.cli.benchmark_ltx.httpx.Client", return_value=fake_client
             ),
-            patch("mlx_runtime_cli.benchmark_ltx._wait_for_health"),
+            patch("mlxr.clients.cli.benchmark_ltx._wait_for_health"),
         ):
             with benchmark_ltx.running_runtime_daemon(
                 runtime_home=root / "runtime-home",
@@ -830,14 +830,14 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
 
         with (
             patch(
-                "mlx_runtime_cli.benchmark_ltx.running_runtime_daemon",
+                "mlxr.clients.cli.benchmark_ltx.running_runtime_daemon",
                 fake_running_runtime_daemon,
             ),
             patch(
-                "mlx_runtime_cli.benchmark_ltx.run_scenario_with_api",
+                "mlxr.clients.cli.benchmark_ltx.run_scenario_with_api",
                 return_value=benchmark_result,
             ),
-            patch("mlx_runtime_cli.benchmark_ltx.write_benchmark_result"),
+            patch("mlxr.clients.cli.benchmark_ltx.write_benchmark_result"),
         ):
             self.assertEqual(
                 benchmark_ltx.main(
@@ -858,14 +858,14 @@ class LTXBenchmarkHarnessTests(unittest.TestCase):
         failing_result = benchmark_result.model_copy(update={"status": "failed"})
         with (
             patch(
-                "mlx_runtime_cli.benchmark_ltx.running_runtime_daemon",
+                "mlxr.clients.cli.benchmark_ltx.running_runtime_daemon",
                 fake_running_runtime_daemon,
             ),
             patch(
-                "mlx_runtime_cli.benchmark_ltx.run_scenario_with_api",
+                "mlxr.clients.cli.benchmark_ltx.run_scenario_with_api",
                 return_value=failing_result,
             ),
-            patch("mlx_runtime_cli.benchmark_ltx.write_benchmark_result"),
+            patch("mlxr.clients.cli.benchmark_ltx.write_benchmark_result"),
         ):
             self.assertEqual(
                 benchmark_ltx.main(

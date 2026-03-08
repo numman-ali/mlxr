@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mlx_runtime_core import FetchPolicy, HuggingFaceProviderAdapter
-from mlx_runtime_schemas import SourceAuth, SourcePolicy, SourceRef
+from mlxr.core.runtime import FetchPolicy, HuggingFaceProviderAdapter
+from mlxr.core.schemas import SourceAuth, SourcePolicy, SourceRef
 
 
 class FakeHfApi:
@@ -72,7 +72,7 @@ class HuggingFaceProviderTests(unittest.TestCase):
             with patch.dict(os.environ, {"HF_TOKEN": "hf-secret"}, clear=False):
                 resolved = provider.resolve(source_ref)
                 with patch(
-                    "mlx_runtime_core.providers.snapshot_download",
+                    "mlxr.core.runtime.providers.snapshot_download",
                     return_value=str(Path(tmp_dir) / "snapshot"),
                 ) as snapshot_download:
                     materialization = provider.fetch(

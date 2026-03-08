@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from mlx_runtime_schemas import WorkflowPlanResult, WorkflowRunResult
-from mlx_runtime_server.app import create_app
-from mlx_runtime_workflows import WorkflowPlanner, WorkflowStrategyRegistry
+from mlxr.core.schemas import WorkflowPlanResult, WorkflowRunResult
+from mlxr.core.server.app import create_app
+from mlxr.core.workflows import WorkflowPlanner, WorkflowStrategyRegistry
 
 from tests.runtime_test_support import (
     import_input_handle,

@@ -58,7 +58,7 @@ What the repo does **not** have yet is a shared repo-owned inference substrate b
 
 Today the clearest prompt-side leak is the LTX backend importing external LM and VLM code directly:
 
-- [`packages/families/ltx/src/ltx/_prompt_encoding_backend/runtime.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/ltx/_prompt_encoding_backend/runtime.py)
+- [`packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py)
 
 That import pattern is acceptable as a temporary bridge, but it is the wrong end state if the goal is:
 
@@ -440,7 +440,7 @@ The likely direction is:
 
 Relevant current schema:
 
-- [`packages/core/shared-schemas/src/mlx_runtime_schemas/workflows.py`](/Users/numman/Repos/mlxr/packages/core/shared-schemas/src/mlx_runtime_schemas/workflows.py)
+- [`packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py`](/Users/numman/Repos/mlxr/packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py)
 
 ## Multimodal Content Schema
 
@@ -529,7 +529,7 @@ Today the runtime direction is:
 Relevant current sources:
 
 - [`docs/adr/0004-worker-process-topology.md`](/Users/numman/Repos/mlxr/docs/adr/0004-worker-process-topology.md)
-- [`packages/core/runtime-server/src/mlx_runtime_server/worker.py`](/Users/numman/Repos/mlxr/packages/core/runtime-server/src/mlx_runtime_server/worker.py)
+- [`packages/core/runtime-server/src/mlxr/core/server/worker.py`](/Users/numman/Repos/mlxr/packages/core/runtime-server/src/mlxr/core/server/worker.py)
 
 The current per-job subprocess path is a good default for heavy media generation, but it is a poor fit for interactive text and VLM serving because those workloads want:
 
@@ -797,7 +797,7 @@ This document is primarily about a shared text and multimodal understanding engi
 
 Relevant current path:
 
-- [`packages/families/ltx/src/ltx/_generation_backend/runtime_helpers.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/ltx/_generation_backend/runtime_helpers.py)
+- [`packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py)
 
 Current recommendation:
 

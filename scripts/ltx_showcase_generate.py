@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from ltx.prompting import PromptShapingOptions, shape_text_first_prompt_bundle
+from mlxr.families.ltx.prompting import (
+    PromptShapingOptions,
+    shape_text_first_prompt_bundle,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tmp" / "showcase-runs"

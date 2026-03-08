@@ -108,7 +108,7 @@ def _assert_real_backend(
 def _default_prompt_encoder_factory(
     *, checkpoint_path: Path, text_encoder_path: Path
 ) -> PromptEncoderLike:
-    module = importlib.import_module("ltx.prompt_encoding")
+    module = importlib.import_module("mlxr.families.ltx.prompt_encoding")
     factory: Callable[..., PromptEncoderLike] = getattr(module, "create_prompt_encoder")
     return factory(
         checkpoint_path=checkpoint_path,
@@ -119,7 +119,7 @@ def _default_prompt_encoder_factory(
 def _default_video_generator_factory(
     *, checkpoint_path: Path, spatial_upsampler_path: Path
 ) -> VideoGeneratorLike:
-    module = importlib.import_module("ltx.generation")
+    module = importlib.import_module("mlxr.families.ltx.generation")
     factory: Callable[..., VideoGeneratorLike] = getattr(
         module, "create_video_generator"
     )
@@ -130,7 +130,7 @@ def _default_video_generator_factory(
 
 
 def _default_mp4_encoder(video: GeneratedVideoLike, output_path: Path) -> None:
-    module = importlib.import_module("ltx.generation")
+    module = importlib.import_module("mlxr.families.ltx.generation")
     encoder: Callable[[GeneratedVideoLike, Path], None] = getattr(
         module, "encode_mp4_video"
     )
