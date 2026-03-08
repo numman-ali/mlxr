@@ -2,6 +2,12 @@
 
 Status: research recommendation for the next shared execution substrate in `MLXR`.
 
+This document is one part of the canonical LTX ownership set. Read it alongside:
+
+- [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
+- [18-ltx-reference-map.md](18-ltx-reference-map.md)
+- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+
 ## Executive Recommendation
 
 `MLXR` should build one repo-owned MLX execution substrate for text, VLM, and broader multimodal understanding workloads instead of depending on `mlx-lm` or `mlx-vlm` at runtime.

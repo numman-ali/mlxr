@@ -60,6 +60,16 @@ These items remain provisional until the benchmark matrix and cross-family valid
 - [LTX integration seams](docs/research/07-ltx-integration-seams.md)
 - [Acceleration techniques survey](docs/research/08-acceleration-techniques-survey.md)
 - [Open questions and validation plan](docs/research/09-open-questions-and-validation-plan.md)
+- [LTX fidelity debug playbook](docs/research/10-ltx-fidelity-debug-playbook.md)
+- [LTX capability matrix](docs/research/11-ltx-capability-matrix.md)
+- [LTX prompting guide](docs/research/12-ltx-prompting-guide.md)
+- [LTX showcase execution plan](docs/research/13-ltx-showcase-execution-plan.md)
+- [First showcase pack](docs/research/14-first-showcase-pack.md)
+- [Next-phase task list](docs/research/15-next-phase-task-list.md)
+- [Owned substrate migration plan](docs/research/16-owned-substrate-migration-plan.md)
+- [Multimodal inference engine](docs/research/17-multimodal-inference-engine.md)
+- [LTX reference map](docs/research/18-ltx-reference-map.md)
+- [LTX compatibility checklist](docs/research/19-ltx-compatibility-checklist.md)
 
 ## ADRs
 

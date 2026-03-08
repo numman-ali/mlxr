@@ -15,6 +15,12 @@ Its job is to keep three truths aligned:
 This is not a speculative design note. It is the implementation order for
 bringing `LTX` back onto a repo-owned substrate.
 
+Use it together with:
+
+- [18-ltx-reference-map.md](18-ltx-reference-map.md)
+- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+- [17-multimodal-inference-engine.md](17-multimodal-inference-engine.md)
+
 ## Current Truth
 
 Today the only promoted real engine is the distilled proving slice:

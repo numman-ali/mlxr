@@ -6,6 +6,12 @@ This is the current execution checklist for the next major `MLXR` tranche.
 
 It exists so a fresh session can resume the work without reconstructing the plan from chat history.
 
+For the full upstream surface and owned-substrate sequencing, read this
+alongside:
+
+- [18-ltx-reference-map.md](18-ltx-reference-map.md)
+- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+
 The goal is:
 
 - finish the remaining `LTX-2.3` audio and semantic-quality work
