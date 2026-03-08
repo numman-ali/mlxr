@@ -17,7 +17,11 @@ from .conditioning import (
     _require_audio_context,
     _resolve_latent_frame_index,
 )
-from .config import _load_checkpoint_prefixed_weights, _runtime_audio_encoder_config
+from .config import (
+    _load_checkpoint_prefixed_weights,
+    _runtime_audio_encoder_config,
+    _runtime_model_config,
+)
 from .debug import _looks_like_metal_oom
 from .outputs import _audio_waveform_to_numpy
 from .primitives import (
@@ -186,9 +190,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
         rope_module = importlib.import_module("mlx_video.models.ltx.rope")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
-        video_vae_module = importlib.import_module(
-            "mlx_video.models.ltx.video_vae.video_vae"
-        )
         audio_vae_module = importlib.import_module(
             "mlx_video.models.ltx.audio_vae.audio_vae"
         )
@@ -197,6 +198,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         )
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
+    runtime_model_config = _runtime_model_config(self.checkpoint_path)
 
     self._reference_imports = _ReferenceImports(
         model_class=ltx_module.LTXModel,
@@ -214,10 +216,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
         latent_state_class=LatentState,
-        video_encoder_class=video_vae_module.VideoEncoder,
-        video_norm_layer_enum=video_vae_module.NormLayerType,
-        video_log_variance_enum=video_vae_module.LogVarianceType,
-        video_padding_mode_enum=video_vae_module.PaddingModeType,
         condition_class=_condition_ref,
         stage_1_sigmas=STAGE_1_SIGMAS,
         stage_2_sigmas=STAGE_2_SIGMAS,
@@ -228,11 +226,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
         load_vae_encoder=lambda checkpoint_path: _load_runtime_vae_encoder(
-            checkpoint_path,
-            video_encoder_class=video_vae_module.VideoEncoder,
-            norm_layer_enum=video_vae_module.NormLayerType,
-            log_variance_enum=video_vae_module.LogVarianceType,
-            padding_mode_enum=video_vae_module.PaddingModeType,
+            checkpoint_path
         ),
         load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
             _load_runtime_audio_decoder(
@@ -253,7 +247,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
         audio_latent_channels=audio_runtime_config.latent_channels,
-        audio_mel_bins=audio_runtime_config.mel_bins,
+        audio_mel_bins=runtime_model_config.audio_latent_mel_bins,
         audio_sample_rate=audio_runtime_config.sample_rate,
     )
     _patch_reference_modules(self._reference_imports)
@@ -481,6 +475,16 @@ def _encode_audio_conditioning(
         input_channels=encoder.in_channels,
     )
     audio_latents = encoder(mx.array(mel).astype(mx.float32)).astype(model_dtype)
+    actual_shape = tuple(int(size) for size in audio_latents.shape)
+    if (
+        actual_shape[1] != imports.audio_latent_channels
+        or actual_shape[3] != imports.audio_mel_bins
+    ):
+        raise RuntimeError(
+            "LTX audio conditioning latent shape does not match the runtime transformer contract: "
+            f"got {actual_shape}, expected channels={imports.audio_latent_channels} "
+            f"and mel_bins={imports.audio_mel_bins}"
+        )
     audio_latents = _fit_audio_latents(audio_latents, target_frames=audio_frames)
     mx.eval(audio_latents)
     return audio_latents, waveform.astype(np.float32), int(sample_rate)
@@ -525,15 +529,11 @@ def _ensure_audio_stack(
         self.checkpoint_path,
         prefixes=("audio_vae.", "vocoder."),
     )
-    sanitized_audio_weights = {
-        f"audio_vae.{key}": value
-        for key, value in sanitize_audio_vae_weights(checkpoint_audio_weights).items()
-    }
     checkpoint_root = self.checkpoint_path.parent
     if self._audio_decoder is None:
         self._audio_decoder = imports.load_audio_decoder(
             checkpoint_root,
-            unified_weights=sanitized_audio_weights,
+            unified_weights=checkpoint_audio_weights,
         )
         mx.eval(self._audio_decoder.parameters())
     if self._vocoder is None:

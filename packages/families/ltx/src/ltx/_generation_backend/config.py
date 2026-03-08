@@ -701,6 +701,34 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
             for key in checkpoint_keys
         ),
     )
+    audio_in_channels = _int_or_default(
+        raw_transformer_config.get("audio_in_channels"),
+        default_audio_channels,
+    )
+    audio_out_channels = _int_or_default(
+        raw_transformer_config.get("audio_out_channels"),
+        default_audio_channels,
+    )
+    audio_latent_channels = _runtime_audio_encoder_config(
+        checkpoint_path.parent
+    ).latent_channels
+    if audio_in_channels % audio_latent_channels != 0:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has audio_in_channels={audio_in_channels}, "
+            f"which is not divisible by audio latent channels={audio_latent_channels}"
+        )
+    if audio_out_channels % audio_latent_channels != 0:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has audio_out_channels={audio_out_channels}, "
+            f"which is not divisible by audio latent channels={audio_latent_channels}"
+        )
+    audio_latent_mel_bins = audio_in_channels // audio_latent_channels
+    if audio_out_channels // audio_latent_channels != audio_latent_mel_bins:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has inconsistent audio latent geometry: "
+            f"audio_in_channels={audio_in_channels}, audio_out_channels={audio_out_channels}, "
+            f"audio latent channels={audio_latent_channels}"
+        )
     return _RuntimeModelConfig(
         num_attention_heads=_int_value(
             raw_transformer_config.get("num_attention_heads", 32),
@@ -741,14 +769,9 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
             raw_transformer_config.get("audio_attention_head_dim"),
             64,
         ),
-        audio_in_channels=_int_or_default(
-            raw_transformer_config.get("audio_in_channels"),
-            default_audio_channels,
-        ),
-        audio_out_channels=_int_or_default(
-            raw_transformer_config.get("audio_out_channels"),
-            default_audio_channels,
-        ),
+        audio_in_channels=audio_in_channels,
+        audio_out_channels=audio_out_channels,
+        audio_latent_mel_bins=audio_latent_mel_bins,
         audio_cross_attention_dim=_int_or_default(
             raw_transformer_config.get("audio_cross_attention_dim"),
             2048,

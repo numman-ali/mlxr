@@ -69,9 +69,10 @@ Use this with:
 
 - [~] The promoted distilled path now owns latent upsampling, audio decoder
   loading, VAE encoder loading, the x2 spatial upsampler path, video
-  unpatchify, decoder-side tiling and tile blending, the decoder-side
-  convolution / timestep / residual / upsampling blocks, and the donor utility
-  sanitizers and RMS norm helper it previously imported.
+  unpatchify, encoder-side video-VAE substrate, decoder-side tiling and tile
+  blending, the decoder-side convolution / timestep / residual / upsampling
+  blocks, and the donor utility sanitizers and RMS norm helper it previously
+  imported.
 - [ ] No runtime `mlx_video.*` import remains in the promoted distilled path.
 - [ ] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.

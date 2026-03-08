@@ -29,8 +29,6 @@ from .types import (
     _TilingConfigInstance,
     _UpsamplerLike,
     _VAEEncoder,
-    _VAEEncoderFactory,
-    _ValueEnumFactory,
     _VideoDecoderLike,
     _VocoderLike,
 )
@@ -41,6 +39,7 @@ from .video_decoder_blocks import (
     PixArtAlphaTimestepEmbedder,
     ResBlockGroup,
 )
+from .video_encoder import LatentLogVarianceType, VideoEncoder
 from .video_ops import unpatchify_video
 from .video_tiling import TilingConfig, decode_with_tiling
 
@@ -514,23 +513,15 @@ def _load_configured_upsampler(
 
 def _load_runtime_vae_encoder(
     checkpoint_path: Path,
-    *,
-    video_encoder_class: _VAEEncoderFactory,
-    norm_layer_enum: _ValueEnumFactory,
-    log_variance_enum: _ValueEnumFactory,
-    padding_mode_enum: _ValueEnumFactory,
 ) -> _VAEEncoder:
     vae_config = _runtime_vae_config(checkpoint_path)
-    norm_layer = norm_layer_enum(vae_config.norm_layer)
-    latent_log_var = log_variance_enum(vae_config.latent_log_var)
-    padding_mode = padding_mode_enum(vae_config.encoder_spatial_padding_mode)
-    encoder = video_encoder_class(
-        convolution_dimensions=3,
+    padding_mode = PaddingModeType(vae_config.encoder_spatial_padding_mode)
+    latent_log_var = LatentLogVarianceType(vae_config.latent_log_var)
+    encoder = VideoEncoder(
         in_channels=vae_config.in_channels,
         out_channels=vae_config.latent_channels,
         encoder_blocks=list(vae_config.encoder_blocks),
         patch_size=vae_config.patch_size,
-        norm_layer=norm_layer,
         latent_log_var=latent_log_var,
         encoder_spatial_padding_mode=padding_mode,
     )
@@ -594,8 +585,11 @@ def _load_runtime_vae_encoder(
             f"LTX checkpoint '{checkpoint_path}' has invalid VAE encoder std statistics shape "
             f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
         )
-    if encoder_weights:
-        encoder.load_weights(list(encoder_weights.items()), strict=False)
+    if not encoder_weights:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' is missing VAE encoder weights"
+        )
+    encoder.load_weights(list(encoder_weights.items()), strict=False)
     encoder.per_channel_statistics._mean_of_means = mean_array
     encoder.per_channel_statistics._std_of_means = std_array
     return encoder

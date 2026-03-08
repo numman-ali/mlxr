@@ -1190,6 +1190,7 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(runtime_config.audio_attention_head_dim, 64)
         self.assertEqual(runtime_config.audio_in_channels, 128)
         self.assertEqual(runtime_config.audio_out_channels, 128)
+        self.assertEqual(runtime_config.audio_latent_mel_bins, 16)
         self.assertEqual(runtime_config.audio_cross_attention_dim, 2048)
         self.assertEqual(runtime_config.audio_positional_embedding_max_pos, [20])
         self.assertEqual(runtime_config.av_ca_timestep_scale_multiplier, 1000)
@@ -1244,6 +1245,109 @@ class RuntimeUnitTests(unittest.TestCase):
         self.assertEqual(_REFERENCE_MLX_VIDEO_ROOT, expected)
         self.assertTrue(_REFERENCE_MLX_VIDEO_ROOT.is_dir())
 
+    def test_ltx_runtime_imports_derive_audio_latent_mel_bins_from_transformer_contract(
+        self,
+    ) -> None:
+        from ltx._generation_backend.distilled import LTXDistilledVideoGenerator
+
+        checkpoint_metadata = {
+            "transformer": {
+                "num_attention_heads": 32,
+                "attention_head_dim": 128,
+                "cross_attention_dim": 4096,
+                "rope_type": "split",
+                "frequencies_precision": "float64",
+                "caption_proj_before_connector": True,
+                "audio_num_attention_heads": 32,
+                "audio_attention_head_dim": 64,
+                "audio_in_channels": 128,
+                "audio_out_channels": 128,
+                "audio_cross_attention_dim": 2048,
+                "audio_positional_embedding_max_pos": [20],
+            },
+            "vae": {
+                "latent_channels": 128,
+                "out_channels": 3,
+                "patch_size": 4,
+                "decoder_base_channels": 128,
+                "decoder_blocks": [["res_x", {"num_layers": 4}]],
+                "norm_layer": "pixel_norm",
+                "decoder_spatial_padding_mode": "reflect",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_path = Path(tmp_dir) / "checkpoint.safetensors"
+            upsampler_path = Path(tmp_dir) / "upsampler.safetensors"
+            save_file(
+                {
+                    "model.diffusion_model.audio_patchify_proj.weight": np.zeros(
+                        (2048, 128), dtype=np.float32
+                    ),
+                    "model.diffusion_model.audio_attn1.to_q.weight": np.zeros(
+                        (2048, 2048), dtype=np.float32
+                    ),
+                },
+                str(checkpoint_path),
+                metadata={"config": json.dumps(checkpoint_metadata)},
+            )
+            upsampler_path.write_text("unused", encoding="utf-8")
+
+            generator = LTXDistilledVideoGenerator(
+                checkpoint_path=checkpoint_path,
+                spatial_upsampler_path=upsampler_path,
+            )
+            imports = generator._imports()
+
+        self.assertEqual(imports.audio_latent_channels, 8)
+        self.assertEqual(imports.audio_mel_bins, 16)
+
+    def test_ltx_runtime_model_config_rejects_inconsistent_audio_output_geometry(
+        self,
+    ) -> None:
+        from ltx._generation_backend.config import _runtime_model_config
+
+        checkpoint_metadata = {
+            "transformer": {
+                "num_attention_heads": 32,
+                "attention_head_dim": 128,
+                "cross_attention_dim": 4096,
+                "rope_type": "split",
+                "frequencies_precision": "float64",
+                "caption_proj_before_connector": True,
+                "audio_num_attention_heads": 32,
+                "audio_attention_head_dim": 64,
+                "audio_in_channels": 128,
+                "audio_out_channels": 96,
+                "audio_cross_attention_dim": 2048,
+                "audio_positional_embedding_max_pos": [20],
+            },
+            "vae": {
+                "latent_channels": 128,
+                "out_channels": 3,
+                "patch_size": 4,
+                "decoder_base_channels": 128,
+                "decoder_blocks": [["res_x", {"num_layers": 4}]],
+                "norm_layer": "pixel_norm",
+                "decoder_spatial_padding_mode": "reflect",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_path = Path(tmp_dir) / "checkpoint.safetensors"
+            save_file(
+                {
+                    "model.diffusion_model.audio_patchify_proj.weight": np.zeros(
+                        (2048, 128), dtype=np.float32
+                    ),
+                },
+                str(checkpoint_path),
+                metadata={"config": json.dumps(checkpoint_metadata)},
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "inconsistent audio latent geometry"):
+                _runtime_model_config(checkpoint_path)
+
     def test_ltx_generation_padded_shape_is_constructible(self) -> None:
         padded = _resolve_padded_shape(width=384, height=224)
         self.assertEqual(padded.output_width, 384)
@@ -1287,6 +1391,7 @@ class RuntimeUnitTests(unittest.TestCase):
             audio_attention_head_dim=64,
             audio_in_channels=128,
             audio_out_channels=128,
+            audio_latent_mel_bins=16,
             audio_cross_attention_dim=2048,
             positional_embedding_theta=10000.0,
             positional_embedding_max_pos=[20, 2048, 2048],
@@ -1359,6 +1464,7 @@ class RuntimeUnitTests(unittest.TestCase):
             audio_attention_head_dim=64,
             audio_in_channels=128,
             audio_out_channels=128,
+            audio_latent_mel_bins=16,
             audio_cross_attention_dim=2048,
             positional_embedding_theta=10000.0,
             positional_embedding_max_pos=[20, 2048, 2048],
@@ -1704,3 +1810,146 @@ class RuntimeUnitTests(unittest.TestCase):
         channels_first = np.zeros((1, 2, 65, 64), dtype=np.float32)
         preserved = _normalize_audio_mel_layout(channels_first, input_channels=2)
         self.assertEqual(preserved.shape, (1, 2, 65, 64))
+
+    def test_ltx_audio_stack_passes_raw_audio_vae_weights_to_decoder_loader(
+        self,
+    ) -> None:
+        from ltx._generation_backend import runtime_helpers as helpers
+        from ltx._generation_backend.distilled import LTXDistilledVideoGenerator
+
+        class _FakeDecoder:
+            def parameters(self) -> tuple[object, ...]:
+                return ()
+
+        class _FakeVocoder:
+            def parameters(self) -> tuple[object, ...]:
+                return ()
+
+        captured: dict[str, object] = {}
+
+        def _fake_load_audio_decoder(
+            checkpoint_root: Path, *, unified_weights: dict[str, mx.array]
+        ) -> _FakeDecoder:
+            captured["checkpoint_root"] = checkpoint_root
+            captured["weight_keys"] = tuple(sorted(unified_weights))
+            return _FakeDecoder()
+
+        checkpoint_metadata = {
+            "transformer": {
+                "num_attention_heads": 32,
+                "attention_head_dim": 128,
+                "cross_attention_dim": 4096,
+                "rope_type": "split",
+                "frequencies_precision": "float64",
+                "caption_proj_before_connector": True,
+                "audio_num_attention_heads": 32,
+                "audio_attention_head_dim": 64,
+                "audio_in_channels": 128,
+                "audio_out_channels": 128,
+                "audio_cross_attention_dim": 2048,
+                "audio_positional_embedding_max_pos": [20],
+            },
+            "vae": {
+                "latent_channels": 128,
+                "out_channels": 3,
+                "patch_size": 4,
+                "decoder_base_channels": 128,
+                "decoder_blocks": [["res_x", {"num_layers": 4}]],
+                "norm_layer": "pixel_norm",
+                "decoder_spatial_padding_mode": "reflect",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_path = Path(tmp_dir) / "checkpoint.safetensors"
+            upsampler_path = Path(tmp_dir) / "upsampler.safetensors"
+            save_file(
+                {
+                    "model.diffusion_model.audio_patchify_proj.weight": np.zeros(
+                        (2048, 128), dtype=np.float32
+                    ),
+                },
+                str(checkpoint_path),
+                metadata={"config": json.dumps(checkpoint_metadata)},
+            )
+            upsampler_path.write_text("unused", encoding="utf-8")
+            host = LTXDistilledVideoGenerator(
+                checkpoint_path=checkpoint_path,
+                spatial_upsampler_path=upsampler_path,
+            )
+            imports = host._imports()
+            object.__setattr__(imports, "load_audio_decoder", _fake_load_audio_decoder)
+
+            raw_weights = {
+                "audio_vae.decoder.conv_in.conv.weight": mx.zeros((512, 8, 3, 3)),
+                "vocoder.vocoder.conv_pre.weight": mx.zeros((1536, 128, 7)),
+            }
+
+            with (
+                patch.object(
+                    helpers,
+                    "_load_checkpoint_prefixed_weights",
+                    return_value=raw_weights,
+                ),
+                patch.object(
+                    helpers,
+                    "_load_runtime_vocoder",
+                    return_value=(_FakeVocoder(), 24000, "test_vocoder"),
+                ),
+            ):
+                decoder, _, sample_rate, backend_label = helpers._ensure_audio_stack(
+                    host,
+                    imports,
+                )
+
+        self.assertIsInstance(decoder, _FakeDecoder)
+        self.assertEqual(sample_rate, 24000)
+        self.assertEqual(backend_label, "test_vocoder")
+        self.assertEqual(
+            captured["weight_keys"],
+            (
+                "audio_vae.decoder.conv_in.conv.weight",
+                "vocoder.vocoder.conv_pre.weight",
+            ),
+        )
+
+    def test_ltx_runtime_vae_encoder_rejects_missing_encoder_weights(self) -> None:
+        from ltx._generation_backend.video_stack import _load_runtime_vae_encoder
+
+        checkpoint_metadata = {
+            "transformer": {
+                "num_attention_heads": 32,
+                "attention_head_dim": 128,
+                "cross_attention_dim": 4096,
+            },
+            "vae": {
+                "latent_channels": 128,
+                "out_channels": 3,
+                "patch_size": 4,
+                "decoder_base_channels": 128,
+                "decoder_blocks": [["res_x", {"num_layers": 4}]],
+                "norm_layer": "pixel_norm",
+                "decoder_spatial_padding_mode": "reflect",
+                "encoder_spatial_padding_mode": "reflect",
+                "encoder_blocks": [["res_x", {"num_layers": 4}]],
+                "latent_log_var": "per_channel",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_path = Path(tmp_dir) / "checkpoint.safetensors"
+            save_file(
+                {
+                    "vae.per_channel_statistics.mean-of-means": np.zeros(
+                        (128,), dtype=np.float32
+                    ),
+                    "vae.per_channel_statistics.std-of-means": np.ones(
+                        (128,), dtype=np.float32
+                    ),
+                },
+                str(checkpoint_path),
+                metadata={"config": json.dumps(checkpoint_metadata)},
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "missing VAE encoder weights"):
+                _load_runtime_vae_encoder(checkpoint_path)

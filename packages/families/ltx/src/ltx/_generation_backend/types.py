@@ -34,7 +34,8 @@ class _PreparedImageEncoder(Protocol):
 
 
 class _VAEEncoder(Protocol):
-    per_channel_statistics: "_PerChannelStatistics"
+    @property
+    def per_channel_statistics(self) -> "_PerChannelStatistics": ...
 
     def parameters(self) -> object: ...
 
@@ -199,6 +200,8 @@ class _PerChannelStatistics(Protocol):
     _mean_of_means: MLXArray
     _std_of_means: MLXArray
 
+    def normalize(self, x: MLXArray) -> MLXArray: ...
+
 
 class _ModelTypeEnumLike(Protocol):
     AudioVideo: object
@@ -253,25 +256,6 @@ class _ModelFactory(Protocol):
 
 class _LoadVAEEncoder(Protocol):
     def __call__(self, checkpoint_path: Path) -> _VAEEncoder: ...
-
-
-class _ValueEnumFactory(Protocol):
-    def __call__(self, value: str) -> object: ...
-
-
-class _VAEEncoderFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        convolution_dimensions: int,
-        in_channels: int,
-        out_channels: int,
-        encoder_blocks: list[tuple[str, object]],
-        patch_size: int,
-        norm_layer: object,
-        latent_log_var: object,
-        encoder_spatial_padding_mode: object,
-    ) -> _VAEEncoder: ...
 
 
 class _LoadAudioDecoder(Protocol):
@@ -498,10 +482,6 @@ class _ReferenceImports:
     to_denoised: _ToDenoised
     scaled_dot_product_attention: _ScaledDotProductAttentionFn
     latent_state_class: _LatentStateFactory
-    video_encoder_class: _VAEEncoderFactory
-    video_norm_layer_enum: _ValueEnumFactory
-    video_log_variance_enum: _ValueEnumFactory
-    video_padding_mode_enum: _ValueEnumFactory
     condition_class: _ConditionFactory
     stage_1_sigmas: tuple[float, ...]
     stage_2_sigmas: tuple[float, ...]
@@ -545,6 +525,7 @@ class _RuntimeModelConfig:
     audio_attention_head_dim: int
     audio_in_channels: int
     audio_out_channels: int
+    audio_latent_mel_bins: int
     audio_cross_attention_dim: int
     positional_embedding_theta: float
     positional_embedding_max_pos: list[int]
