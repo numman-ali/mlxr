@@ -175,7 +175,7 @@ class _AudioEncoderLike(_GeneratorModule, Protocol):
 
 
 class _AudioDecoderLike(_GeneratorModule, Protocol):
-    pass
+    per_channel_statistics: "_PerChannelStatistics"
 
 
 class _AudioProcessorLike(Protocol):
@@ -254,7 +254,6 @@ class _LoadAudioDecoder(Protocol):
     def __call__(
         self,
         checkpoint_root: Path,
-        pipeline_type: object,
         *,
         unified_weights: dict[str, MLXArray],
     ) -> _AudioDecoderLike: ...
@@ -283,6 +282,27 @@ class _AudioEncoderFactory(Protocol):
         mel_bins: int,
         is_causal: bool,
     ) -> _AudioEncoderLike: ...
+
+
+class _AudioDecoderFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        ch: int,
+        out_ch: int,
+        ch_mult: tuple[int, ...],
+        num_res_blocks: int,
+        attn_resolutions: set[int],
+        resolution: int,
+        z_channels: int,
+        norm_type: object,
+        causality_axis: object,
+        mel_bins: int,
+        mid_block_add_attention: bool,
+        sample_rate: int,
+        mel_hop_length: int,
+        is_causal: bool,
+    ) -> _AudioDecoderLike: ...
 
 
 class _AudioProcessorFactory(Protocol):
@@ -466,6 +486,7 @@ class _ReferenceImports:
     load_vae_encoder: _LoadVAEEncoder
     load_audio_decoder: _LoadAudioDecoder
     audio_encoder_class: _AudioEncoderFactory
+    audio_decoder_class: _AudioDecoderFactory
     audio_processor_class: _AudioProcessorFactory
     audio_norm_type_enum: _AudioEnumFactory
     audio_causality_axis_enum: _AudioEnumFactory
@@ -475,7 +496,6 @@ class _ReferenceImports:
     audio_vocoder_class: object
     prepare_image_for_encoding: _PreparedImageEncoder
     upsample_latents: _UpsampleLatents
-    distilled_pipeline_type: object
     audio_latent_channels: int
     audio_mel_bins: int
     audio_sample_rate: int

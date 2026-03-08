@@ -57,6 +57,7 @@ from .types import (
 from .video_stack import (
     _load_configured_upsampler,
     _load_configured_vae_decoder,
+    _load_runtime_audio_decoder,
     _load_runtime_vocoder,
     _upsample_latents,
 )
@@ -174,7 +175,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         return self._reference_imports
 
     with _reference_path_on_sys_path():
-        generate_module = importlib.import_module("mlx_video.generate")
         convert_module = importlib.import_module("mlx_video.convert")
         config_module = importlib.import_module("mlx_video.models.ltx.config")
         ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
@@ -200,6 +200,8 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         )
         tiling_module = importlib.import_module("mlx_video.models.ltx.video_vae.tiling")
         utils_module = importlib.import_module("mlx_video.utils")
+
+    audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
 
     self._reference_imports = _ReferenceImports(
         model_class=ltx_module.LTXModel,
@@ -231,8 +233,18 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         load_image=_load_image_ref,
         upsampler_module=upsampler_module,
         load_vae_encoder=encoder_module.load_vae_encoder,
-        load_audio_decoder=generate_module.load_audio_decoder,
+        load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
+            _load_runtime_audio_decoder(
+                checkpoint_root=checkpoint_root,
+                audio_decoder_class=audio_vae_init_module.AudioDecoder,
+                audio_norm_type_enum=audio_vae_init_module.NormType,
+                audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
+                sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
+                unified_weights=unified_weights,
+            )
+        ),
         audio_encoder_class=audio_vae_module.AudioEncoder,
+        audio_decoder_class=audio_vae_init_module.AudioDecoder,
         audio_processor_class=audio_vae_init_module.AudioProcessor,
         audio_norm_type_enum=audio_vae_init_module.NormType,
         audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
@@ -244,10 +256,9 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         ).Vocoder,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
-        distilled_pipeline_type=generate_module.PipelineType.DISTILLED,
-        audio_latent_channels=int(generate_module.AUDIO_LATENT_CHANNELS),
-        audio_mel_bins=int(generate_module.AUDIO_MEL_BINS),
-        audio_sample_rate=int(generate_module.AUDIO_SAMPLE_RATE),
+        audio_latent_channels=audio_runtime_config.latent_channels,
+        audio_mel_bins=audio_runtime_config.mel_bins,
+        audio_sample_rate=audio_runtime_config.sample_rate,
     )
     _patch_reference_modules(self._reference_imports)
     return self._reference_imports
@@ -532,7 +543,6 @@ def _ensure_audio_stack(
     if self._audio_decoder is None:
         self._audio_decoder = imports.load_audio_decoder(
             checkpoint_root,
-            imports.distilled_pipeline_type,
             unified_weights=sanitized_audio_weights,
         )
         mx.eval(self._audio_decoder.parameters())

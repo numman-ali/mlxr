@@ -12,13 +12,18 @@ from .config import (
     _decoder_initial_feature_channels,
     _first_present,
     _int_value,
+    _runtime_audio_encoder_config,
     _runtime_vae_config,
     _runtime_vocoder_config,
     _validate_upsampler_layout,
 )
 from .types import (
     MLXArray,
+    _AudioDecoderFactory,
+    _AudioDecoderLike,
+    _AudioEnumFactory,
     _RuntimeVocoderArchitectureConfig,
+    _SanitizeAudioVAEWeights,
     _SanitizeVocoderWeights,
     _TilingConfigInstance,
     _UpsamplerLike,
@@ -504,6 +509,55 @@ def _load_configured_upsampler(
 
     upsampler.load_weights(list(sanitized.items()), strict=False)
     return upsampler
+
+
+def _load_runtime_audio_decoder(
+    *,
+    checkpoint_root: Path,
+    audio_decoder_class: _AudioDecoderFactory,
+    audio_norm_type_enum: _AudioEnumFactory,
+    audio_causality_axis_enum: _AudioEnumFactory,
+    sanitize_audio_vae_weights: _SanitizeAudioVAEWeights,
+    unified_weights: dict[str, MLXArray],
+) -> _AudioDecoderLike:
+    audio_config = _runtime_audio_encoder_config(checkpoint_root)
+    norm_type = audio_norm_type_enum(audio_config.norm_type)
+    causality_axis = audio_causality_axis_enum(audio_config.causality_axis)
+
+    decoder = audio_decoder_class(
+        ch=audio_config.base_channels,
+        out_ch=audio_config.in_channels,
+        ch_mult=audio_config.ch_mult,
+        num_res_blocks=audio_config.num_res_blocks,
+        attn_resolutions=audio_config.attn_resolutions,
+        resolution=audio_config.resolution,
+        z_channels=audio_config.latent_channels,
+        norm_type=norm_type,
+        causality_axis=causality_axis,
+        mel_bins=audio_config.mel_bins,
+        mid_block_add_attention=audio_config.mid_block_add_attention,
+        sample_rate=audio_config.sample_rate,
+        mel_hop_length=audio_config.mel_hop_length,
+        is_causal=audio_config.is_causal,
+    )
+
+    sanitized = sanitize_audio_vae_weights(unified_weights)
+    decoder_weights = {
+        key.replace("decoder.", ""): value
+        for key, value in sanitized.items()
+        if key.startswith("decoder.")
+    }
+    if decoder_weights:
+        decoder.load_weights(list(decoder_weights.items()), strict=False)
+    if "per_channel_statistics._mean_of_means" in sanitized:
+        decoder.per_channel_statistics._mean_of_means = sanitized[
+            "per_channel_statistics._mean_of_means"
+        ]
+    if "per_channel_statistics._std_of_means" in sanitized:
+        decoder.per_channel_statistics._std_of_means = sanitized[
+            "per_channel_statistics._std_of_means"
+        ]
+    return decoder
 
 
 def _load_runtime_vocoder(
