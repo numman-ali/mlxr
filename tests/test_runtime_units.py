@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -257,6 +258,28 @@ class RuntimeUnitTests(unittest.TestCase):
                     output_path = Path(output_dir) / "out_job_1.mp4"
                     self.assertTrue(output_path.exists())
                     self.assertIn(b"ftyp", output_path.read_bytes()[:32])
+                    ffprobe = subprocess.run(
+                        [
+                            "ffprobe",
+                            "-v",
+                            "error",
+                            "-print_format",
+                            "json",
+                            "-show_streams",
+                            str(output_path),
+                        ],
+                        capture_output=True,
+                        check=True,
+                        text=True,
+                    )
+                    probe_payload = json.loads(ffprobe.stdout)
+                    streams = probe_payload["streams"]
+                    video_stream = next(
+                        stream
+                        for stream in streams
+                        if stream.get("codec_type") == "video"
+                    )
+                    self.assertEqual(video_stream["codec_name"], "h264")
                     self.assertEqual(encode_result.metrics["status"], "encoded")
                     self.assertTrue(encode_result.metrics["audio_present"])
                     self.assertEqual(encode_result.metrics["audio_sample_rate"], 24000)

@@ -11,7 +11,7 @@ First implementation slice:
 - artifactized fast-path assets with validated component payloads
 - resolved image-conditioning handles in the runtime worker
 - resolved audio-conditioning handles in the runtime worker
-- runtime-managed `mp4` and `wav` outputs with per-stage memory and timing telemetry
+- runtime-managed H.264/AAC `mp4` and `wav` outputs with per-stage memory and timing telemetry
 
 Current measured caveat:
 

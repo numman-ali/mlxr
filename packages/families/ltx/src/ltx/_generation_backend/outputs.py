@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from functools import cache
 from pathlib import Path
 
 import mlx.core as mx
@@ -77,6 +78,7 @@ def _encode_video_only_mp4(
     num_frames, height, width, _ = video.frames.shape
     if num_frames < 1:
         raise ValueError("Generated video must contain at least one frame")
+    encoder_args = _preferred_h264_encoder_args(ffmpeg_path)
 
     result = subprocess.run(
         [
@@ -97,12 +99,9 @@ def _encode_video_only_mp4(
             "-i",
             "-",
             "-an",
-            "-c:v",
-            "mpeg4",
-            "-q:v",
-            "4",
-            "-pix_fmt",
-            "yuv420p",
+            *encoder_args,
+            "-movflags",
+            "+faststart",
             str(output_path),
         ],
         input=video.frames.tobytes(order="C"),
@@ -112,6 +111,62 @@ def _encode_video_only_mp4(
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(f"ffmpeg failed to encode mp4 output: {stderr}")
+
+
+@cache
+def _available_ffmpeg_encoders(ffmpeg_path: str) -> frozenset[str]:
+    result = subprocess.run(
+        [ffmpeg_path, "-hide_banner", "-encoders"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"ffmpeg failed to list encoders: {stderr}")
+
+    encoders: set[str] = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].startswith("V"):
+            encoders.add(parts[1])
+    return frozenset(encoders)
+
+
+def _preferred_h264_encoder_args(ffmpeg_path: str) -> list[str]:
+    encoders = _available_ffmpeg_encoders(ffmpeg_path)
+    if "h264_videotoolbox" in encoders:
+        return [
+            "-c:v",
+            "h264_videotoolbox",
+            "-allow_sw",
+            "1",
+            "-profile:v",
+            "high",
+            "-pix_fmt",
+            "yuv420p",
+            "-tag:v",
+            "avc1",
+        ]
+    if "libx264" in encoders:
+        return [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "18",
+            "-profile:v",
+            "high",
+            "-pix_fmt",
+            "yuv420p",
+            "-tag:v",
+            "avc1",
+        ]
+    raise RuntimeError(
+        "Current LTX mp4 output requires an H.264 ffmpeg encoder "
+        "('h264_videotoolbox' or 'libx264')"
+    )
 
 
 def _mux_mp4_with_audio(
