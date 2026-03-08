@@ -369,26 +369,28 @@ def main() -> int:
         raise SystemExit(f"Video path is not a file: {video_path}")
 
     review_dir, staged_video_path, keep_dir = _stage_video(video_path, args.save_dir)
-    staged_audio_path = (
-        _extract_audio_review_track(video_path, review_dir)
-        if args.extract_audio_review_track
-        else None
-    )
-    prompt = _build_prompt(staged_video_path, staged_audio_path, args.extra_instruction)
-    command = [
-        "gemini",
-        "-m",
-        args.model,
-        "-p",
-        prompt,
-        "--include-directories",
-        str(review_dir),
-        "--output-format",
-        "text",
-        "-y",
-    ]
-
+    staged_audio_path: Path | None = None
     try:
+        staged_audio_path = (
+            _extract_audio_review_track(video_path, review_dir)
+            if args.extract_audio_review_track
+            else None
+        )
+        prompt = _build_prompt(
+            staged_video_path, staged_audio_path, args.extra_instruction
+        )
+        command = [
+            "gemini",
+            "-m",
+            args.model,
+            "-p",
+            prompt,
+            "--include-directories",
+            str(review_dir),
+            "--output-format",
+            "text",
+            "-y",
+        ]
         result = subprocess.run(
             command,
             check=False,
@@ -425,6 +427,20 @@ def main() -> int:
             artifacts=artifacts,
         )
         return 0
+    except subprocess.CalledProcessError as error:
+        sys.stderr.write(
+            "gemini_describe_video.py: media staging failed "
+            f"for command {error.cmd!r} with exit code {error.returncode}\n"
+        )
+        if error.stderr:
+            sys.stderr.write(error.stderr)
+        return 2
+    except OSError as error:
+        sys.stderr.write(
+            "gemini_describe_video.py: required external command failed to start: "
+            f"{error}\n"
+        )
+        return 2
     except RuntimeError as error:
         sys.stderr.write(f"gemini_describe_video.py: {error}\n")
         return 2

@@ -165,6 +165,7 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
 
             class _Completed:
                 def __init__(self) -> None:
+                    self.returncode = 0
                     self.stdout = (
                         '{"visual_summary":"Dog in a park.",'
                         '"primary_subject":"dog",'
@@ -195,6 +196,29 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
             assert isinstance(command, list)
             self.assertNotIn("--strict", command)
             self.assertIn(str(video_path.parent / "gemini-review"), command)
+
+    def test_run_gemini_review_surfaces_nonzero_exit_as_runtime_error(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            video_path = Path(tmp_dir) / "clip.mp4"
+            video_path.write_bytes(b"clip")
+
+            class _Completed:
+                def __init__(self) -> None:
+                    self.returncode = 2
+                    self.stdout = ""
+                    self.stderr = "gemini_describe_video.py: media staging failed"
+
+            def fake_run(command: list[str], **kwargs: object) -> _Completed:
+                return _Completed()
+
+            original_run = module.subprocess.run
+            module.subprocess.run = fake_run
+            try:
+                with self.assertRaisesRegex(RuntimeError, "media staging failed"):
+                    module._run_gemini_review(video_path=video_path)
+            finally:
+                module.subprocess.run = original_run
 
     def test_write_ffprobe_persists_json_beside_video(self) -> None:
         module = _load_module()

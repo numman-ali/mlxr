@@ -445,8 +445,13 @@ def _run_gemini_review(*, video_path: Path) -> GeminiReview:
         str(review_dir),
     ]
     result = subprocess.run(
-        command, check=True, capture_output=True, text=True, cwd=REPO_ROOT
+        command, check=False, capture_output=True, text=True, cwd=REPO_ROOT
     )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        stdout = result.stdout.strip()
+        detail = stderr or stdout or "Gemini review command failed without output"
+        raise RuntimeError(detail)
     payload = json.loads(result.stdout)
     if not isinstance(payload, dict):
         raise ValueError("Gemini review script returned a non-object JSON payload")

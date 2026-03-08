@@ -337,6 +337,68 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                     module._extract_audio_review_track(video_path, review_dir)
                 )
 
+    def test_main_returns_nonzero_when_audio_review_track_extraction_fails(
+        self,
+    ) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_root = Path(tmp_dir)
+            video_path = temp_root / "dog.mp4"
+            save_dir = temp_root / "review"
+            video_path.write_bytes(b"fake-video")
+            stderr = io.StringIO()
+            argv = [
+                "gemini_describe_video.py",
+                str(video_path),
+                "--save-dir",
+                str(save_dir),
+            ]
+            with (
+                patch.object(
+                    module,
+                    "_extract_audio_review_track",
+                    side_effect=module.subprocess.CalledProcessError(
+                        1, ["ffmpeg", "-i", str(video_path)]
+                    ),
+                ),
+                patch.object(sys, "argv", argv),
+                patch("sys.stderr", stderr),
+            ):
+                exit_code = module.main()
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn("media staging failed", stderr.getvalue())
+
+    def test_main_returns_nonzero_when_required_tool_is_missing(self) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            temp_root = Path(tmp_dir)
+            video_path = temp_root / "dog.mp4"
+            save_dir = temp_root / "review"
+            video_path.write_bytes(b"fake-video")
+            stderr = io.StringIO()
+            argv = [
+                "gemini_describe_video.py",
+                str(video_path),
+                "--save-dir",
+                str(save_dir),
+            ]
+            with (
+                patch.object(
+                    module,
+                    "_extract_audio_review_track",
+                    side_effect=FileNotFoundError("ffprobe"),
+                ),
+                patch.object(sys, "argv", argv),
+                patch("sys.stderr", stderr),
+            ):
+                exit_code = module.main()
+
+            self.assertEqual(exit_code, 2)
+            self.assertIn(
+                "required external command failed to start", stderr.getvalue()
+            )
+
     def test_extract_review_xml_rejects_multiple_review_blocks(self) -> None:
         module = _load_script_module()
         with self.assertRaisesRegex(RuntimeError, "exactly one <review> XML block"):
