@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mlx-runtime = "mlx_runtime_cli.cli:main"
+mlxr = "mlx_runtime_cli.cli:main"
 
 [build-system]
 requires = ["hatchling"]

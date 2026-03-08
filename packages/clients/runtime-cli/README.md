@@ -4,7 +4,7 @@ This package is the first-party thin client over the local daemon.
 
 Current command groups:
 
-- `mlx-runtime generate`
+- `mlxr generate`
   - plans and runs the current workflow-oriented generation surface
   - defaults to the local Unix-domain socket transport
   - supports `--plan-only`
@@ -13,7 +13,7 @@ Current command groups:
 
 Planned or still-growing command groups:
 
-- `mlx-runtime serve`
-- `mlx-runtime models *`
-- `mlx-runtime run`
-- `mlx-runtime jobs *`
+- `mlxr serve`
+- `mlxr models *`
+- `mlxr run`
+- `mlxr jobs *`
