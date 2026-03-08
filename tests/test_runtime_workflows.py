@@ -95,6 +95,14 @@ class RuntimeWorkflowTests(unittest.TestCase):
                     "Framing preference: landscape composition.",
                     result.plan.resolved_prompt,
                 )
+                self.assertIn(
+                    "Natural-audio preference is text-first guidance only",
+                    "\n".join(result.plan.warnings),
+                )
+                self.assertIn(
+                    "may still drift toward soundtrack-like audio",
+                    "\n".join(result.plan.warnings),
+                )
 
     def test_workflow_plan_selects_image_conditioning_when_image_reference_exists(
         self,

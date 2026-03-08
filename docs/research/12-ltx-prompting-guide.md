@@ -73,6 +73,8 @@ and is shared by:
 
 The planner should not require users to think in terms of separate audio and video prompts by default, but it may derive those internally.
 
+The current workflow layer also warns explicitly when `natural_audio` or `no_music` are being treated as text-first guidance rather than a guaranteed audio-control path.
+
 Current implementation caveat:
 
 - the repo-owned shaper currently emits structured multi-line guidance blocks such as `Audio details:` and `Audio prohibition:`

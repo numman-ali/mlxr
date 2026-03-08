@@ -101,6 +101,60 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
             )
         )
 
+    def test_review_matches_scene_accepts_anime_character_wording(self) -> None:
+        module = _load_module()
+        scene = next(
+            candidate
+            for candidate in module.SHOWCASE_SCENES
+            if candidate.scene_id == "anime_neon_chase"
+        )
+
+        self.assertTrue(
+            module._review_matches_scene(
+                parsed_review={
+                    "visual_summary": "An anime character running down a neon city street.",
+                    "primary_subject": "A young female anime character.",
+                    "scene": "A neon city street at night with glowing signs and traffic.",
+                    "style": "2D anime",
+                    "camera": "Tracking side shot",
+                    "audio_present": "true",
+                    "audio_type": "ambience",
+                    "audio_summary": "Traffic and city noise.",
+                    "confidence": "high",
+                    "verdict": "match",
+                },
+                scene=scene,
+                strict=True,
+            )
+        )
+
+    def test_review_matches_scene_accepts_stop_motion_desk_wording(self) -> None:
+        module = _load_module()
+        scene = next(
+            candidate
+            for candidate in module.SHOWCASE_SCENES
+            if candidate.scene_id == "stop_motion_workshop"
+        )
+
+        self.assertTrue(
+            module._review_matches_scene(
+                parsed_review={
+                    "visual_summary": "A stop-motion fox figurine on a wooden desk under a lamp.",
+                    "primary_subject": "A crafted stop-motion fox figurine.",
+                    "scene": "A small workbench or desk with tools and a warm lamp.",
+                    "style": "Stop-motion miniature",
+                    "camera": "Static close-up",
+                    "audio_present": "true",
+                    "audio_type": "music",
+                    "audio_summary": "Light whimsical instrumental music.",
+                    "confidence": "high",
+                    "verdict": "match",
+                },
+                scene=scene,
+                strict=True,
+            )
+        )
+
     def test_run_gemini_review_uses_expected_save_dir(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp_dir:

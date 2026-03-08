@@ -47,7 +47,11 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             warnings.append(
                 "Audio prompt details will stay descriptive only until audio-conditioned generation lands."
             )
-        if intent.preferences.no_music:
+        if task == "video.generate" and intent.preferences.natural_audio:
+            warnings.append(
+                "Natural-audio preference is text-first guidance only on the current AV path; validate the output if exact diegetic sound matters."
+            )
+        if task == "video.generate" and intent.preferences.no_music:
             warnings.append(
                 "The current text-only AV path may still drift toward soundtrack-like audio; audio-conditioned generation is the stronger control path."
             )
