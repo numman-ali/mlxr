@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Mapping, Protocol, TypeAlias
+from typing import Callable, Mapping, Protocol, TypeAlias
 
 import mlx.core as mx
 import numpy as np
@@ -160,7 +160,7 @@ class _VideoDecoderLike(_GeneratorModule, Protocol):
 
 
 class _UpsamplerLike(_GeneratorModule, Protocol):
-    pass
+    def __call__(self, latent: MLXArray, debug: bool = False) -> MLXArray: ...
 
 
 class _AudioEncoderLike(_GeneratorModule, Protocol):
@@ -341,14 +341,9 @@ class _AdalnFactory(Protocol):
     def __call__(self, dims: int, embedding_coefficient: int = 6) -> object: ...
 
 
-class _UpsampleLatents(Protocol):
-    def __call__(
-        self,
-        latents: MLXArray,
-        upsampler: _UpsamplerLike,
-        latents_mean: MLXArray,
-        latents_std: MLXArray,
-    ) -> MLXArray: ...
+_UpsampleLatents: TypeAlias = Callable[
+    [MLXArray, _UpsamplerLike, MLXArray, MLXArray], MLXArray
+]
 
 
 class _ConditionLike(Protocol):
@@ -468,15 +463,12 @@ class _ReferenceImports:
     compute_audio_frames: _ComputeAudioFrames
     load_image: _ImageLoader
     upsampler_module: ModuleType
-    load_vae_decoder: object
     load_vae_encoder: _LoadVAEEncoder
     load_audio_decoder: _LoadAudioDecoder
     audio_encoder_class: _AudioEncoderFactory
     audio_processor_class: _AudioProcessorFactory
     audio_norm_type_enum: _AudioEnumFactory
     audio_causality_axis_enum: _AudioEnumFactory
-    load_audio_vae_weights: object
-    load_vocoder: object
     decode_audio: _DecodeAudio
     sanitize_audio_vae_weights: _SanitizeAudioVAEWeights
     sanitize_vocoder_weights: _SanitizeVocoderWeights

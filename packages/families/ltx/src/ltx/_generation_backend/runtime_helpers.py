@@ -58,6 +58,7 @@ from .video_stack import (
     _load_configured_upsampler,
     _load_configured_vae_decoder,
     _load_runtime_vocoder,
+    _upsample_latents,
 )
 
 
@@ -229,15 +230,12 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
         upsampler_module=upsampler_module,
-        load_vae_decoder=decoder_module.load_vae_decoder,
         load_vae_encoder=encoder_module.load_vae_encoder,
         load_audio_decoder=generate_module.load_audio_decoder,
         audio_encoder_class=audio_vae_module.AudioEncoder,
         audio_processor_class=audio_vae_init_module.AudioProcessor,
         audio_norm_type_enum=audio_vae_init_module.NormType,
         audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
-        load_audio_vae_weights=convert_module.load_audio_vae_weights,
-        load_vocoder=generate_module.load_vocoder,
         decode_audio=audio_vae_module.decode_audio,
         sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
         sanitize_vocoder_weights=convert_module.sanitize_vocoder_weights,
@@ -245,7 +243,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
             "mlx_video.models.ltx.audio_vae.vocoder"
         ).Vocoder,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
-        upsample_latents=upsampler_module.upsample_latents,
+        upsample_latents=_upsample_latents,
         distilled_pipeline_type=generate_module.PipelineType.DISTILLED,
         audio_latent_channels=int(generate_module.AUDIO_LATENT_CHANNELS),
         audio_mel_bins=int(generate_module.AUDIO_MEL_BINS),

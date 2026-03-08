@@ -51,6 +51,19 @@ class _WrappedCausalConv3d(nn.Module):
         return result
 
 
+def _upsample_latents(
+    latent: MLXArray,
+    upsampler: _UpsamplerLike,
+    latent_mean: MLXArray,
+    latent_std: MLXArray,
+) -> MLXArray:
+    mean = latent_mean.reshape(1, -1, 1, 1, 1)
+    std = latent_std.reshape(1, -1, 1, 1, 1)
+    unnormalized = latent * std + mean
+    upsampled: MLXArray = upsampler(unnormalized)
+    return (upsampled - mean) / std
+
+
 class _ConfiguredVideoDecoder(nn.Module):
     def __init__(
         self,
