@@ -209,6 +209,73 @@ def to_denoised(
     return result.astype(original_dtype)
 
 
+def rms_norm(x: MLXArray, *, eps: float) -> MLXArray:
+    weight = mx.ones((x.shape[-1],), dtype=x.dtype)
+    return mx.fast.rms_norm(x, weight, eps)
+
+
+def sanitize_audio_vae_weights(weights: dict[str, MLXArray]) -> dict[str, MLXArray]:
+    sanitized: dict[str, MLXArray] = {}
+
+    for key, value in weights.items():
+        new_key: str | None = None
+
+        if key.startswith("audio_vae.decoder."):
+            new_key = key.replace("audio_vae.decoder.", "decoder.")
+        elif key.startswith("audio_vae.encoder."):
+            new_key = key.replace("audio_vae.encoder.", "encoder.")
+        elif key.startswith(("decoder.", "encoder.")):
+            new_key = key
+        elif key.startswith("audio_vae.per_channel_statistics."):
+            if "mean-of-means" in key:
+                new_key = "per_channel_statistics._mean_of_means"
+            elif "std-of-means" in key:
+                new_key = "per_channel_statistics._std_of_means"
+        elif key == "latents_mean":
+            new_key = "per_channel_statistics._mean_of_means"
+        elif key == "latents_std":
+            new_key = "per_channel_statistics._std_of_means"
+
+        if new_key is None:
+            continue
+
+        if "conv" in new_key.lower() and "weight" in new_key and value.ndim == 4:
+            value = mx.transpose(value, (0, 2, 3, 1))
+
+        sanitized[new_key] = value
+
+    return sanitized
+
+
+def sanitize_vocoder_weights(weights: dict[str, MLXArray]) -> dict[str, MLXArray]:
+    sanitized: dict[str, MLXArray] = {}
+    has_prefix = any(key.startswith("vocoder.") for key in weights)
+
+    for key, value in weights.items():
+        if has_prefix and not key.startswith("vocoder."):
+            continue
+
+        new_key = key.removeprefix("vocoder.")
+        if new_key.startswith("upsamplers."):
+            new_key = new_key.replace("upsamplers.", "ups.", 1)
+        elif new_key.startswith("resnets."):
+            new_key = new_key.replace("resnets.", "resblocks.", 1)
+        elif new_key.startswith("conv_in."):
+            new_key = new_key.replace("conv_in.", "conv_pre.", 1)
+        elif new_key.startswith("conv_out."):
+            new_key = new_key.replace("conv_out.", "conv_post.", 1)
+
+        if "weight" in new_key and value.ndim == 3:
+            if "ups" in new_key:
+                value = mx.transpose(value, (1, 2, 0))
+            else:
+                value = mx.transpose(value, (0, 2, 1))
+
+        sanitized[new_key] = value
+
+    return sanitized
+
+
 def load_image(
     image_path: str | Path,
     *,

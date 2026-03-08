@@ -32,6 +32,9 @@ from .primitives import (
     create_position_grid,
     load_image,
     prepare_image_for_encoding,
+    rms_norm,
+    sanitize_audio_vae_weights,
+    sanitize_vocoder_weights,
     to_denoised,
 )
 from .reference import _patch_reference_modules
@@ -176,15 +179,11 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         return self._reference_imports
 
     with _reference_path_on_sys_path():
-        convert_module = importlib.import_module("mlx_video.convert")
         config_module = importlib.import_module("mlx_video.models.ltx.config")
         ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
         attention_module = importlib.import_module("mlx_video.models.ltx.attention")
         adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
         rope_module = importlib.import_module("mlx_video.models.ltx.rope")
-        feed_forward_module = importlib.import_module(
-            "mlx_video.models.ltx.feed_forward"
-        )
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
         decoder_module = importlib.import_module(
             "mlx_video.models.ltx.video_vae.decoder"
@@ -199,7 +198,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
             "mlx_video.models.ltx.audio_vae"
         )
         tiling_module = importlib.import_module("mlx_video.models.ltx.video_vae.tiling")
-        utils_module = importlib.import_module("mlx_video.utils")
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
 
@@ -212,11 +210,10 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         attention_class=attention_module.Attention,
         preprocessor_class=ltx_module.TransformerArgsPreprocessor,
         multi_preprocessor_class=ltx_module.MultiModalTransformerArgsPreprocessor,
-        feed_forward_class=feed_forward_module.FeedForward,
         adaln_class=adaln_module.AdaLayerNormSingle,
         apply_rotary_emb=rope_module.apply_rotary_emb,
         precompute_freqs_cis=rope_module.precompute_freqs_cis,
-        rms_norm=utils_module.rms_norm,
+        rms_norm=rms_norm,
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
         latent_state_class=LatentState,
@@ -248,7 +245,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
                 audio_decoder_class=audio_vae_init_module.AudioDecoder,
                 audio_norm_type_enum=audio_vae_init_module.NormType,
                 audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
-                sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
+                sanitize_audio_vae_weights=sanitize_audio_vae_weights,
                 unified_weights=unified_weights,
             )
         ),
@@ -258,8 +255,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         audio_norm_type_enum=audio_vae_init_module.NormType,
         audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
         decode_audio=audio_vae_module.decode_audio,
-        sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
-        sanitize_vocoder_weights=convert_module.sanitize_vocoder_weights,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
         audio_latent_channels=audio_runtime_config.latent_channels,
@@ -418,7 +413,7 @@ def _ensure_audio_encoder(
         self.checkpoint_path,
         prefixes=("audio_vae.",),
     )
-    sanitized = imports.sanitize_audio_vae_weights(checkpoint_audio_weights)
+    sanitized = sanitize_audio_vae_weights(checkpoint_audio_weights)
     checkpoint_root = self.checkpoint_path.parent
     audio_config = _runtime_audio_encoder_config(checkpoint_root)
     norm_type = imports.audio_norm_type_enum(audio_config.norm_type)
@@ -540,9 +535,7 @@ def _ensure_audio_stack(
     )
     sanitized_audio_weights = {
         f"audio_vae.{key}": value
-        for key, value in imports.sanitize_audio_vae_weights(
-            checkpoint_audio_weights
-        ).items()
+        for key, value in sanitize_audio_vae_weights(checkpoint_audio_weights).items()
     }
     checkpoint_root = self.checkpoint_path.parent
     if self._audio_decoder is None:
@@ -559,7 +552,7 @@ def _ensure_audio_stack(
         ) = _load_runtime_vocoder(
             checkpoint_path=self.checkpoint_path,
             checkpoint_weights=checkpoint_audio_weights,
-            sanitize_vocoder_weights=imports.sanitize_vocoder_weights,
+            sanitize_vocoder_weights=sanitize_vocoder_weights,
         )
         mx.eval(vocoder.parameters())
         self._vocoder = vocoder

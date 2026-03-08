@@ -488,7 +488,6 @@ class _ReferenceImports:
     attention_class: object
     preprocessor_class: _VariadicFactory
     multi_preprocessor_class: _VariadicFactory
-    feed_forward_class: object
     adaln_class: _AdalnFactory
     apply_rotary_emb: _RotaryEmbeddingFn
     precompute_freqs_cis: _PrecomputeFreqsCis
@@ -519,8 +518,6 @@ class _ReferenceImports:
     audio_norm_type_enum: _AudioEnumFactory
     audio_causality_axis_enum: _AudioEnumFactory
     decode_audio: _DecodeAudio
-    sanitize_audio_vae_weights: _SanitizeAudioVAEWeights
-    sanitize_vocoder_weights: _SanitizeVocoderWeights
     prepare_image_for_encoding: _PreparedImageEncoder
     upsample_latents: _UpsampleLatents
     audio_latent_channels: int

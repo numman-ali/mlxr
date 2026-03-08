@@ -52,6 +52,8 @@ Already moved onto repo-owned code in the promoted distilled path:
 - audio decoder loader path
 - VAE encoder loader path
 - x2 spatial upsampler class and loader path
+- audio-VAE and vocoder weight sanitizers
+- RMS norm helper used by the patched transformer bridge
 
 Still donor-backed in the promoted distilled path:
 
