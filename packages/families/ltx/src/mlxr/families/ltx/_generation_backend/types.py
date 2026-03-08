@@ -312,7 +312,52 @@ class _TilingConfigInstance(Protocol):
 
 
 class _AdalnFactory(Protocol):
-    def __call__(self, dims: int, embedding_coefficient: int = 6) -> object: ...
+    def __call__(
+        self, embedding_dim: int, embedding_coefficient: int = 6
+    ) -> object: ...
+
+
+class _PreprocessorFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        patchify_proj: object,
+        adaln: object,
+        inner_dim: int,
+        max_pos: list[int],
+        num_attention_heads: int,
+        use_middle_indices_grid: bool,
+        timestep_scale_multiplier: int,
+        positional_embedding_theta: float,
+        rope_type: object,
+        caption_projection: object | None = ...,
+        prompt_adaln: object | None = ...,
+        double_precision_rope: bool = ...,
+    ) -> object: ...
+
+
+class _MultiPreprocessorFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        patchify_proj: object,
+        adaln: object,
+        cross_scale_shift_adaln: object,
+        cross_gate_adaln: object,
+        inner_dim: int,
+        max_pos: list[int],
+        num_attention_heads: int,
+        cross_pe_max_pos: int,
+        use_middle_indices_grid: bool,
+        audio_cross_attention_dim: int,
+        timestep_scale_multiplier: int,
+        positional_embedding_theta: float,
+        rope_type: object,
+        av_ca_timestep_scale_multiplier: int,
+        caption_projection: object | None = ...,
+        prompt_adaln: object | None = ...,
+        double_precision_rope: bool = ...,
+    ) -> object: ...
 
 
 _UpsampleLatents: TypeAlias = Callable[
@@ -415,8 +460,8 @@ class _ReferenceImports:
     rope_type_enum: object
     BasicAVTransformerBlock: _VariadicFactory
     attention_class: object
-    preprocessor_class: _VariadicFactory
-    multi_preprocessor_class: _VariadicFactory
+    preprocessor_class: object
+    multi_preprocessor_class: object
     adaln_class: _AdalnFactory
     apply_rotary_emb: _RotaryEmbeddingFn
     precompute_freqs_cis: _PrecomputeFreqsCis

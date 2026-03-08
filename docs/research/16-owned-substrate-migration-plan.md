@@ -59,12 +59,16 @@ Already moved onto repo-owned code in the promoted distilled path:
 - decoder-side temporal/spatial tiling config and tile blending logic
 - decoder-side convolution, timestep embedding, residual block-group, and
   depth-to-space upsampling blocks
+- transformer-side rotary embeddings
+- transformer-side timestep embedding, AdaLN, and transformer-args
+  preprocessor stack
 - audio-VAE and vocoder weight sanitizers
 - RMS norm helper used by the patched transformer bridge
 
 Still donor-backed in the promoted distilled path:
 
-- transformer construction and patched bridge
+- transformer construction and patched bridge beyond the owned rotary / AdaLN /
+  preprocessor seam
 - remaining audio runtime helper imports
 - donor checkout import indirection through the current helper stack
 

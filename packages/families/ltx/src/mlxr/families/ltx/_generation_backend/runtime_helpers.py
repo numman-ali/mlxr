@@ -9,6 +9,7 @@ import numpy.typing as npt
 
 from ..generation import AudioConditioningInput, ConditioningInput
 from ..prompt_encoding import PromptEncodingResult
+from .adaln_ops import AdaLayerNormSingle
 from .audio_autoencoder import (
     AudioCausalityAxis,
     AudioEncoderModel,
@@ -51,6 +52,10 @@ from .primitives import (
 from .reference import _patch_reference_modules
 from .reference_imports import _reference_path_on_sys_path
 from .rope_ops import LTXRopeType, apply_rotary_emb, precompute_freqs_cis
+from .transformer_preprocessors import (
+    MultiModalTransformerArgsPreprocessor,
+    TransformerArgsPreprocessor,
+)
 from .types import (
     MLXArray,
     _AudioDecoderLike,
@@ -223,10 +228,9 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
 
     with _reference_path_on_sys_path():
         config_module = importlib.import_module("mlx_video.models.ltx.config")
-        ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
         attention_module = importlib.import_module("mlx_video.models.ltx.attention")
-        adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
+        ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
     runtime_model_config = _runtime_model_config(self.checkpoint_path)
@@ -238,9 +242,9 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         rope_type_enum=_OwnedRopeTypeEnum,
         BasicAVTransformerBlock=transformer_module.BasicAVTransformerBlock,
         attention_class=attention_module.Attention,
-        preprocessor_class=ltx_module.TransformerArgsPreprocessor,
-        multi_preprocessor_class=ltx_module.MultiModalTransformerArgsPreprocessor,
-        adaln_class=adaln_module.AdaLayerNormSingle,
+        preprocessor_class=TransformerArgsPreprocessor,
+        multi_preprocessor_class=MultiModalTransformerArgsPreprocessor,
+        adaln_class=AdaLayerNormSingle,
         apply_rotary_emb=apply_rotary_emb,
         precompute_freqs_cis=precompute_freqs_cis,
         rms_norm=rms_norm,

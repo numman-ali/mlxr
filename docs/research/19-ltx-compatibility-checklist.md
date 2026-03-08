@@ -72,8 +72,10 @@ Use this with:
   unpatchify and per-channel statistics contract, VAE encoder loading, the x2
   spatial upsampler path, video unpatchify, encoder-side video-VAE substrate,
   decoder-side tiling and tile blending, the decoder-side convolution /
-  timestep / residual / upsampling blocks, and the donor utility sanitizers
-  and RMS norm helper it previously imported.
+  timestep / residual / upsampling blocks, the transformer-side rotary
+  embeddings, the transformer-side timestep embedding / AdaLN / transformer
+  preprocessors, and the donor utility sanitizers and RMS norm helper it
+  previously imported.
 - [ ] No runtime `mlx_video.*` import remains in the promoted distilled path.
 - [ ] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.

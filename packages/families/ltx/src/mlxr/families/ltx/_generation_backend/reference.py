@@ -214,6 +214,9 @@ def _is_multi_preprocessor(
 def _patch_reference_modules(imports: _ReferenceImports) -> None:
     if getattr(imports.model_class, "_mlxr_22b_patch", False):
         return
+    patch_preprocessors = not getattr(
+        imports.preprocessor_class, "__module__", ""
+    ).startswith("mlxr.")
 
     original_get_video_config: Callable[[object], object | None] = getattr(
         imports.model_config_class, "get_video_config"
@@ -224,14 +227,18 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
     original_attention_init: Callable[..., None] = getattr(
         imports.attention_class, "__init__"
     )
-    original_preprocessor_init: Callable[..., None] = getattr(
-        imports.preprocessor_class, "__init__"
+    original_preprocessor_init: Callable[..., None] | None = (
+        getattr(imports.preprocessor_class, "__init__") if patch_preprocessors else None
     )
-    original_multi_preprocessor_init: Callable[..., None] = getattr(
-        imports.multi_preprocessor_class, "__init__"
+    original_multi_preprocessor_init: Callable[..., None] | None = (
+        getattr(imports.multi_preprocessor_class, "__init__")
+        if patch_preprocessors
+        else None
     )
-    original_prepare_context: Callable[..., tuple[MLXArray, MLXArray | None]] = getattr(
-        imports.preprocessor_class, "_prepare_context"
+    original_prepare_context: Callable[..., tuple[MLXArray, MLXArray | None]] | None = (
+        getattr(imports.preprocessor_class, "_prepare_context")
+        if patch_preprocessors
+        else None
     )
     original_model_init_video: Callable[..., None] = getattr(
         imports.model_class, "_init_video"
@@ -362,6 +369,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         double_precision_rope: bool = False,
         prompt_adaln: object | None = None,
     ) -> None:
+        if original_preprocessor_init is None:
+            raise RuntimeError(
+                "Expected original preprocessor init when patching donor preprocessors"
+            )
         prompt_adaln_callable = prompt_adaln if callable(prompt_adaln) else None
         original_preprocessor_init(
             preprocessor_self,
@@ -399,6 +410,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         double_precision_rope: bool = False,
         prompt_adaln: object | None = None,
     ) -> None:
+        if original_multi_preprocessor_init is None:
+            raise RuntimeError(
+                "Expected original multimodal preprocessor init when patching donor preprocessors"
+            )
         prompt_adaln_callable = prompt_adaln if callable(prompt_adaln) else None
         original_multi_preprocessor_init(
             preprocessor_self,
@@ -472,6 +487,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         x: MLXArray,
         attention_mask: MLXArray | None = None,
     ) -> tuple[MLXArray, MLXArray | None]:
+        if original_prepare_context is None:
+            raise RuntimeError(
+                "Expected original preprocessor context helper when patching donor preprocessors"
+            )
         caption_projection = getattr(preprocessor_self, "caption_projection", None)
         if caption_projection is None:
             if context.ndim != 3 or int(context.shape[-1]) != int(x.shape[-1]):
@@ -1026,19 +1045,20 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
     setattr(imports.model_config_class, "get_audio_config", patched_get_audio_config)
     setattr(imports.attention_class, "__init__", patched_attention_init)
     setattr(imports.attention_class, "__call__", patched_attention_call)
-    setattr(imports.preprocessor_class, "__init__", patched_preprocessor_init)
-    setattr(
-        imports.multi_preprocessor_class,
-        "__init__",
-        patched_multi_preprocessor_init,
-    )
-    setattr(
-        imports.multi_preprocessor_class,
-        "prepare",
-        patched_multi_preprocessor_prepare,
-    )
-    setattr(imports.preprocessor_class, "_prepare_context", patched_prepare_context)
-    setattr(imports.preprocessor_class, "prepare", patched_prepare)
+    if patch_preprocessors:
+        setattr(imports.preprocessor_class, "__init__", patched_preprocessor_init)
+        setattr(
+            imports.multi_preprocessor_class,
+            "__init__",
+            patched_multi_preprocessor_init,
+        )
+        setattr(
+            imports.multi_preprocessor_class,
+            "prepare",
+            patched_multi_preprocessor_prepare,
+        )
+        setattr(imports.preprocessor_class, "_prepare_context", patched_prepare_context)
+        setattr(imports.preprocessor_class, "prepare", patched_prepare)
     setattr(imports.model_class, "_init_video", patched_model_init_video)
     setattr(imports.model_class, "_init_audio", patched_model_init_audio)
     setattr(
