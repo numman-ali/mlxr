@@ -65,6 +65,7 @@ class ScenarioPayload(TypedDict):
     prompt: str
     audio_intent: str
     music_allowed: bool
+    conditioning_mode: str
     style_family: str
     expected_subject: str
     expected_scene: str
@@ -101,6 +102,7 @@ class ShowcaseScene:
     prompt: str
     audio_intent: str
     music_allowed: bool
+    conditioning_mode: str
     style_family: str
     expected_subject: str
     expected_scene: str
@@ -138,6 +140,17 @@ def _optional_terms(payload: object, key: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _optional_str(payload: object, key: str, *, default: str) -> str:
+    if not isinstance(payload, dict):
+        raise ValueError("Scenario entries must be JSON objects")
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"Scenario field {key!r} must be a string when provided")
+    return value
+
+
 def _load_scenarios(scenario_pack_path: Path) -> tuple[ShowcaseScene, ...]:
     payload = json.loads(scenario_pack_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -152,6 +165,9 @@ def _load_scenarios(scenario_pack_path: Path) -> tuple[ShowcaseScene, ...]:
             prompt=_required_str(scenario, "prompt"),
             audio_intent=_required_str(scenario, "audio_intent"),
             music_allowed=_required_bool(scenario, "music_allowed"),
+            conditioning_mode=_optional_str(
+                scenario, "conditioning_mode", default="text_first"
+            ),
             style_family=_required_str(scenario, "style_family"),
             expected_subject=_required_str(scenario, "expected_subject"),
             expected_scene=_required_str(scenario, "expected_scene"),
@@ -281,8 +297,11 @@ def main(argv: list[str] | None = None) -> int:
 def _prompt_options_for_run(
     scene: ShowcaseScene, *, num_frames: int, fps: int
 ) -> PromptShapingOptions:
+    audio_prompt: str | None = scene.audio_intent
+    if scene.conditioning_mode != "text_first":
+        audio_prompt = None
     return PromptShapingOptions(
-        audio_prompt=scene.audio_intent,
+        audio_prompt=audio_prompt,
         natural_audio=not scene.music_allowed,
         no_music=not scene.music_allowed,
         style_family=scene.style_family,

@@ -268,6 +268,19 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
         self.assertEqual(adjusted.style_family, "naturalistic")
         self.assertEqual(adjusted.orientation, "landscape")
 
+    def test_prompt_options_for_conditioned_scene_skip_text_audio_prompt(self) -> None:
+        module = _load_module()
+        scene = next(
+            candidate
+            for candidate in module.SHOWCASE_SCENES
+            if candidate.scene_id == "rain_alley_audio_conditioned"
+        )
+
+        adjusted = module._prompt_options_for_run(scene, num_frames=241, fps=24)
+
+        self.assertIsNone(adjusted.audio_prompt)
+        self.assertEqual(scene.conditioning_mode, "audio_conditioned")
+
     def test_run_gemini_review_surfaces_nonzero_exit_as_runtime_error(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp_dir:
