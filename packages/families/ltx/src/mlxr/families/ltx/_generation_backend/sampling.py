@@ -256,6 +256,10 @@ def _denoise_distilled_audio_video(
             positional_embeddings=precomputed_audio_rope,
         )
         velocity, audio_velocity = transformer(video=modality, audio=audio_modality)
+        if velocity is None or audio_velocity is None:
+            raise RuntimeError(
+                "LTX transformer returned empty video/audio velocities for an enabled AV step"
+            )
         velocity = mx.reshape(
             mx.transpose(velocity, (0, 2, 1)),
             (batch_size, channels, frames, latent_h, latent_w),
@@ -300,6 +304,10 @@ def _denoise_distilled_audio_video(
                 video=negative_modality,
                 audio=negative_audio_modality,
             )
+            if negative_velocity is None or negative_audio_velocity is None:
+                raise RuntimeError(
+                    "LTX transformer returned empty negative video/audio velocities for an enabled AV step"
+                )
             negative_velocity = mx.reshape(
                 mx.transpose(negative_velocity, (0, 2, 1)),
                 (batch_size, channels, frames, latent_h, latent_w),

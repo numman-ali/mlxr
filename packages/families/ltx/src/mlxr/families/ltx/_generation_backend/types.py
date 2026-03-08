@@ -129,13 +129,22 @@ class _AudioVideoTransformer(Protocol):
     audio_inner_dim: int
     audio_positional_embedding_max_pos: list[int]
     audio_num_attention_heads: int
-    transformer_blocks: dict[object, object]
-    adaln_single: object
-    audio_adaln_single: object
+
+    @property
+    def transformer_blocks(self) -> Mapping[int, object]: ...
+
+    @property
+    def adaln_single(self) -> object: ...
+
+    @property
+    def audio_adaln_single(self) -> object: ...
 
     def __call__(
-        self, *, video: _PatchedModality, audio: _PatchedModality
-    ) -> tuple[MLXArray, MLXArray]: ...
+        self,
+        *,
+        video: _PatchedModality | None = ...,
+        audio: _PatchedModality | None = ...,
+    ) -> tuple[MLXArray | None, MLXArray | None]: ...
 
     def parameters(self) -> object: ...
 
@@ -215,35 +224,6 @@ class _TransformerConfigLike(Protocol):
 class _ModelConfigFactory(Protocol):
     @classmethod
     def from_dict(cls, raw_config: Mapping[str, object]) -> _TransformerConfigLike: ...
-
-
-class _ModelFactory(Protocol):
-    _mlxr_22b_patch: bool
-
-    def _init_video(self, config: object) -> None: ...
-
-    def _init_audio(self, config: object) -> None: ...
-
-    def _init_preprocessors(
-        self, config: object, cross_pe_max_pos: object = ...
-    ) -> None: ...
-
-    def _init_transformer_blocks(self, config: object) -> None: ...
-
-    def __call__(
-        self,
-        *,
-        video: _PatchedModality | None = ...,
-        audio: _PatchedModality | None = ...,
-    ) -> tuple[object | None, object | None]: ...
-
-    def from_pretrained(
-        self,
-        checkpoint_path: Path,
-        *,
-        config: _TransformerConfigLike,
-        strict: bool,
-    ) -> _AudioVideoTransformer: ...
 
 
 class _LoadVAEEncoder(Protocol):
@@ -454,7 +434,7 @@ class _PaddedShape:
 
 @dataclass(frozen=True, slots=True)
 class _ReferenceImports:
-    model_class: _ModelFactory
+    model_class: object
     model_config_class: object
     model_type_enum: object
     rope_type_enum: object

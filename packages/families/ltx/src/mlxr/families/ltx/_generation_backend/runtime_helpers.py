@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import mlx.core as mx
@@ -52,9 +51,9 @@ from .primitives import (
     to_denoised,
 )
 from .reference import _patch_reference_modules
-from .reference_imports import _reference_path_on_sys_path
 from .rope_ops import LTXRopeType, apply_rotary_emb, precompute_freqs_cis
 from .transformer_blocks import BasicAVTransformerBlock
+from .transformer_model import LTXModel
 from .transformer_preprocessors import (
     MultiModalTransformerArgsPreprocessor,
     TransformerArgsPreprocessor,
@@ -229,14 +228,11 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
     if self._reference_imports is not None:
         return self._reference_imports
 
-    with _reference_path_on_sys_path():
-        ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
-
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
     runtime_model_config = _runtime_model_config(self.checkpoint_path)
 
     self._reference_imports = _ReferenceImports(
-        model_class=ltx_module.LTXModel,
+        model_class=LTXModel,
         model_config_class=LTXModelConfig,
         model_type_enum=LTXModelType,
         rope_type_enum=_OwnedRopeTypeEnum,
@@ -325,7 +321,7 @@ def _ensure_transformer(
     config.apply_gated_attention = runtime_config.apply_gated_attention
     config.cross_attention_adaln = runtime_config.cross_attention_adaln
     config.caption_proj_before_connector = prompt_context.caption_proj_before_connector
-    transformer = imports.model_class.from_pretrained(
+    transformer: _AudioVideoTransformer = LTXModel.from_pretrained(
         self.checkpoint_path,
         config=config,
         strict=True,

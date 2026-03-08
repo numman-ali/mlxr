@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import mlx.core as mx
 
@@ -8,19 +9,17 @@ from .rope_ops import precompute_freqs_cis
 from .types import MLXArray, _PatchedModality, _PatchedTransformerArgs
 
 
-class _ProjectionLike:
-    def __call__(self, x: MLXArray) -> MLXArray:
-        raise NotImplementedError
+class _ProjectionLike(Protocol):
+    def __call__(self, x: MLXArray) -> MLXArray: ...
 
 
-class _AdalnLike:
+class _AdalnLike(Protocol):
     def __call__(
         self,
         timestep: MLXArray,
         *,
         hidden_dtype: mx.Dtype | None = None,
-    ) -> tuple[MLXArray, MLXArray]:
-        raise NotImplementedError
+    ) -> tuple[MLXArray, MLXArray]: ...
 
 
 def _resolve_rope_type_value(rope_type: object) -> str:

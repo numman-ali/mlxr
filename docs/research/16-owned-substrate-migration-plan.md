@@ -30,13 +30,12 @@ Today the only promoted real engine is the distilled proving slice:
 - audio-bearing output on the AV path
 - a narrow `video.condition.audio` preserved-reference slice
 
-That promoted slice is real, but it still depends on unofficial donor code at
-runtime:
+That promoted slice is real.
 
-- the generation engine still imports `mlx_video.*` through the current helper
-  stack
-- the prompt-encode path still depends on `mlx-vlm` / `mlx-lm` for the current
-  Gemma runtime surface
+The generation engine no longer imports `mlx_video.*` anywhere inside the LTX
+family package source tree. The remaining donor-runtime work is now isolated to
+the prompt-encode side, where the Gemma path still depends on `mlx-vlm` /
+`mlx-lm` for the current runtime surface.
 
 Those dependencies are not compatible with the long-term repo direction. The
 next engine work must reduce and then remove them instead of layering more
@@ -44,7 +43,8 @@ capability claims on top.
 
 ## Progress Snapshot
 
-The donor-removal program is underway, but still in progress.
+The donor-removal program is underway, and the first full generation-engine
+milestone is now complete.
 
 Already moved onto repo-owned code in the promoted distilled path:
 
@@ -65,14 +65,16 @@ Already moved onto repo-owned code in the promoted distilled path:
 - audio-VAE and vocoder weight sanitizers
 - RMS norm helper used by the patched transformer bridge
 
-Still donor-backed in the promoted distilled path:
+The promoted distilled generation engine is now donor-free for `mlx_video`
+runtime imports.
 
-- the top-level `LTXModel` constructor / loader bridge
-- donor checkout import indirection through the current helper stack for that
-  final model seam
+Still donor-backed in the broader LTX family runtime:
 
-This means the current promoted slice is healthier than before, but it is not
-yet donor-free.
+- the Gemma prompt path through `mlx-vlm` / `mlx-lm`
+
+This means the current promoted slice is healthier than before, and the next
+owned-substrate wave should focus on the prompt/runtime stack instead of the
+generation engine.
 
 ## Migration Rules
 
@@ -170,10 +172,10 @@ model.
 
 ### Distilled donor-removal tranche
 
-- no runtime import of `mlx_video.*` remains in the promoted distilled path
-- current distilled smoke and showcase receipts still pass
-- backend receipts use `MLXR`-owned names
-- full `verify` remains green
+- [x] no runtime import of `mlx_video.*` remains in the promoted distilled path
+- [x] current distilled smoke and showcase receipts still pass
+- [x] backend receipts use `MLXR`-owned names
+- [x] full `verify` remains green
 
 ### Non-distilled standard tranche
 

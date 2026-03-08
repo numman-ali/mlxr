@@ -67,20 +67,20 @@ Use this with:
 
 ## D. Donor-runtime removal
 
-- [~] The promoted distilled path now owns latent upsampling, audio decoder
+- [x] The promoted distilled path now owns latent upsampling, audio decoder
   loading, the audio encoder/decoder model stack, the audio latent patchify /
   unpatchify and per-channel statistics contract, VAE encoder loading, the x2
   spatial upsampler path, video unpatchify, encoder-side video-VAE substrate,
   decoder-side tiling and tile blending, the decoder-side convolution /
   timestep / residual / upsampling blocks, the transformer-side rotary
   embeddings, the transformer-side timestep embedding / AdaLN / transformer
-  preprocessors, the attention module, the basic AV transformer block, and the
-  donor utility sanitizers and RMS norm helper it previously imported. The
-  remaining donor execution seam is now the top-level `LTXModel` bridge.
-- [ ] No runtime `mlx_video.*` import remains in the promoted distilled path.
-- [ ] No execution-path `sys.path` injection into the repo-local `mlx-video`
+  preprocessors, the attention module, the basic AV transformer block, the
+  top-level `LTXModel` bridge, and the donor utility sanitizers and RMS norm
+  helper it previously imported.
+- [x] No runtime `mlx_video.*` import remains in the promoted distilled path.
+- [x] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.
-- [ ] Distilled backend receipts use only `MLXR`-owned identities.
+- [x] Distilled backend receipts use only `MLXR`-owned identities.
 - [ ] No runtime dependency on `mlx-vlm` remains.
 - [ ] No runtime dependency on `mlx-lm` remains.
 - [ ] The Gemma prompt stack runs on a repo-owned substrate aligned with doc 17.
@@ -198,13 +198,12 @@ Use this with:
 
 The next critical gates, in order, are:
 
-1. [ ] finish `mlx-video` removal for the promoted distilled engine
-2. [ ] finish `mlx-vlm` / `mlx-lm` removal for the Gemma prompt path
-3. [ ] land standard two-stage on the dev checkpoint with required distilled
+1. [ ] finish `mlx-vlm` / `mlx-lm` removal for the Gemma prompt path
+2. [ ] land standard two-stage on the dev checkpoint with required distilled
    LoRA
-4. [ ] land HQ as explicit opt-in
-5. [ ] strengthen `video.condition.audio`
-6. [ ] implement `video.condition.video`
-7. [ ] implement interpolation and retake
-8. [ ] replace the current best-available showcase pack once the stronger rows
+3. [ ] land HQ as explicit opt-in
+4. [ ] strengthen `video.condition.audio`
+5. [ ] implement `video.condition.video`
+6. [ ] implement interpolation and retake
+7. [ ] replace the current best-available showcase pack once the stronger rows
    are real

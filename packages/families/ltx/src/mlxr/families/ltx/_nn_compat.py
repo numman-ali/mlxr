@@ -29,6 +29,15 @@ if TYPE_CHECKING:
         def __init__(self, dims: int, eps: float = 1e-5) -> None: ...
         def __call__(self, x: mx.array) -> mx.array: ...
 
+    class LayerNorm(Module):
+        def __init__(
+            self,
+            dims: int,
+            eps: float = 1e-5,
+            affine: bool = True,
+        ) -> None: ...
+        def __call__(self, x: mx.array) -> mx.array: ...
+
     class Dropout(Module):
         def __init__(self, p: float = 0.5) -> None: ...
         def __call__(self, x: mx.array) -> mx.array: ...
@@ -62,6 +71,7 @@ else:
     Module = _nn.Module
     Linear = _nn.Linear
     RMSNorm = _nn.RMSNorm
+    LayerNorm = _nn.LayerNorm
     Dropout = _nn.Dropout
     Conv1d = _nn.Conv1d
     Conv2d = _nn.Conv2d
@@ -81,6 +91,7 @@ __all__ = [
     "Dropout",
     "LeakyReLU",
     "Linear",
+    "LayerNorm",
     "Module",
     "RMSNorm",
     "SiLU",
