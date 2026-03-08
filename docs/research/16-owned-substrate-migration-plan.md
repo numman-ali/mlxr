@@ -52,6 +52,8 @@ Already moved onto repo-owned code in the promoted distilled path:
 - audio decoder loader path
 - VAE encoder loader path
 - x2 spatial upsampler class and loader path
+- video unpatchify helper
+- decoder-side temporal/spatial tiling config and tile blending logic
 - audio-VAE and vocoder weight sanitizers
 - RMS norm helper used by the patched transformer bridge
 
@@ -101,6 +103,7 @@ Move the current promoted slice onto repo-owned modules under
    - position grids
    - image loading and image-prep helpers
    - velocity-to-denoised conversion
+   - video unpatchify and decoder-side tiling helpers
 2. model loaders and runtime wrappers:
    - transformer loader and bridge
    - VAE encoder/decoder loaders

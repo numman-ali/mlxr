@@ -65,6 +65,7 @@ from .video_stack import (
     _load_runtime_vocoder,
     _upsample_latents,
 )
+from .video_tiling import TilingConfig
 
 
 def _to_denoised_ref(
@@ -197,7 +198,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         audio_vae_init_module = importlib.import_module(
             "mlx_video.models.ltx.audio_vae"
         )
-        tiling_module = importlib.import_module("mlx_video.models.ltx.video_vae.tiling")
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
 
@@ -217,7 +217,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
         latent_state_class=LatentState,
-        tiling_config_class=tiling_module.TilingConfig,
         video_decoder_module=decoder_module,
         video_encoder_class=video_vae_module.VideoEncoder,
         video_norm_layer_enum=video_vae_module.NormLayerType,
@@ -698,7 +697,7 @@ def _decode_video(
     padded_shape: _PaddedShape,
     num_frames: int,
 ) -> tuple[MLXArray, str]:
-    tiling_config = imports.tiling_config_class.auto(
+    tiling_config = TilingConfig.auto(
         padded_shape.internal_height,
         padded_shape.internal_width,
         num_frames,

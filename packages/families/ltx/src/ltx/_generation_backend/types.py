@@ -362,24 +362,28 @@ class _DecodeAudio(Protocol):
     ) -> MLXArray: ...
 
 
-class _TilingConfigLike(Protocol):
-    @staticmethod
-    def auto(
-        height: int, width: int, num_frames: int
-    ) -> _TilingConfigInstance | None: ...
-
-
 class _SpatialTilingConfigLike(Protocol):
-    tile_size_in_pixels: int
+    @property
+    def tile_size_in_pixels(self) -> int: ...
+
+    @property
+    def tile_overlap_in_pixels(self) -> int: ...
 
 
 class _TemporalTilingConfigLike(Protocol):
-    tile_size_in_frames: int
+    @property
+    def tile_size_in_frames(self) -> int: ...
+
+    @property
+    def tile_overlap_in_frames(self) -> int: ...
 
 
 class _TilingConfigInstance(Protocol):
-    spatial_config: _SpatialTilingConfigLike | None
-    temporal_config: _TemporalTilingConfigLike | None
+    @property
+    def spatial_config(self) -> _SpatialTilingConfigLike | None: ...
+
+    @property
+    def temporal_config(self) -> _TemporalTilingConfigLike | None: ...
 
 
 class _AdalnFactory(Protocol):
@@ -495,7 +499,6 @@ class _ReferenceImports:
     to_denoised: _ToDenoised
     scaled_dot_product_attention: _ScaledDotProductAttentionFn
     latent_state_class: _LatentStateFactory
-    tiling_config_class: _TilingConfigLike
     video_decoder_module: ModuleType
     video_encoder_class: _VAEEncoderFactory
     video_norm_layer_enum: _ValueEnumFactory

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import types
 from pathlib import Path
+from typing import Callable
 
 import mlx.core as mx
 
@@ -34,6 +35,8 @@ from .types import (
     _VideoDecoderLike,
     _VocoderLike,
 )
+from .video_ops import unpatchify_video
+from .video_tiling import TilingConfig, decode_with_tiling
 
 
 class _WrappedCausalConv3d(nn.Module):
@@ -263,7 +266,7 @@ class _ConfiguredVideoDecoder(nn.Module):
 
         x = self.act(x)
         x = self.conv_out(x, causal=effective_causal)
-        unpatchified: MLXArray = self._decoder_module.unpatchify(
+        unpatchified = unpatchify_video(
             x,
             patch_size_hw=self.patch_size,
             patch_size_t=1,
@@ -282,11 +285,12 @@ class _ConfiguredVideoDecoder(nn.Module):
         on_frames_ready: object | None = None,
     ) -> mx.array:
         effective_causal = causal or self.causal_decoder
-        if tiling_config is None:
-            default_tiling_config: _TilingConfigInstance = (
-                self._decoder_module.TilingConfig.default()
-            )
-            tiling_config = default_tiling_config
+        resolved_tiling_config: _TilingConfigInstance = (
+            TilingConfig.default() if tiling_config is None else tiling_config
+        )
+        callback: Callable[[MLXArray, int], None] | None = (
+            on_frames_ready if callable(on_frames_ready) else None
+        )
 
         _, _, frames, latent_h, latent_w = sample.shape
         needs_spatial_tiling = False
@@ -294,13 +298,13 @@ class _ConfiguredVideoDecoder(nn.Module):
         spatial_scale = 32
         temporal_scale = 8
 
-        spatial_config = tiling_config.spatial_config
+        spatial_config = resolved_tiling_config.spatial_config
         if spatial_config is not None:
             tile_size_latent = spatial_config.tile_size_in_pixels // spatial_scale
             if latent_h > tile_size_latent or latent_w > tile_size_latent:
                 needs_spatial_tiling = True
 
-        temporal_config = tiling_config.temporal_config
+        temporal_config = resolved_tiling_config.temporal_config
         if temporal_config is not None:
             tile_size_latent = temporal_config.tile_size_in_frames // temporal_scale
             if frames > tile_size_latent:
@@ -321,23 +325,23 @@ class _ConfiguredVideoDecoder(nn.Module):
                 debug=debug,
                 chunked_conv=use_chunked_conv,
             )
-            if callable(on_frames_ready):
+            if callback is not None:
                 try:
-                    on_frames_ready(decoded, 0)
+                    callback(decoded, 0)
                 except Exception:
                     return decoded
             return decoded
 
-        decoded_tiled: MLXArray = self._decoder_module.decode_with_tiling(
+        decoded_tiled = decode_with_tiling(
             decoder_fn=self,
             latents=sample,
-            tiling_config=tiling_config,
+            tiling_config=resolved_tiling_config,
             spatial_scale=32,
             temporal_scale=8,
             causal=effective_causal,
             timestep=timestep,
             chunked_conv=use_chunked_conv,
-            on_frames_ready=on_frames_ready,
+            on_frames_ready=callback,
         )
         return decoded_tiled
 
