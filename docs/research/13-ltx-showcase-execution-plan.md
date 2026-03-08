@@ -13,7 +13,10 @@ The goal is:
 - deliver the first truthful five-clip showcase pack
 
 The next quality target after the current distilled showcase tranche is not
-simply “bigger or longer.” It is the upstream full-checkpoint two-stage family:
+simply “bigger or longer.” It is the upstream full-checkpoint two-stage family.
+But the current engine still needs the owned-substrate migration described in
+[16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
+before those non-distilled rows should be promoted.
 
 - `TI2VidTwoStagesPipeline` as the production-default quality path
 - `TI2VidTwoStagesHQPipeline` as the next top-end alternate high-quality
@@ -88,9 +91,11 @@ Current blocker for the original natural-audio showcase intent:
 
 ### D. Core capability completion
 
+- [ ] remove runtime `mlx-video` usage from the promoted distilled engine
+- [ ] remove prompt-path `mlx-vlm` / `mlx-lm` usage from the Gemma prompt stack
 - [ ] extend the artifact and adapter contract for non-distilled two-stage:
   full `dev` checkpoint plus distilled LoRA on top of Gemma and x2 upsampler
-- [ ] implement the non-distilled scheduler/sampler/guidance substrate needed by upstream two-stage rows
+- [ ] implement the non-distilled scheduler/sampler/guidance substrate needed by upstream two-stage rows on the owned engine
 - [ ] land the upstream production-default `TI2VidTwoStagesPipeline` semantics on the full `dev` checkpoint
 - [ ] land the upstream `TI2VidTwoStagesHQPipeline` semantics as the next
   top-end alternate high-quality variant

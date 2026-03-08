@@ -225,7 +225,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                         frames=frames,
                         fps=24,
                         seed=seed or 0,
-                        backend="mlx_video_distilled_two_stage_bridge",
+                        backend="mlxr_ltx_distilled_two_stage",
                         conditioning_count=0,
                         prompt_signature="sig",
                         metadata={

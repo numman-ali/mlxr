@@ -390,7 +390,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             frames=frames_uint8,
             fps=fps,
             seed=effective_seed,
-            backend="mlx_video_distilled_two_stage_bridge",
+            backend="mlxr_ltx_distilled_two_stage",
             conditioning_count=len(conditioning_inputs),
             prompt_signature=_prompt_signature(prompt_context.prompt_text),
             audio_waveform=audio_waveform,
@@ -418,7 +418,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                     else 0
                 ),
                 "audio_backend": audio_backend,
-                "audio_bwe_applied": audio_backend == "mlx_vocoder_with_bwe",
+                "audio_bwe_applied": audio_backend == "mlxr_vocoder_with_bwe",
                 "audio_conditioned": audio_conditioning is not None,
                 "guidance_mode": (
                     "cfg"

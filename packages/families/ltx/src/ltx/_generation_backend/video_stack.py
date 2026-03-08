@@ -610,5 +610,5 @@ def _load_runtime_vocoder(
     return (
         vocoder_with_bwe,
         runtime_vocoder_config.bwe.output_sample_rate,
-        "mlx_vocoder_with_bwe",
+        "mlxr_vocoder_with_bwe",
     )

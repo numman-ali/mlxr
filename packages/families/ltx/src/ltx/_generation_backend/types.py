@@ -13,13 +13,23 @@ MLXArray: TypeAlias = mx.array
 
 class _ImageLoader(Protocol):
     def __call__(
-        self, path: str, *, height: int, width: int, dtype: mx.Dtype
+        self,
+        path: str | Path,
+        *,
+        height: int | None = ...,
+        width: int | None = ...,
+        dtype: mx.Dtype = ...,
     ) -> MLXArray: ...
 
 
 class _PreparedImageEncoder(Protocol):
     def __call__(
-        self, image: MLXArray, height: int, width: int, *, dtype: mx.Dtype
+        self,
+        image: MLXArray,
+        target_height: int,
+        target_width: int,
+        *,
+        dtype: mx.Dtype = ...,
     ) -> MLXArray: ...
 
 
@@ -82,7 +92,7 @@ class _ScaledDotProductAttentionFn(Protocol):
 
 class _ToDenoised(Protocol):
     def __call__(
-        self, latents: MLXArray, velocity: MLXArray, sigma: MLXArray
+        self, latents: MLXArray, velocity: MLXArray, sigma: MLXArray | float
     ) -> MLXArray: ...
 
 
@@ -341,7 +351,14 @@ class _UpsampleLatents(Protocol):
 
 
 class _ConditionLike(Protocol):
-    pass
+    @property
+    def latent(self) -> MLXArray: ...
+
+    @property
+    def frame_idx(self) -> int: ...
+
+    @property
+    def strength(self) -> float: ...
 
 
 class _ConditionFactory(Protocol):
@@ -364,12 +381,30 @@ class _ApplyConditioning(Protocol):
 
 class _CreatePositionGrid(Protocol):
     def __call__(
-        self, batch: int, frames: int, height: int, width: int, *, fps: float
+        self,
+        batch_size: int,
+        num_frames: int,
+        height: int,
+        width: int,
+        *,
+        temporal_scale: int = ...,
+        spatial_scale: int = ...,
+        fps: float = ...,
+        causal_fix: bool = ...,
     ) -> MLXArray: ...
 
 
 class _CreateAudioPositionGrid(Protocol):
-    def __call__(self, batch: int, audio_frames: int) -> MLXArray: ...
+    def __call__(
+        self,
+        batch_size: int,
+        audio_frames: int,
+        *,
+        sample_rate: int = ...,
+        hop_length: int = ...,
+        downsample_factor: int = ...,
+        is_causal: bool = ...,
+    ) -> MLXArray: ...
 
 
 class _ComputeAudioFrames(Protocol):
@@ -454,8 +489,8 @@ class _ReferenceImports:
 
 @dataclass(frozen=True, slots=True)
 class _ConditioningPlan:
-    stage1: tuple[object, ...]
-    stage2: tuple[object, ...]
+    stage1: tuple[_ConditionLike, ...]
+    stage2: tuple[_ConditionLike, ...]
 
 
 @dataclass(frozen=True, slots=True)

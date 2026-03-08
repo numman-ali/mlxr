@@ -248,6 +248,8 @@ If the task is LTX-capability-specific:
 - read [12-ltx-prompting-guide.md](/Users/numman/Repos/mlxr/docs/research/12-ltx-prompting-guide.md) when text-first prompt quality or showcase work is in scope
 - read [13-ltx-showcase-execution-plan.md](/Users/numman/Repos/mlxr/docs/research/13-ltx-showcase-execution-plan.md) when continuing the current capability-to-showcase tranche
 - read [14-first-showcase-pack.md](/Users/numman/Repos/mlxr/docs/research/14-first-showcase-pack.md) when validating, replacing, or promoting the current five-clip showcase set
+- read [16-owned-substrate-migration-plan.md](/Users/numman/Repos/mlxr/docs/research/16-owned-substrate-migration-plan.md) when donor-runtime removal, non-distilled recovery, or Gemma substrate ownership is in scope
+- read [17-multimodal-inference-engine.md](/Users/numman/Repos/mlxr/docs/research/17-multimodal-inference-engine.md) when replacing `mlx-vlm` / `mlx-lm` or deciding what shared MLX multimodal execution logic belongs in `packages/core/`
 
 ## Source Of Truth Order
 

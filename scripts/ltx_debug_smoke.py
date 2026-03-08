@@ -24,7 +24,7 @@ DEFAULT_RUN_NAME = "ltx-fidelity-debug"
 DEFAULT_TMUX_SESSION = "mlxr-ltx-debug"
 DEFAULT_HEARTBEAT_SECONDS = 2.0
 DEFAULT_PROFILE_NAME = "safe-smoke"
-KNOWN_REAL_BACKENDS = frozenset({"mlx_video_distilled_two_stage_bridge"})
+KNOWN_REAL_BACKENDS = frozenset({"mlxr_ltx_distilled_two_stage"})
 KNOWN_REAL_PIPELINE_KINDS = frozenset({"distilled_two_stage"})
 PROFILE_PRESETS: dict[str, tuple[int, int, int, int]] = {
     "safe-smoke": (256, 160, 17, 24),

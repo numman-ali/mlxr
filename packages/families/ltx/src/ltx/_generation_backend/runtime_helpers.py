@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 
 import mlx.core as mx
 import numpy as np
@@ -19,6 +20,20 @@ from .conditioning import (
 from .config import _load_checkpoint_prefixed_weights, _runtime_audio_encoder_config
 from .debug import _looks_like_metal_oom
 from .outputs import _audio_waveform_to_numpy
+from .primitives import (
+    STAGE_1_SIGMAS,
+    STAGE_2_SIGMAS,
+    LatentState,
+    VideoConditionByLatentIndex,
+    apply_conditioning,
+    apply_denoise_mask,
+    compute_audio_frames,
+    create_audio_position_grid,
+    create_position_grid,
+    load_image,
+    prepare_image_for_encoding,
+    to_denoised,
+)
 from .reference import _patch_reference_modules
 from .reference_imports import _reference_path_on_sys_path
 from .types import (
@@ -46,15 +61,118 @@ from .video_stack import (
 )
 
 
+def _to_denoised_ref(
+    latents: MLXArray,
+    velocity: MLXArray,
+    sigma: MLXArray | float,
+) -> MLXArray:
+    return to_denoised(latents, velocity, sigma)
+
+
+def _condition_ref(
+    *,
+    latent: MLXArray,
+    frame_idx: int,
+    strength: float,
+) -> _ConditionLike:
+    return VideoConditionByLatentIndex(
+        latent=latent,
+        frame_idx=frame_idx,
+        strength=strength,
+    )
+
+
+def _apply_conditioning_ref(
+    state: _LatentStateLike,
+    conditionings: list[_ConditionLike],
+) -> _LatentStateLike:
+    return apply_conditioning(state, conditionings)
+
+
+def _apply_denoise_mask_ref(
+    denoised: MLXArray,
+    clean_latent: MLXArray,
+    denoise_mask: MLXArray,
+) -> MLXArray:
+    return apply_denoise_mask(denoised, clean_latent, denoise_mask)
+
+
+def _create_position_grid_ref(
+    batch_size: int,
+    num_frames: int,
+    height: int,
+    width: int,
+    *,
+    temporal_scale: int = 8,
+    spatial_scale: int = 32,
+    fps: float = 24.0,
+    causal_fix: bool = True,
+) -> MLXArray:
+    return create_position_grid(
+        batch_size,
+        num_frames,
+        height,
+        width,
+        temporal_scale=temporal_scale,
+        spatial_scale=spatial_scale,
+        fps=fps,
+        causal_fix=causal_fix,
+    )
+
+
+def _create_audio_position_grid_ref(
+    batch_size: int,
+    audio_frames: int,
+    *,
+    sample_rate: int = 16000,
+    hop_length: int = 160,
+    downsample_factor: int = 4,
+    is_causal: bool = True,
+) -> MLXArray:
+    return create_audio_position_grid(
+        batch_size,
+        audio_frames,
+        sample_rate=sample_rate,
+        hop_length=hop_length,
+        downsample_factor=downsample_factor,
+        is_causal=is_causal,
+    )
+
+
+def _compute_audio_frames_ref(num_frames: int, fps: float) -> int:
+    return compute_audio_frames(num_frames, fps)
+
+
+def _load_image_ref(
+    path: str | Path,
+    *,
+    height: int | None = None,
+    width: int | None = None,
+    dtype: mx.Dtype = mx.float32,
+) -> MLXArray:
+    return load_image(path, height=height, width=width, dtype=dtype)
+
+
+def _prepare_image_for_encoding_ref(
+    image: MLXArray,
+    target_height: int,
+    target_width: int,
+    *,
+    dtype: mx.Dtype = mx.float32,
+) -> MLXArray:
+    return prepare_image_for_encoding(
+        image,
+        target_height=target_height,
+        target_width=target_width,
+        dtype=dtype,
+    )
+
+
 def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
     if self._reference_imports is not None:
         return self._reference_imports
 
     with _reference_path_on_sys_path():
-        conditioning_module = importlib.import_module("mlx_video.conditioning")
-        conditioning_latent_module = importlib.import_module(
-            "mlx_video.conditioning.latent"
-        )
         generate_module = importlib.import_module("mlx_video.generate")
         convert_module = importlib.import_module("mlx_video.convert")
         config_module = importlib.import_module("mlx_video.models.ltx.config")
@@ -96,19 +214,19 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         apply_rotary_emb=rope_module.apply_rotary_emb,
         precompute_freqs_cis=rope_module.precompute_freqs_cis,
         rms_norm=utils_module.rms_norm,
-        to_denoised=utils_module.to_denoised,
+        to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
-        latent_state_class=conditioning_latent_module.LatentState,
+        latent_state_class=LatentState,
         tiling_config_class=tiling_module.TilingConfig,
-        condition_class=conditioning_module.VideoConditionByLatentIndex,
-        stage_1_sigmas=tuple(float(value) for value in generate_module.STAGE_1_SIGMAS),
-        stage_2_sigmas=tuple(float(value) for value in generate_module.STAGE_2_SIGMAS),
-        apply_conditioning=conditioning_module.apply_conditioning,
-        apply_denoise_mask=conditioning_latent_module.apply_denoise_mask,
-        create_position_grid=generate_module.create_position_grid,
-        create_audio_position_grid=generate_module.create_audio_position_grid,
-        compute_audio_frames=generate_module.compute_audio_frames,
-        load_image=utils_module.load_image,
+        condition_class=_condition_ref,
+        stage_1_sigmas=STAGE_1_SIGMAS,
+        stage_2_sigmas=STAGE_2_SIGMAS,
+        apply_conditioning=_apply_conditioning_ref,
+        apply_denoise_mask=_apply_denoise_mask_ref,
+        create_position_grid=_create_position_grid_ref,
+        create_audio_position_grid=_create_audio_position_grid_ref,
+        compute_audio_frames=_compute_audio_frames_ref,
+        load_image=_load_image_ref,
         load_upsampler=upsampler_module.load_upsampler,
         load_vae_decoder=decoder_module.load_vae_decoder,
         load_vae_encoder=encoder_module.load_vae_encoder,
@@ -125,7 +243,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         audio_vocoder_class=importlib.import_module(
             "mlx_video.models.ltx.audio_vae.vocoder"
         ).Vocoder,
-        prepare_image_for_encoding=utils_module.prepare_image_for_encoding,
+        prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=upsampler_module.upsample_latents,
         distilled_pipeline_type=generate_module.PipelineType.DISTILLED,
         audio_latent_channels=int(generate_module.AUDIO_LATENT_CHANNELS),

@@ -651,7 +651,7 @@ class RuntimeUnitTests(unittest.TestCase):
             )
 
         self.assertEqual(sample_rate, 48000)
-        self.assertEqual(backend_name, "mlx_vocoder_with_bwe")
+        self.assertEqual(backend_name, "mlxr_vocoder_with_bwe")
         self.assertTrue(hasattr(vocoder, "bwe_generator"))
         self.assertTrue(hasattr(vocoder, "mel_stft"))
 

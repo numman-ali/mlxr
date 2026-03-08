@@ -156,19 +156,21 @@ Current showcase truth:
 ## Recommended next implementation order
 
 If the repo priority is “highest quality achievable on Mac,” the next target
-should not be more distilled polishing. It should be the upstream
-full-checkpoint two-stage family.
+should not be more distilled-only polishing. But it also should not be layering
+new non-distilled claims on top of donor runtime code that still powers the
+current proving slice. The next target is the owned-substrate migration
+described in [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md),
+followed immediately by the upstream full-checkpoint two-stage family.
 
 Recommended order:
 
-1. extend the artifact and adapter contract for the non-distilled two-stage
-   family: full `dev` checkpoint plus distilled LoRA on top of the existing
-   Gemma and x2 upsampler assets
-2. land the non-distilled scheduler/sampler/guidance substrate the upstream
-   two-stage family depends on
-3. land standard two-stage on the full `dev` checkpoint as the upstream
-   production-default quality path
-4. land `two_stage_hq` as the top-end alternate high-quality two-stage variant
+1. remove runtime `mlx-video` usage from the promoted distilled engine and keep
+   the current proving slice green on repo-owned code
+2. remove prompt-path `mlx-vlm` / `mlx-lm` usage after the generation engine is
+   owned
+3. land standard two-stage on the full `dev` checkpoint as the owned
+   production-quality target
+4. land `two_stage_hq` as the explicit top-end alternate high-quality variant
 5. improve `video.condition.audio` scene quality from “real bridge slice” to
    “quality-promoted capability”
 6. land `video.condition.video`
@@ -191,5 +193,7 @@ Recommended order:
   into one vague “best” row.
 - Landing the non-distilled two-stage family is not just a checkpoint swap. It
   also requires the supporting scheduler, sampler, guidance, and LoRA contract
-  work that the current distilled path does not yet need.
+  work that the current distilled path does not yet need, and it should now be
+  built on the owned-substrate migration path instead of extending the donor
+  runtime.
 - Capability coverage and profile promotion are different gates. A capability may be implemented and still not be quality-promoted at recommended or HQ sizes.
