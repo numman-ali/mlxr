@@ -21,15 +21,30 @@ Already true:
 - real audio-bearing output works
 - first real `video.condition.audio` slice works
 - Gemini XML-based video review helper exists and is validated
+- the Gemini helper now stages an extracted review WAV when audio is present and reviews the video and audio together
 - a repo-owned showcase runner now exists at `scripts/ltx_showcase_generate.py`
 - the repo has a cleaner package structure and split LTX internals
 
 Still not true:
 
 - text-first AV still drifts semantically on some clips
+- text-first natural scenes still drift into soundtrack-like music on the current 10-second dog, nature, and vintage receipts
 - the current `video.condition.audio` example proved the bridge, but not strong scene quality
 - conditioned-scene quality on `video.condition.audio` is still not strong enough to promote
 - the five-scene showcase pack is not ready to promote
+
+Already promoted at the current score-friendly bar:
+
+- anime neon chase
+- stop-motion workshop
+- vintage nostalgic street
+- cinematic spacewalk
+- noir rainy city
+
+Current blocker for the original natural-audio showcase intent:
+
+- the 10-second dog, nature, and vintage natural-scene receipts still come back as visual matches with music-like audio on the stronger video-plus-audio Gemini review path
+- that means the current text-first `natural_audio` / `no_music` story is still not strong enough to promote as a natural-sound showcase pack
 
 ## Execution checklist
 
@@ -56,7 +71,8 @@ Still not true:
 
 ### C. Semantic validation workflow
 
-- [ ] keep `scripts/gemini_describe_video.py` as the default automated semantic cross-check
+- [x] keep `scripts/gemini_describe_video.py` as the default automated semantic cross-check
+- [x] stage an extracted review WAV alongside showcase MP4s when audio is present so Gemini reviews both in one pass
 - [x] make `scripts/ltx_showcase_generate.py` save `ffprobe` receipts and fail promotion when Gemini does not clear the expected subject/audio gate
 - [ ] use ffprobe and runtime manifests as execution truth
 - [ ] inspect stills/keyframes whenever Gemini and runtime expectations disagree
@@ -83,11 +99,23 @@ Still not true:
   - Gemini parsed review
 - [ ] reject any clip that is semantically off-target or drifts into the wrong audio mode
 - [ ] only promote the pack once all five clips clear the same truth bar
+- [x] promote the first score-friendly five-clip pack once all five clips clear the current truth bar
 
 Current dog-showcase truth:
 
 - the first 10-second dog showcase receipt at `384x224 / 241f / 24fps` now produces the intended dog-with-owner park scene visually
 - Gemini still classifies its audio as `music`, so that clip is not promotable for the natural-audio/no-music scene
+
+Current natural-audio showcase truth:
+
+- the stronger video-plus-audio Gemini pass now also classifies the 10-second nature and vintage clips as visual matches with music-like audio
+- the blocker is no longer “weak review tooling”; it is the current text-first AV behavior on these natural scenes
+
+Current score-friendly showcase truth:
+
+- a distinct five-clip text-first pack now exists at `384x224 / 241f / 24fps`
+- the consolidated receipt is `tmp/showcase-runs/showcase-pack-20260308.json`
+- this pack is truthful for stylized and score-friendly scenes; it is not evidence that natural-audio realism is solved
 
 Suggested initial scene set:
 

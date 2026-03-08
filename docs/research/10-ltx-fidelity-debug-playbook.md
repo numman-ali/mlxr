@@ -111,9 +111,10 @@ Treat the manifest as the run receipt. If a result later becomes part of repo tr
 
 Use `scripts/gemini_describe_video.py` as the default automated semantic cross-check for promoted clips.
 
-The helper stages the video into a non-ignored review directory, asks Gemini for one strict XML review, and saves:
+The helper stages the video into a non-ignored review directory, extracts a mono WAV review track when the clip has audio, asks Gemini for one strict XML review over both assets, and saves:
 
 - the staged review copy
+- the staged review audio track when present
 - the exact review prompt
 - the raw Gemini response
 - the parsed review JSON
@@ -133,6 +134,12 @@ Promotion rule:
 - do not promote a clip if Gemini reports soundtrack-like music when the prompt and manifest expect natural audio with no music
 - if Gemini and the runtime receipt disagree, inspect reviewer stills, ffprobe output, and keyframes before promoting anything
 - Gemini does not override runtime receipts, ffprobe output, or obvious manual-review contradictions
+
+Current LTX showcase truth:
+
+- the audio-aware Gemini pass confirms that the current text-first natural scenes are still drifting into soundtrack-like music
+- this is now confirmed on the 10-second dog, nature, and vintage receipts, not just inferred from one weak review pass
+- until that changes, text-first `natural_audio` / `no_music` must remain advisory rather than promotable guarantees
 
 ## How To Interpret Stage Snapshots
 

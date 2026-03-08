@@ -152,6 +152,27 @@ SHOWCASE_SCENES: tuple[ShowcaseScene, ...] = (
         notes="Vintage realism; avoid obvious modern music.",
     ),
     ShowcaseScene(
+        scene_id="vintage_nostalgic_street",
+        title="Vintage Nostalgic Street",
+        base_prompt=(
+            "A nostalgic 1970s main street drifts by in a warm golden-hour pan, with "
+            "parked classic cars, hand-painted storefront signs, and pedestrians moving "
+            "slowly through sun flare and soft grain like restored home-movie footage."
+        ),
+        shaping=PromptShapingOptions(
+            audio_prompt=(
+                "nostalgic electric guitar, mellow street atmosphere, distant voices, "
+                "and vintage neighborhood texture"
+            ),
+            duration_seconds=10.0,
+            orientation="landscape",
+        ),
+        expected_subject_terms=("people", "pedestrian", "cars", "street"),
+        expected_scene_terms=("street", "shop", "storefront", "cars", "sidewalk"),
+        expected_audio_types=("music", "ambience", "other"),
+        notes="Vintage scene with score-friendly nostalgic audio.",
+    ),
+    ShowcaseScene(
         scene_id="nature_documentary",
         title="Nature Documentary",
         base_prompt=(
@@ -175,6 +196,48 @@ SHOWCASE_SCENES: tuple[ShowcaseScene, ...] = (
         notes="Documentary scene; natural ambience only.",
     ),
     ShowcaseScene(
+        scene_id="cinematic_spacewalk",
+        title="Cinematic Spacewalk",
+        base_prompt=(
+            "An astronaut walks slowly across the moon near a landed spacecraft while "
+            "gray dust drifts under each step and the Earth hangs in the black sky, "
+            "shot with grand cinematic composition and gentle forward camera movement."
+        ),
+        shaping=PromptShapingOptions(
+            audio_prompt=(
+                "deep cinematic atmosphere, subtle suit movement, radio crackle, and "
+                "wide sci-fi sound design"
+            ),
+            duration_seconds=10.0,
+            orientation="landscape",
+        ),
+        expected_subject_terms=("astronaut",),
+        expected_scene_terms=("moon", "spacecraft", "space", "lunar"),
+        expected_audio_types=("music", "other", "speech"),
+        notes="Score-friendly cinematic science-fiction scene.",
+    ),
+    ShowcaseScene(
+        scene_id="noir_rain_city",
+        title="Noir Rainy City",
+        base_prompt=(
+            "A trench-coated detective walks alone through a rain-soaked city street at "
+            "night as reflections shimmer on the pavement under street lamps, captured "
+            "in moody noir style with slow deliberate camera tracking and strong contrast."
+        ),
+        shaping=PromptShapingOptions(
+            audio_prompt=(
+                "rainfall, footsteps on wet pavement, distant traffic, and moody noir "
+                "jazz club atmosphere"
+            ),
+            duration_seconds=10.0,
+            orientation="landscape",
+        ),
+        expected_subject_terms=("detective", "person", "man"),
+        expected_scene_terms=("street", "rain", "city", "pavement", "lamp"),
+        expected_audio_types=("music", "ambience", "other"),
+        notes="Noir scene where music or ambience are both acceptable.",
+    ),
+    ShowcaseScene(
         scene_id="stop_motion_workshop",
         title="Stop Motion Workshop",
         base_prompt=(
@@ -191,7 +254,14 @@ SHOWCASE_SCENES: tuple[ShowcaseScene, ...] = (
             orientation="landscape",
         ),
         expected_subject_terms=("fox",),
-        expected_scene_terms=("workshop", "table", "miniature", "desk", "workbench", "lamp"),
+        expected_scene_terms=(
+            "workshop",
+            "table",
+            "miniature",
+            "desk",
+            "workbench",
+            "lamp",
+        ),
         expected_audio_types=("other", "ambience", "music"),
         notes="Stylized handcrafted scene; foley-like audio preferred.",
     ),

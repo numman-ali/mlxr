@@ -28,9 +28,14 @@ def _load_script_module() -> types.ModuleType:
 class GeminiDescribeVideoScriptTests(unittest.TestCase):
     def test_build_prompt_requires_xml_only_response(self) -> None:
         module = _load_script_module()
-        prompt = module._build_prompt(Path("/tmp/review/dog.mp4"), "")
+        prompt = module._build_prompt(
+            Path("/tmp/review/dog.mp4"),
+            Path("/tmp/review/dog-audio-review.wav"),
+            "",
+        )
         self.assertIn("Return exactly one XML block and nothing else.", prompt)
         self.assertIn("@dog.mp4", prompt)
+        self.assertIn("@dog-audio-review.wav", prompt)
         self.assertIn("<audio_present>true|false|unknown</audio_present>", prompt)
 
     def test_parse_review_requires_all_expected_fields(self) -> None:
@@ -136,13 +141,32 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                 check: bool,
                 capture_output: bool,
                 text: bool,
-                cwd: Path,
+                cwd: Path | None = None,
             ) -> CompletedProcess[str]:
-                self.assertFalse(check)
                 self.assertTrue(capture_output)
                 self.assertTrue(text)
-                self.assertEqual(cwd, save_dir.resolve())
                 command_log.append(command)
+                if command[0] == "ffprobe":
+                    self.assertTrue(check)
+                    self.assertIsNone(cwd)
+                    return CompletedProcess(
+                        args=command,
+                        returncode=0,
+                        stdout="0\n",
+                        stderr="",
+                    )
+                if command[0] == "ffmpeg":
+                    self.assertTrue(check)
+                    self.assertIsNone(cwd)
+                    Path(command[-1]).write_bytes(b"fake-audio")
+                    return CompletedProcess(
+                        args=command,
+                        returncode=0,
+                        stdout="",
+                        stderr="",
+                    )
+                self.assertFalse(check)
+                self.assertEqual(cwd, save_dir.resolve())
                 return CompletedProcess(
                     args=command,
                     returncode=0,
@@ -165,12 +189,13 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                 exit_code = module.main()
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(len(command_log), 1)
-            self.assertEqual(command_log[0][0], "gemini")
-            self.assertEqual(command_log[0][1:3], ["-m", module.DEFAULT_MODEL])
-            self.assertIn("-p", command_log[0])
-            self.assertIn("--include-directories", command_log[0])
-            self.assertIn(str(save_dir.resolve()), command_log[0])
+            self.assertEqual(
+                [command[0] for command in command_log], ["ffprobe", "ffmpeg", "gemini"]
+            )
+            self.assertEqual(command_log[2][1:3], ["-m", module.DEFAULT_MODEL])
+            self.assertIn("-p", command_log[2])
+            self.assertIn("--include-directories", command_log[2])
+            self.assertIn(str(save_dir.resolve()), command_log[2])
 
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["primary_subject"], "dog")
@@ -178,10 +203,12 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
             self.assertEqual(payload["verdict"], "match")
 
             staged_video = save_dir / "dog.mp4"
+            staged_audio = save_dir / "dog-audio-review.wav"
             prompt_path = save_dir / "gemini-review-prompt.txt"
             raw_path = save_dir / "gemini-review-raw.txt"
             parsed_path = save_dir / "gemini-review.json"
             self.assertTrue(staged_video.exists())
+            self.assertTrue(staged_audio.exists())
             self.assertTrue(prompt_path.exists())
             self.assertTrue(raw_path.exists())
             self.assertTrue(parsed_path.exists())
@@ -201,6 +228,9 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                 },
             )
             self.assertIn("@dog.mp4", prompt_path.read_text(encoding="utf-8"))
+            self.assertIn(
+                "@dog-audio-review.wav", prompt_path.read_text(encoding="utf-8")
+            )
 
     def test_main_returns_nonzero_when_gemini_output_has_no_review_xml(self) -> None:
         module = _load_script_module()
@@ -220,12 +250,20 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                 patch.object(
                     module.subprocess,
                     "run",
-                    return_value=CompletedProcess(
-                        args=["gemini"],
-                        returncode=0,
-                        stdout="not xml",
-                        stderr="",
-                    ),
+                    side_effect=[
+                        CompletedProcess(
+                            args=["ffprobe"],
+                            returncode=0,
+                            stdout="",
+                            stderr="",
+                        ),
+                        CompletedProcess(
+                            args=["gemini"],
+                            returncode=0,
+                            stdout="not xml",
+                            stderr="",
+                        ),
+                    ],
                 ),
                 patch.object(sys, "argv", argv),
                 patch("sys.stderr", stderr),
@@ -263,12 +301,20 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
                 patch.object(
                     module.subprocess,
                     "run",
-                    return_value=CompletedProcess(
-                        args=["gemini"],
-                        returncode=0,
-                        stdout=xml_response,
-                        stderr="",
-                    ),
+                    side_effect=[
+                        CompletedProcess(
+                            args=["ffprobe"],
+                            returncode=0,
+                            stdout="",
+                            stderr="",
+                        ),
+                        CompletedProcess(
+                            args=["gemini"],
+                            returncode=0,
+                            stdout=xml_response,
+                            stderr="",
+                        ),
+                    ],
                 ),
                 patch.object(sys, "argv", argv),
                 patch("sys.stdout", stdout),
@@ -278,6 +324,18 @@ class GeminiDescribeVideoScriptTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertIsNone(payload["artifacts"])
+
+    def test_extract_audio_review_track_returns_none_without_audio_stream(self) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            video_path = Path(tmp_dir) / "silent.mp4"
+            review_dir = Path(tmp_dir) / "review"
+            review_dir.mkdir()
+            video_path.write_bytes(b"fake-video")
+            with patch.object(module, "_video_has_audio_stream", return_value=False):
+                self.assertIsNone(
+                    module._extract_audio_review_track(video_path, review_dir)
+                )
 
     def test_extract_review_xml_rejects_multiple_review_blocks(self) -> None:
         module = _load_script_module()

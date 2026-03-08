@@ -83,6 +83,12 @@ Current promoted rows only clear the first two rungs for:
 
 Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, and `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality and capability completion.
 
+Current showcase truth:
+
+- the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
+- it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
+- it does not prove that text-first natural-audio realism is solved; the stronger Gemini video-plus-audio review still classifies the current dog, nature, and natural-vintage natural-scene clips as music-like
+
 ## Recommended next implementation order
 
 1. improve `video.condition.audio` scene quality from “real bridge slice” to “quality-promoted capability”

@@ -45,6 +45,7 @@ class ParsedReview:
 @dataclass(frozen=True, slots=True)
 class ReviewArtifacts:
     staged_video_path: Path
+    staged_audio_path: Path | None
     raw_response_path: Path
     parsed_review_path: Path
     prompt_path: Path
@@ -93,6 +94,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Preserve the staged non-ignored review copy even when --save-dir is not set.",
     )
     parser.add_argument(
+        "--extract-audio-review-track",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Extract a mono WAV review track alongside the staged video and ask Gemini "
+            "to use both in the same review pass."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help=(
@@ -123,16 +133,29 @@ def _xml_schema_prompt() -> str:
     )
 
 
-def _build_prompt(staged_video_path: Path, extra_instruction: str) -> str:
+def _build_prompt(
+    staged_video_path: Path,
+    staged_audio_path: Path | None,
+    extra_instruction: str,
+) -> str:
     instruction = (
-        "Review the attached local video file. "
+        "Review the attached local media files. "
         "Focus on the visible scene, subject identity, motion, style, and camera feel. "
         "In the same review, inspect the audio and say whether audio is present and whether it sounds like music, ambience, barking, speech, or something else. "
         "If you are unsure, say that plainly in the relevant fields rather than guessing. "
-        f"The staged local file path is {staged_video_path}. "
-        f"Use the attached file @{staged_video_path.name} as the source of truth. "
+        f"Use the attached file @{staged_video_path.name} as the source of truth for the visuals. "
         f"{_xml_schema_prompt()}"
     )
+    if staged_audio_path is not None:
+        instruction = (
+            f"{instruction} Use the attached file @{staged_audio_path.name} as the "
+            "source of truth for the audio review."
+        )
+    else:
+        instruction = (
+            f"{instruction} No separate extracted audio file is attached, so assess "
+            "audio only from the video file if possible."
+        )
     if extra_instruction.strip():
         instruction = f"{instruction} {extra_instruction.strip()}"
     return instruction
@@ -157,6 +180,55 @@ def _stage_video(video_path: Path, save_dir: Path | None) -> tuple[Path, Path, b
     staged_video_path = review_dir / video_path.name
     shutil.copy2(video_path, staged_video_path)
     return review_dir, staged_video_path, keep_dir
+
+
+def _video_has_audio_stream(video_path: Path) -> bool:
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        str(video_path),
+    ]
+    result = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return bool(result.stdout.strip())
+
+
+def _extract_audio_review_track(video_path: Path, review_dir: Path) -> Path | None:
+    if not _video_has_audio_stream(video_path):
+        return None
+    staged_audio_path = review_dir / f"{video_path.stem}-audio-review.wav"
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(video_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+        str(staged_audio_path),
+    ]
+    subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return staged_audio_path
 
 
 def _extract_review_xml(raw_output: str) -> str:
@@ -222,6 +294,7 @@ def _write_artifacts(
     raw_output: str,
     parsed_review: ParsedReview,
     staged_video_path: Path,
+    staged_audio_path: Path | None,
 ) -> ReviewArtifacts:
     raw_response_path = review_dir / "gemini-review-raw.txt"
     parsed_review_path = review_dir / "gemini-review.json"
@@ -234,6 +307,7 @@ def _write_artifacts(
     )
     return ReviewArtifacts(
         staged_video_path=staged_video_path,
+        staged_audio_path=staged_audio_path,
         raw_response_path=raw_response_path,
         parsed_review_path=parsed_review_path,
         prompt_path=prompt_path,
@@ -273,6 +347,11 @@ def _print_result(
     if artifacts is not None:
         payload["artifacts"] = {
             "staged_video_path": str(artifacts.staged_video_path),
+            "staged_audio_path": (
+                str(artifacts.staged_audio_path)
+                if artifacts.staged_audio_path is not None
+                else None
+            ),
             "raw_response_path": str(artifacts.raw_response_path),
             "parsed_review_path": str(artifacts.parsed_review_path),
             "prompt_path": str(artifacts.prompt_path),
@@ -290,7 +369,12 @@ def main() -> int:
         raise SystemExit(f"Video path is not a file: {video_path}")
 
     review_dir, staged_video_path, keep_dir = _stage_video(video_path, args.save_dir)
-    prompt = _build_prompt(staged_video_path, args.extra_instruction)
+    staged_audio_path = (
+        _extract_audio_review_track(video_path, review_dir)
+        if args.extract_audio_review_track
+        else None
+    )
+    prompt = _build_prompt(staged_video_path, staged_audio_path, args.extra_instruction)
     command = [
         "gemini",
         "-m",
@@ -332,6 +416,7 @@ def main() -> int:
                 raw_output=result.stdout,
                 parsed_review=parsed_review,
                 staged_video_path=staged_video_path,
+                staged_audio_path=staged_audio_path,
             )
         _print_result(
             output_format=args.output_format,

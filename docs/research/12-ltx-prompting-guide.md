@@ -147,6 +147,8 @@ Current caveat:
 
 - stronger text shaping improves scene description quality
 - it does not yet guarantee `no_music` for text-first natural-audio scenes, so `no_music` remains advisory until the runtime evidence says otherwise
+- the stronger Gemini review path that now inspects both the MP4 and an extracted review WAV confirmed that the current 10-second dog, nature, and vintage natural-scene receipts still drift into score-like music
+- score-friendly text-first scenes are currently a better fit for the first promoted showcase pack than natural-audio realism scenes
 
 ## Sources
 
