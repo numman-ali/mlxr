@@ -9,7 +9,7 @@ Current command groups:
   - defaults to the local Unix-domain socket transport
   - supports `--plan-only`
   - supports `--wait`
-  - supports trusted local export of the first output artifact with `--export-path`
+  - supports trusted local export of the first output artifact with `--wait --export-path`
 
 Planned or still-growing command groups:
 

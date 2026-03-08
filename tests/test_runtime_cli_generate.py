@@ -156,6 +156,65 @@ class RuntimeCliGenerateTests(unittest.TestCase):
         self.assertEqual(parsed.export_path, Path("/tmp/result.mp4"))
         self.assertTrue(parsed.overwrite_export)
 
+    def test_generate_parser_rejects_export_without_wait(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--export-path",
+                    "/tmp/result.mp4",
+                ]
+            )
+
+    def test_generate_parser_rejects_wait_with_plan_only(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--plan-only",
+                    "--wait",
+                ]
+            )
+
+    def test_generate_parser_rejects_invalid_wait_values(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--wait",
+                    "--timeout-seconds",
+                    "0",
+                ]
+            )
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--wait",
+                    "--poll-interval-seconds",
+                    "-0.1",
+                ]
+            )
+
     def test_default_uds_path_uses_runtime_home_temp_socket(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_home = Path(tmp_dir) / "runtime-home"

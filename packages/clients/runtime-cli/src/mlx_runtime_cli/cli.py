@@ -5,8 +5,9 @@ import base64
 import json
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar, overload
 
 import httpx
 from mlx_runtime_core import RuntimeHome
@@ -25,6 +26,32 @@ from mlx_runtime_schemas import (
 )
 
 WorkflowQuality = Literal["auto", "fast", "balanced", "high"]
+_NamespaceT = TypeVar("_NamespaceT")
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    @overload
+    def parse_args(
+        self, args: Sequence[str] | None = None, namespace: None = None
+    ) -> argparse.Namespace: ...
+
+    @overload
+    def parse_args(
+        self, args: Sequence[str] | None, namespace: _NamespaceT
+    ) -> _NamespaceT: ...
+
+    @overload
+    def parse_args(self, *, namespace: _NamespaceT) -> _NamespaceT: ...
+
+    def parse_args(
+        self,
+        args: Sequence[str] | None = None,
+        namespace: _NamespaceT | None = None,
+    ) -> argparse.Namespace | _NamespaceT:
+        parsed = super().parse_args(args, namespace)
+        if isinstance(parsed, argparse.Namespace):
+            _validate_cli_args(self, parsed)
+        return parsed
 
 
 def _workflow_quality(value: str) -> WorkflowQuality:
@@ -40,7 +67,7 @@ def _workflow_quality(value: str) -> WorkflowQuality:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="First-party thin CLI for MLXR")
+    parser = _ArgumentParser(description="First-party thin CLI for MLXR")
     parser.add_argument(
         "--runtime-url",
         default=None,
@@ -273,6 +300,23 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
         default="auto",
         choices=("auto", "fast", "balanced", "high"),
     )
+
+
+def _validate_cli_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    if getattr(args, "command", None) != "generate":
+        return
+    if bool(args.plan_only) and bool(args.wait):
+        parser.error("--wait cannot be used with --plan-only")
+    if args.export_path is not None and not bool(args.wait):
+        parser.error("--export-path requires --wait")
+    if bool(args.overwrite_export) and args.export_path is None:
+        parser.error("--overwrite-export requires --export-path")
+    if float(args.timeout_seconds) <= 0:
+        parser.error("--timeout-seconds must be greater than 0")
+    if float(args.poll_interval_seconds) < 0:
+        parser.error("--poll-interval-seconds must be non-negative")
 
 
 def _generation_params(args: argparse.Namespace) -> dict[str, int]:
