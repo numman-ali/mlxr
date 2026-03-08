@@ -21,6 +21,7 @@ Already true:
 - real audio-bearing output works
 - first real `video.condition.audio` slice works
 - Gemini XML-based video review helper exists and is validated
+- a repo-owned showcase runner now exists at `scripts/ltx_showcase_generate.py`
 - the repo has a cleaner package structure and split LTX internals
 
 Still not true:
@@ -43,6 +44,7 @@ Still not true:
 ### B. Text-first prompt and workflow quality
 
 - [ ] use the new prompting guide as the source of truth for prompt shaping
+- [x] add a repo-owned text-first prompt shaper shared by the LTX workflow layer and the showcase runner
 - [ ] keep the default UX text-first
 - [ ] improve the planner’s internal prompt shaping for:
   - `natural_audio`
@@ -55,6 +57,7 @@ Still not true:
 ### C. Semantic validation workflow
 
 - [ ] keep `scripts/gemini_describe_video.py` as the default automated semantic cross-check
+- [x] make `scripts/ltx_showcase_generate.py` save `ffprobe` receipts and fail promotion when Gemini does not clear the expected subject/audio gate
 - [ ] use ffprobe and runtime manifests as execution truth
 - [ ] inspect stills/keyframes whenever Gemini and runtime expectations disagree
 - [ ] do not promote clips that Gemini identifies as the wrong scene or wrong audio character
@@ -80,6 +83,11 @@ Still not true:
   - Gemini parsed review
 - [ ] reject any clip that is semantically off-target or drifts into the wrong audio mode
 - [ ] only promote the pack once all five clips clear the same truth bar
+
+Current dog-showcase truth:
+
+- the first 10-second dog showcase receipt at `384x224 / 241f / 24fps` now produces the intended dog-with-owner park scene visually
+- Gemini still classifies its audio as `music`, so that clip is not promotable for the natural-audio/no-music scene
 
 Suggested initial scene set:
 

@@ -20,6 +20,7 @@ Current measured caveat:
 - the current fixed-seed dog ladder now passes a clear-dog `384x224 / 17f / 24fps` rung and a coherent `768x512 / 33f / 24fps` rung against the real Hugging Face-converted artifact set
 - the AV bridge now exports checkpoint-backed audio as muxed `mp4` or standalone `wav`, and the current repo-owned MLX audio path now includes the checkpoint’s full BWE wrapper instead of stopping at the `AMP1` base vocoder
 - the current `video.condition.audio` slice is real on the artifact-backed bridge and preserves the resolved reference audio into the output path; that is a truthful preserved-reference capability, but it is still separate from broader scene-semantic quality on the conditioned path, and reference-video input, retake, interpolation, one-stage, HQ, and LoRA-driven controls are still tracked separately in the capability matrix
+- the current text-first prompt stack now uses a shared repo-owned shaper for explicit audio details plus `natural_audio` / `no_music` / duration / orientation cues, but those remain advisory text controls until semantic validation says otherwise; the first 10-second dog showcase run now passes visually and still fails the no-music audio bar
 - the remaining truth gap is broader capability completion plus recommended-resolution and HQ-profile validation once that capability matrix is green
 
 Out of first slice:

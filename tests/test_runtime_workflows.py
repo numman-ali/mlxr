@@ -80,13 +80,14 @@ class RuntimeWorkflowTests(unittest.TestCase):
                     result.plan.resolved_prompt,
                 )
                 self.assertIn(
-                    "Audio direction: natural diegetic scene sound only",
+                    "Audio direction: use only natural diegetic environmental sound",
                     result.plan.resolved_prompt,
                 )
                 self.assertIn(
-                    "Audio direction: no soundtrack, no score, and no background music.",
+                    "Audio prohibition: no soundtrack, no score, no background music",
                     result.plan.resolved_prompt,
                 )
+                self.assertIn("no piano", result.plan.resolved_prompt)
                 self.assertIn(
                     "Target duration: about 10.0 seconds.", result.plan.resolved_prompt
                 )

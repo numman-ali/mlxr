@@ -15,7 +15,7 @@ This guide is specifically for the current first-party `LTX-2.3` proving path. I
 
 The official `LTX-2` guidance is consistent on a few important points:
 
-- prompts should be one flowing paragraph
+- prompts should ideally be one flowing paragraph
 - prompts should start with the action
 - descriptions should be literal, specific, and chronological
 - prompts should cover:
@@ -62,7 +62,21 @@ Internally, `MLXR` may split that into:
 - explicit audio details
 - advisory framing and duration cues
 
+The current repo-owned implementation of that shaping lives in:
+
+- `packages/families/ltx/src/ltx/prompting.py`
+
+and is shared by:
+
+- the LTX workflow strategy
+- the showcase runner
+
 The planner should not require users to think in terms of separate audio and video prompts by default, but it may derive those internally.
+
+Current implementation caveat:
+
+- the repo-owned shaper currently emits structured multi-line guidance blocks such as `Audio details:` and `Audio prohibition:`
+- that is a deliberate prompt-shaping experiment for the current proving path, not a claim that this exact formatting is upstream-canonical
 
 ## Prompt shaping rules in MLXR
 
@@ -126,6 +140,11 @@ A prompt/process improvement should count only after:
 - the runtime receipts are real and non-preview
 - Gemini review and stills agree on the scene
 - the clip clears the intended semantic bar at the current rung
+
+Current caveat:
+
+- stronger text shaping improves scene description quality
+- it does not yet guarantee `no_music` for text-first natural-audio scenes, so `no_music` remains advisory until the runtime evidence says otherwise
 
 ## Sources
 
