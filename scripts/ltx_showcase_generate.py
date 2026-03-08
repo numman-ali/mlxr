@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from ltx.prompting import PromptShapingOptions, shape_text_first_prompt
+from ltx.prompting import PromptShapingOptions, shape_text_first_prompt_bundle
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tmp" / "showcase-runs"
@@ -60,6 +60,7 @@ class SceneSummary(TypedDict):
     scene_id: str
     title: str
     prompt: str
+    negative_prompt: str | None
     video_path: str
     manifest_path: str
     ffprobe_path: str
@@ -311,13 +312,17 @@ def main(argv: list[str] | None = None) -> int:
 
     summary: list[SceneSummary] = []
     for scene in selected:
-        prompt = shape_text_first_prompt(scene.base_prompt, options=scene.shaping)
+        resolved_prompts = shape_text_first_prompt_bundle(
+            scene.base_prompt, options=scene.shaping
+        )
+        prompt = resolved_prompts.prompt
         run_name = f"showcase-{scene.scene_id}"
         run_result = _run_smoke(
             artifact_root=args.artifact_root.expanduser().resolve(),
             output_root=output_root,
             run_name=run_name,
             prompt=prompt,
+            negative_prompt=resolved_prompts.negative_prompt,
             width=int(args.width),
             height=int(args.height),
             num_frames=int(args.num_frames),
@@ -341,6 +346,7 @@ def main(argv: list[str] | None = None) -> int:
             "scene_id": scene.scene_id,
             "title": scene.title,
             "prompt": prompt,
+            "negative_prompt": resolved_prompts.negative_prompt,
             "video_path": run_result["video_path"],
             "manifest_path": run_result["manifest_path"],
             "ffprobe_path": str(ffprobe_path),
@@ -376,6 +382,7 @@ def _run_smoke(
     output_root: Path,
     run_name: str,
     prompt: str,
+    negative_prompt: str | None,
     width: int,
     height: int,
     num_frames: int,
@@ -404,6 +411,8 @@ def _run_smoke(
         run_name,
         "--no-stage-debug",
     ]
+    if negative_prompt is not None:
+        command.extend(["--negative-prompt", negative_prompt])
     result = subprocess.run(
         command, check=True, capture_output=True, text=True, cwd=REPO_ROOT
     )

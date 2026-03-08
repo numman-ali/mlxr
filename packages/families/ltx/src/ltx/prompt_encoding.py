@@ -25,6 +25,11 @@ class PromptEncodingResult:
     transformer_apply_gated_attention: bool | None = None
     transformer_cross_attention_adaln: bool | None = None
     config_source: str | None = None
+    negative_prompt_text: str | None = None
+    negative_video_context: object | None = None
+    negative_audio_context: object | None = None
+    negative_video_context_shape: tuple[int, ...] | None = None
+    negative_audio_context_shape: tuple[int, ...] | None = None
 
 
 class PromptEncoder(Protocol):
@@ -34,6 +39,7 @@ class PromptEncoder(Protocol):
         *,
         max_length: int = 1024,
         return_audio_context: bool = True,
+        negative_prompt: str | None = None,
     ) -> PromptEncodingResult: ...
 
     def close(self) -> None: ...

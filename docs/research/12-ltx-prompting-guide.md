@@ -146,9 +146,11 @@ A prompt/process improvement should count only after:
 Current caveat:
 
 - stronger text shaping improves scene description quality
-- it does not yet guarantee `no_music` for text-first natural-audio scenes, so `no_music` remains advisory until the runtime evidence says otherwise
-- the stronger Gemini review path that now inspects both the MP4 and an extracted review WAV confirmed that the current 10-second dog, nature, and vintage natural-scene receipts still drift into score-like music
-- score-friendly text-first scenes are currently a better fit for the first promoted showcase pack than natural-audio realism scenes
+- `no_music` is still not a blanket guarantee for text-first natural-audio scenes
+- the first repo-owned scene-level recovery path that improved this was family-local negative guidance plus rescaled CFG on the distilled AV bridge
+- that path is now strong enough for the 10-second dog receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`, where Gemini reviews the clip as a golden retriever with barking and natural outdoor ambience
+- that does not yet generalize to every natural scene; nature and vintage natural-scene realism still need to be revalidated on the newer guidance path
+- score-friendly text-first scenes remain the safest promoted showcase set until more natural scenes clear the same bar
 
 ## Sources
 

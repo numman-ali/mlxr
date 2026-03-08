@@ -103,6 +103,13 @@ class RuntimeWorkflowTests(unittest.TestCase):
                     "may still drift toward soundtrack-like audio",
                     "\n".join(result.plan.warnings),
                 )
+                resolved_negative_prompt = result.plan.metadata.get(
+                    "resolved_negative_prompt"
+                )
+                self.assertIsInstance(resolved_negative_prompt, str)
+                assert isinstance(resolved_negative_prompt, str)
+                self.assertIn("background music", resolved_negative_prompt)
+                self.assertIn("chimes", resolved_negative_prompt)
 
     def test_workflow_plan_selects_image_conditioning_when_image_reference_exists(
         self,
@@ -219,7 +226,7 @@ class RuntimeWorkflowTests(unittest.TestCase):
             with (
                 patched_inline_job_process_context(),
                 patched_ltx_prompt_encoder(),
-                patched_ltx_video_generator(include_audio=True),
+                patched_ltx_video_generator(include_audio=True) as generators,
                 TestClient(create_app(state)) as client,
             ):
                 register_local_ltx_model(client, source_dir)
@@ -230,6 +237,11 @@ class RuntimeWorkflowTests(unittest.TestCase):
                         "intent": {
                             "model_id": "ltx-2.3-fast-local",
                             "prompt": "golden retriever in a park",
+                            "audio_prompt": "happy barking and light footsteps",
+                            "preferences": {
+                                "natural_audio": True,
+                                "no_music": True,
+                            },
                             "params": {
                                 "width": 96,
                                 "height": 64,
@@ -245,6 +257,7 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 result = response_model(response, WorkflowRunResult)
                 terminal = wait_for_job_terminal_state(client, result.submit.job_id)
                 self.assertEqual(terminal["state"], "completed")
+                self.assertTrue(generators[0].calls[0]["negative_prompt_present"])
 
     def test_workflow_run_supports_audio_conditioning_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

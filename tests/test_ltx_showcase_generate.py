@@ -197,6 +197,48 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
             self.assertNotIn("--strict", command)
             self.assertIn(str(video_path.parent / "gemini-review"), command)
 
+    def test_run_smoke_includes_negative_prompt_when_present(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_root = Path(tmp_dir) / "artifacts"
+            artifact_root.mkdir()
+            output_root = Path(tmp_dir) / "output"
+            output_root.mkdir()
+
+            captured: dict[str, object] = {}
+
+            class _Completed:
+                def __init__(self) -> None:
+                    self.returncode = 0
+                    self.stdout = '{"video_path":"/tmp/clip.mp4","manifest_path":"/tmp/manifest.json"}'
+
+            def fake_run(command: list[str], **kwargs: object) -> _Completed:
+                captured["command"] = command
+                return _Completed()
+
+            original_run = module.subprocess.run
+            module.subprocess.run = fake_run
+            try:
+                payload = module._run_smoke(
+                    artifact_root=artifact_root,
+                    output_root=output_root,
+                    run_name="dog-scene",
+                    prompt="dog in park",
+                    negative_prompt="background music, soundtrack",
+                    width=384,
+                    height=224,
+                    num_frames=241,
+                    fps=24,
+                )
+            finally:
+                module.subprocess.run = original_run
+
+            self.assertEqual(payload["video_path"], "/tmp/clip.mp4")
+            command = captured["command"]
+            assert isinstance(command, list)
+            self.assertIn("--negative-prompt", command)
+            self.assertIn("background music, soundtrack", command)
+
     def test_run_gemini_review_surfaces_nonzero_exit_as_runtime_error(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp_dir:

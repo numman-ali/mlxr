@@ -253,7 +253,9 @@ class RuntimeJobTests(unittest.TestCase):
                 terminal = wait_for_job_terminal_state(client, first_job_id)
                 self.assertEqual(terminal["state"], "completed")
 
-    def test_job_fails_when_negative_prompt_is_requested_for_fast_path(self) -> None:
+    def test_job_completes_when_negative_prompt_is_requested_for_fast_path(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             source_dir = make_local_bundle(root)
@@ -287,11 +289,7 @@ class RuntimeJobTests(unittest.TestCase):
                 job_id = response_model(submit, JobSubmitResult).job_id
 
                 terminal = wait_for_job_terminal_state(client, job_id)
-                self.assertEqual(terminal["state"], "failed")
-                error = terminal.get("error")
-                self.assertIsInstance(error, str)
-                assert isinstance(error, str)
-                self.assertIn("does not support negative_prompt yet", error)
+                self.assertEqual(terminal["state"], "completed")
 
     def test_job_cancellation_marks_terminal_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

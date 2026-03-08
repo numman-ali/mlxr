@@ -18,6 +18,8 @@ from ..prompt_encoding import PromptEncodingResult
 from .conditioning import (
     _effective_seed,
     _half_resolution_padded_shape,
+    _optional_negative_audio_context,
+    _optional_negative_video_context,
     _prompt_context_dtype,
     _prompt_signature,
     _require_audio_context,
@@ -117,6 +119,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         _assert_prompt_runtime_contract(prompt_context, runtime_config)
         video_context = _require_video_context(prompt_context)
         audio_context = _require_audio_context(prompt_context)
+        negative_video_context = _optional_negative_video_context(prompt_context)
+        negative_audio_context = _optional_negative_audio_context(prompt_context)
         padded_shape = _resolve_padded_shape(width=width, height=height)
         effective_seed = _effective_seed(
             prompt_context=prompt_context,
@@ -210,6 +214,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             audio_latents=audio_latents,
             audio_positions=stage1_audio_positions,
             audio_embeddings=audio_context,
+            negative_text_embeddings=negative_video_context,
+            negative_audio_embeddings=negative_audio_context,
             sigmas=imports.stage_1_sigmas,
             state=stage1_state,
             runtime_config=runtime_config,
@@ -332,6 +338,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             audio_latents=audio_latents,
             audio_positions=stage2_audio_positions,
             audio_embeddings=audio_context,
+            negative_text_embeddings=negative_video_context,
+            negative_audio_embeddings=negative_audio_context,
             sigmas=imports.stage_2_sigmas,
             state=stage2_state,
             runtime_config=runtime_config,
@@ -412,6 +420,13 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 "audio_backend": audio_backend,
                 "audio_bwe_applied": audio_backend == "mlx_vocoder_with_bwe",
                 "audio_conditioned": audio_conditioning is not None,
+                "guidance_mode": (
+                    "cfg"
+                    if prompt_context.negative_prompt_text is not None
+                    else "positive_only"
+                ),
+                "negative_prompt_present": prompt_context.negative_prompt_text
+                is not None,
             },
         )
 

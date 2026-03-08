@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -97,6 +98,18 @@ def _require_array_input(
     raise RuntimeError(context)
 
 
+@dataclass(frozen=True, slots=True)
+class _SinglePromptEncoding:
+    video_context: object
+    audio_context: object | None
+    attention_mask: object
+    token_count: int
+    sequence_length: int
+    video_context_shape: tuple[int, ...]
+    attention_mask_shape: tuple[int, ...]
+    audio_context_shape: tuple[int, ...] | None = None
+
+
 if runtime._RUNTIME_IMPORT_ERROR is None:
     mx = runtime.mx
     AutoTokenizer = runtime.AutoTokenizer
@@ -124,85 +137,38 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             *,
             max_length: int = 1024,
             return_audio_context: bool = True,
+            negative_prompt: str | None = None,
         ) -> PromptEncodingResult:
             self.max_length = max_length
             self._ensure_loaded()
-            if self.tokenizer is None:
-                raise RuntimeError("LTX prompt encoder tokenizer failed to initialize")
-            if self.language_model is None or self.feature_extractor is None:
-                raise RuntimeError("LTX prompt encoder model failed to initialize")
-            if self.video_connector is None:
-                raise RuntimeError(
-                    "LTX prompt encoder video connector failed to initialize"
-                )
             if self.layout is None:
                 raise RuntimeError("LTX prompt encoder layout failed to initialize")
             layout = self.layout
-
-            inputs = self.tokenizer(
-                prompt,
-                return_tensors="np",
+            prompt_encoding = self._encode_single_prompt(
+                prompt=prompt,
                 max_length=max_length,
-                truncation=True,
-                padding="max_length",
+                return_audio_context=return_audio_context,
             )
-            input_ids = mx.array(
-                _require_array_input(
-                    inputs["input_ids"],
-                    context="Tokenizer did not return input_ids",
+            normalized_negative_prompt = (
+                negative_prompt.strip() if negative_prompt else ""
+            )
+            negative_encoding: _SinglePromptEncoding | None = None
+            if normalized_negative_prompt:
+                negative_encoding = self._encode_single_prompt(
+                    prompt=normalized_negative_prompt,
+                    max_length=max_length,
+                    return_audio_context=return_audio_context,
                 )
-            )
-            attention_mask = mx.array(
-                _require_array_input(
-                    inputs["attention_mask"],
-                    context="Tokenizer did not return attention_mask",
-                )
-            )
-            _, all_hidden_states = self.language_model(
-                inputs=input_ids,
-                input_embeddings=None,
-                attention_mask=attention_mask,
-                output_hidden_states=True,
-            )
-            video_features, audio_features = self.feature_extractor(
-                all_hidden_states,
-                attention_mask,
-                padding_side="left",
-            )
-            additive_mask = _convert_to_additive_mask(
-                attention_mask, video_features.dtype
-            )
-
-            video_context, video_mask = self.video_connector(
-                video_features, additive_mask
-            )
-            video_context, binary_mask = _to_binary_mask(video_context, video_mask)
-            audio_context: object | None = None
-            audio_shape: tuple[int, ...] | None = None
-            if return_audio_context and self.audio_connector is not None:
-                if audio_features is None:
-                    raise ValueError(
-                        "Current V2 LTX prompt path requires audio feature projections"
-                    )
-                audio_context, _ = self.audio_connector(
-                    audio_features,
-                    additive_mask,
-                )
-                audio_shape = tuple(int(size) for size in audio_context.shape)
-                mx.eval(audio_context)
-
-            mx.eval(video_context, binary_mask)
-            token_count = int(mx.sum(attention_mask).item())
             return PromptEncodingResult(
-                video_context=video_context,
-                audio_context=audio_context,
-                attention_mask=binary_mask,
+                video_context=prompt_encoding.video_context,
+                audio_context=prompt_encoding.audio_context,
+                attention_mask=prompt_encoding.attention_mask,
                 prompt_text=prompt,
-                token_count=token_count,
-                sequence_length=int(binary_mask.shape[-1]),
-                video_context_shape=tuple(int(size) for size in video_context.shape),
-                attention_mask_shape=tuple(int(size) for size in binary_mask.shape),
-                audio_context_shape=audio_shape,
+                token_count=prompt_encoding.token_count,
+                sequence_length=prompt_encoding.sequence_length,
+                video_context_shape=prompt_encoding.video_context_shape,
+                attention_mask_shape=prompt_encoding.attention_mask_shape,
+                audio_context_shape=prompt_encoding.audio_context_shape,
                 context_representation="post_connector",
                 caption_proj_before_connector=layout.caption_proj_before_connector,
                 rope_type=layout.rope_type,
@@ -218,6 +184,27 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                     layout.transformer_cross_attention_adaln
                 ),
                 config_source=layout.config_source,
+                negative_prompt_text=normalized_negative_prompt or None,
+                negative_video_context=(
+                    negative_encoding.video_context
+                    if negative_encoding is not None
+                    else None
+                ),
+                negative_audio_context=(
+                    negative_encoding.audio_context
+                    if negative_encoding is not None
+                    else None
+                ),
+                negative_video_context_shape=(
+                    negative_encoding.video_context_shape
+                    if negative_encoding is not None
+                    else None
+                ),
+                negative_audio_context_shape=(
+                    negative_encoding.audio_context_shape
+                    if negative_encoding is not None
+                    else None
+                ),
             )
 
         def close(self) -> None:
@@ -283,6 +270,87 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             self.tokenizer.padding_side = "left"
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        def _encode_single_prompt(
+            self,
+            *,
+            prompt: str,
+            max_length: int,
+            return_audio_context: bool,
+        ) -> _SinglePromptEncoding:
+            if self.tokenizer is None:
+                raise RuntimeError("LTX prompt encoder tokenizer failed to initialize")
+            if self.language_model is None or self.feature_extractor is None:
+                raise RuntimeError("LTX prompt encoder model failed to initialize")
+            if self.video_connector is None:
+                raise RuntimeError(
+                    "LTX prompt encoder video connector failed to initialize"
+                )
+
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="np",
+                max_length=max_length,
+                truncation=True,
+                padding="max_length",
+            )
+            input_ids = mx.array(
+                _require_array_input(
+                    inputs["input_ids"],
+                    context="Tokenizer did not return input_ids",
+                )
+            )
+            attention_mask = mx.array(
+                _require_array_input(
+                    inputs["attention_mask"],
+                    context="Tokenizer did not return attention_mask",
+                )
+            )
+            _, all_hidden_states = self.language_model(
+                inputs=input_ids,
+                input_embeddings=None,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+            )
+            video_features, audio_features = self.feature_extractor(
+                all_hidden_states,
+                attention_mask,
+                padding_side="left",
+            )
+            additive_mask = _convert_to_additive_mask(
+                attention_mask, video_features.dtype
+            )
+
+            video_context, video_mask = self.video_connector(
+                video_features, additive_mask
+            )
+            video_context, binary_mask = _to_binary_mask(video_context, video_mask)
+            audio_context: object | None = None
+            audio_shape: tuple[int, ...] | None = None
+            if return_audio_context and self.audio_connector is not None:
+                if audio_features is None:
+                    raise ValueError(
+                        "Current V2 LTX prompt path requires audio feature projections"
+                    )
+                audio_context, _ = self.audio_connector(
+                    audio_features,
+                    additive_mask,
+                )
+                audio_shape = tuple(int(size) for size in audio_context.shape)
+                mx.eval(audio_context)
+
+            mx.eval(video_context, binary_mask)
+            token_count = int(mx.sum(attention_mask).item())
+            return _SinglePromptEncoding(
+                video_context=video_context,
+                audio_context=audio_context,
+                attention_mask=binary_mask,
+                token_count=token_count,
+                sequence_length=int(binary_mask.shape[-1]),
+                video_context_shape=tuple(int(size) for size in video_context.shape),
+                attention_mask_shape=tuple(int(size) for size in binary_mask.shape),
+                audio_context_shape=audio_shape,
+            )
 
         def _load_connector_weights(self) -> None:
             if (

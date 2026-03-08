@@ -10,7 +10,12 @@ from mlx_runtime_schemas import (
 )
 from mlx_runtime_workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
 
-from .prompting import Orientation, PromptShapingOptions, shape_text_first_prompt
+from .prompting import (
+    Orientation,
+    PromptShapingOptions,
+    ShapedPromptBundle,
+    shape_text_first_prompt_bundle,
+)
 
 
 class LTXWorkflowStrategy(FamilyWorkflowStrategy):
@@ -56,7 +61,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "The current text-only AV path may still drift toward soundtrack-like audio; audio-conditioned generation is the stronger control path."
             )
 
-        resolved_prompt = _resolved_prompt(intent)
+        resolved_prompts = _resolved_prompts(intent)
         pipeline_variant = _pipeline_variant(capability)
         selected_profile = _selected_profile(capability, task)
 
@@ -67,7 +72,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             selected_task=task,
             selected_profile=selected_profile,
             pipeline_variant=pipeline_variant,
-            resolved_prompt=resolved_prompt,
+            resolved_prompt=resolved_prompts.prompt,
             resolved_video_prompt=intent.video_prompt,
             resolved_audio_prompt=intent.audio_prompt,
             references=list(references),
@@ -93,6 +98,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "implemented_task_surface": list(capability.tasks),
                 "supported_reference_kinds": _supported_reference_kinds(capability),
                 "workflow_mode": "simple_generation",
+                "resolved_negative_prompt": resolved_prompts.negative_prompt,
             },
         )
 
@@ -106,7 +112,10 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             raise ValueError(
                 f"Model '{context.model.model_id}' does not support task '{plan.selected_task}'"
             )
+        resolved_prompts = _resolved_prompts(intent)
         inputs: dict[str, object] = {"prompt": plan.resolved_prompt}
+        if resolved_prompts.negative_prompt is not None:
+            inputs["negative_prompt"] = resolved_prompts.negative_prompt
         if plan.selected_task in {"video.condition.image", "video.condition.audio"}:
             images: list[dict[str, object]] = []
             for reference in intent.references:
@@ -190,6 +199,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "workflow_variant": plan.pipeline_variant,
                 "resolved_video_prompt": plan.resolved_video_prompt,
                 "resolved_audio_prompt": plan.resolved_audio_prompt,
+                "resolved_negative_prompt": resolved_prompts.negative_prompt,
             }
         )
         extensions["ltx"] = ltx_extensions
@@ -219,10 +229,9 @@ def _references_by_kind(
     return grouped
 
 
-def _resolved_prompt(intent: WorkflowIntent) -> str:
+def _resolved_prompts(intent: WorkflowIntent) -> ShapedPromptBundle:
     orientation = _normalized_orientation(intent.preferences.orientation)
-
-    return shape_text_first_prompt(
+    return shape_text_first_prompt_bundle(
         intent.prompt,
         options=PromptShapingOptions(
             video_prompt=intent.video_prompt,

@@ -171,8 +171,11 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                 def __init__(self) -> None:
                     self.closed = False
 
-                def encode(self, prompt: str) -> object:
+                def encode(
+                    self, prompt: str, *, negative_prompt: str | None = None
+                ) -> object:
                     call_log.append(f"encode:{prompt}")
+                    test_case.assertIsNone(negative_prompt)
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),
@@ -380,7 +383,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             )
 
             class FakeEncoder:
-                def encode(self, prompt: str) -> object:
+                def encode(
+                    self, prompt: str, *, negative_prompt: str | None = None
+                ) -> object:
+                    del negative_prompt
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),
@@ -473,7 +479,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             )
 
             class FakeEncoder:
-                def encode(self, prompt: str) -> object:
+                def encode(
+                    self, prompt: str, *, negative_prompt: str | None = None
+                ) -> object:
+                    del negative_prompt
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),

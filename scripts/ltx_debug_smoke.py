@@ -40,7 +40,7 @@ def _now_utc() -> datetime:
 
 
 class PromptEncoderLike(Protocol):
-    def encode(self, prompt: str) -> object: ...
+    def encode(self, prompt: str, *, negative_prompt: str | None = None) -> object: ...
 
     def close(self) -> None: ...
 
@@ -161,6 +161,7 @@ class SmokeConfig:
     clean_lifecycle: bool
     backend_progress: bool
     heartbeat_seconds: float
+    negative_prompt: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +188,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--spatial-upsampler-path", type=Path)
     parser.add_argument("--text-encoder-path", type=Path)
     parser.add_argument("--prompt", required=True)
+    parser.add_argument("--negative-prompt")
     parser.add_argument(
         "--profile",
         choices=tuple(PROFILE_PRESETS.keys()),
@@ -243,6 +245,11 @@ def build_config(args: argparse.Namespace) -> SmokeConfig:
     return SmokeConfig(
         artifact_paths=artifact_paths,
         prompt=args.prompt,
+        negative_prompt=(
+            str(getattr(args, "negative_prompt", "")).strip()
+            if getattr(args, "negative_prompt", None)
+            else None
+        ),
         profile_name=profile_name,
         width=width,
         height=height,
@@ -353,6 +360,7 @@ def run_smoke(
         "status": "running",
         "started_at_utc": started_at.isoformat().replace("+00:00", "Z"),
         "prompt": config.prompt,
+        "negative_prompt": config.negative_prompt,
         "profile_name": config.profile_name,
         "seed": config.seed,
         "width": config.width,
@@ -411,7 +419,10 @@ def run_smoke(
 
             prompt_started = time.perf_counter()
             print("encoding prompt", flush=True)
-            prompt_context = encoder.encode(config.prompt)
+            prompt_context = encoder.encode(
+                config.prompt,
+                negative_prompt=config.negative_prompt,
+            )
             timings_ms["prompt_encode"] = _elapsed_ms(prompt_started)
 
             if config.clean_lifecycle:
@@ -571,7 +582,7 @@ def _validate_artifact_paths(paths: ArtifactPaths) -> ArtifactPaths:
 
 
 def _cli_args_from_config(config: SmokeConfig) -> list[str]:
-    return [
+    command = [
         "uv",
         "run",
         "python",
@@ -606,6 +617,9 @@ def _cli_args_from_config(config: SmokeConfig) -> list[str]:
         "--heartbeat-seconds",
         str(config.heartbeat_seconds),
     ]
+    if config.negative_prompt is not None:
+        command.extend(["--negative-prompt", config.negative_prompt])
+    return command
 
 
 def _safe_close(resource: object, errors: list[str] | None = None) -> None:

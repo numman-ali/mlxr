@@ -334,22 +334,19 @@ class RuntimeUnitTests(unittest.TestCase):
                     self.assertEqual(encode_result.metrics["audio_sample_rate"], 24000)
                     self.assertEqual(encode_result.metrics["audio_channels"], 2)
 
-    def test_ltx_adapter_prompt_encode_rejects_negative_prompt(self) -> None:
+    def test_ltx_adapter_prompt_encode_accepts_negative_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
             runtime_home.ensure_layout()
             artifact = self._artifactized_portable_artifact(runtime_home)
             adapter = LTXFamilyAdapter()
-            loaded = adapter.load(
-                artifact,
-                ExecutionProfile(task="video.generate", profile="bf16"),
-            )
+            with patched_ltx_prompt_encoder() as encoders:
+                loaded = adapter.load(
+                    artifact,
+                    ExecutionProfile(task="video.generate", profile="bf16"),
+                )
 
-            with self.assertRaisesRegex(
-                ValueError,
-                "does not support negative_prompt yet",
-            ):
-                adapter.run_stage(
+                result = adapter.run_stage(
                     loaded,
                     ExecutionStage(
                         stage_id="prompt_encode",
@@ -360,6 +357,8 @@ class RuntimeUnitTests(unittest.TestCase):
                         params={"simulate_delay_seconds": 0.0},
                     ),
                 )
+                self.assertTrue(result.metrics["negative_prompt_present"])
+                self.assertEqual(len(encoders), 1)
 
     def test_ltx_adapter_condition_inputs_prepares_resolved_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

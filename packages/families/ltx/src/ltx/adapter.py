@@ -28,12 +28,12 @@ from ._adapter.capability import (
 )
 from ._adapter.stages import (
     _fps,
+    _negative_prompt_text,
     _num_frames,
     _prepared_audio_conditioning_input,
     _prepared_conditioning_inputs,
     _prompt_encoder,
     _prompt_text,
-    _reject_unsupported_negative_prompt,
     _runtime_state,
     _seed,
     _stage_dimension,
@@ -66,6 +66,7 @@ class LTXFamilyAdapter:
     _prompt_encoder = _prompt_encoder
     _video_generator = _video_generator
     _prompt_text = _prompt_text
+    _negative_prompt_text = _negative_prompt_text
     _prepared_conditioning_inputs = _prepared_conditioning_inputs
     _prepared_audio_conditioning_input = _prepared_audio_conditioning_input
     _stage_dimension = _stage_dimension
@@ -73,7 +74,6 @@ class LTXFamilyAdapter:
     _fps = _fps
     _seed = _seed
     _stage_task = _stage_task
-    _reject_unsupported_negative_prompt = _reject_unsupported_negative_prompt
 
     _role_candidates = _role_candidates
     _prepare_components = _prepare_components

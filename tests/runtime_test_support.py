@@ -212,6 +212,7 @@ class FakePromptEncoder:
         *,
         max_length: int = 1024,
         return_audio_context: bool = True,
+        negative_prompt: str | None = None,
     ) -> PromptEncodingResult:
         self.calls.append((prompt, max_length, return_audio_context))
         audio_context = (
@@ -219,6 +220,7 @@ class FakePromptEncoder:
             if self.include_audio_context and return_audio_context
             else None
         )
+        normalized_negative_prompt = negative_prompt.strip() if negative_prompt else ""
         return PromptEncodingResult(
             video_context="video-context",
             audio_context=audio_context,
@@ -240,6 +242,23 @@ class FakePromptEncoder:
             transformer_apply_gated_attention=True,
             transformer_cross_attention_adaln=True,
             config_source="fake://prompt-config",
+            negative_prompt_text=normalized_negative_prompt or None,
+            negative_video_context=(
+                "negative-video-context" if normalized_negative_prompt else None
+            ),
+            negative_audio_context=(
+                "negative-audio-context"
+                if normalized_negative_prompt and audio_context is not None
+                else None
+            ),
+            negative_video_context_shape=(
+                (1, self.sequence_length, 3840) if normalized_negative_prompt else None
+            ),
+            negative_audio_context_shape=(
+                (1, self.sequence_length, 2048)
+                if normalized_negative_prompt and audio_context is not None
+                else None
+            ),
         )
 
     def close(self) -> None:
@@ -280,6 +299,8 @@ class FakeVideoGenerator:
                 "seed": seed,
                 "conditioning_count": len(conditioning_inputs),
                 "audio_conditioned": audio_conditioning is not None,
+                "negative_prompt_present": prompt_context.negative_prompt_text
+                is not None,
             }
         )
         effective_seed = 0 if seed is None else seed

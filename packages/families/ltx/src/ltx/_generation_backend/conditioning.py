@@ -173,6 +173,22 @@ def _require_audio_context(prompt_context: PromptEncodingResult) -> MLXArray:
     return prompt_context.audio_context
 
 
+def _optional_negative_video_context(
+    prompt_context: PromptEncodingResult,
+) -> MLXArray | None:
+    if not _looks_like_mlx_array(prompt_context.negative_video_context):
+        return None
+    return prompt_context.negative_video_context
+
+
+def _optional_negative_audio_context(
+    prompt_context: PromptEncodingResult,
+) -> MLXArray | None:
+    if not _looks_like_mlx_array(prompt_context.negative_audio_context):
+        return None
+    return prompt_context.negative_audio_context
+
+
 def _attention_mask(prompt_context: PromptEncodingResult) -> MLXArray | None:
     if not _looks_like_mlx_array(prompt_context.attention_mask):
         return None

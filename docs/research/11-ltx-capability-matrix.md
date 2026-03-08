@@ -81,24 +81,26 @@ Current promoted rows only clear the first two rungs for:
 - distilled two-stage T2V
 - distilled two-stage I2V
 
-Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, and `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality and capability completion.
+Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio, and the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `384x224 / 241f / 24fps`. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality and capability completion.
 
 Current showcase truth:
 
 - the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
 - it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
-- it does not prove that text-first natural-audio realism is solved; the stronger Gemini video-plus-audio review still classifies the current dog, nature, and natural-vintage natural-scene clips as music-like
+- the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`
+- it does not yet prove that text-first natural-audio realism is solved broadly; nature and natural-vintage scenes still need to clear the same video-plus-audio Gemini review bar on the newer path
 
 ## Recommended next implementation order
 
-1. improve `video.condition.audio` scene quality from “real bridge slice” to “quality-promoted capability”
-2. `video.condition.video`
-3. `video.interpolate`
-4. `video.retake`
-5. one-stage T2V and I2V
-6. full two-stage / HQ variants
-7. IC-LoRA and distilled LoRA support
-8. recommended, HQ, and longer-clip promotion for every green capability row
+1. broaden the newer text-first natural-audio guidance path beyond the dog scene and revalidate nature/vintage natural scenes
+2. improve `video.condition.audio` scene quality from “real bridge slice” to “quality-promoted capability”
+3. `video.condition.video`
+4. `video.interpolate`
+5. `video.retake`
+6. one-stage T2V and I2V
+7. full two-stage / HQ variants
+8. IC-LoRA and distilled LoRA support
+9. recommended, HQ, and longer-clip promotion for every green capability row
 
 ## Notes
 

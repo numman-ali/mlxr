@@ -35,12 +35,13 @@ def run_stage(
                 }
             )
         prompt = self._prompt_text(stage.inputs)
-        self._reject_unsupported_negative_prompt(stage.inputs)
+        negative_prompt = self._negative_prompt_text(stage.inputs)
         prompt_encoder = self._prompt_encoder(runtime_state)
         prompt_context = prompt_encoder.encode(
             prompt,
             max_length=1024,
             return_audio_context=True,
+            negative_prompt=negative_prompt,
         )
         runtime_state.prompt_context = prompt_context
         return StageResult(
@@ -69,6 +70,18 @@ def run_stage(
                 ),
                 "transformer_context_dim": prompt_context.transformer_context_dim,
                 "config_source": prompt_context.config_source,
+                "negative_prompt_present": prompt_context.negative_prompt_text
+                is not None,
+                "negative_video_context_shape": (
+                    list(prompt_context.negative_video_context_shape)
+                    if prompt_context.negative_video_context_shape is not None
+                    else None
+                ),
+                "negative_audio_context_shape": (
+                    list(prompt_context.negative_audio_context_shape)
+                    if prompt_context.negative_audio_context_shape is not None
+                    else None
+                ),
             }
         )
     if stage.stage_id == "condition_inputs":
@@ -434,17 +447,15 @@ def _stage_task(self: LTXFamilyAdapter, stage: ExecutionStage) -> str:
     return "video.generate"
 
 
-def _reject_unsupported_negative_prompt(
+def _negative_prompt_text(
     self: LTXFamilyAdapter, inputs: dict[str, object]
-) -> None:
+) -> str | None:
     negative_prompt = inputs.get("negative_prompt")
     if negative_prompt in {None, ""}:
-        return
+        return None
     if not isinstance(negative_prompt, str):
         raise ValueError(
             "LTX prompt_encode expects inputs.negative_prompt to be a string when provided"
         )
-    if negative_prompt.strip():
-        raise ValueError(
-            "LTX fast-path prompt encoding does not support negative_prompt yet"
-        )
+    normalized = negative_prompt.strip()
+    return normalized or None

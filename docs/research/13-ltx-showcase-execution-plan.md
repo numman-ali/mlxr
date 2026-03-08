@@ -28,10 +28,10 @@ Already true:
 Still not true:
 
 - text-first AV still drifts semantically on some clips
-- text-first natural scenes still drift into soundtrack-like music on the current 10-second dog, nature, and vintage receipts
+- nature and vintage natural scenes still need to be re-run on the newer guidance path
 - the current `video.condition.audio` example proved the bridge, but not strong scene quality
 - conditioned-scene quality on `video.condition.audio` is still not strong enough to promote
-- the five-scene showcase pack is not ready to promote
+- the five-scene natural-audio showcase pack is not ready to promote
 
 Already promoted at the current score-friendly bar:
 
@@ -43,8 +43,8 @@ Already promoted at the current score-friendly bar:
 
 Current blocker for the original natural-audio showcase intent:
 
-- the 10-second dog, nature, and vintage natural-scene receipts still come back as visual matches with music-like audio on the stronger video-plus-audio Gemini review path
-- that means the current text-first `natural_audio` / `no_music` story is still not strong enough to promote as a natural-sound showcase pack
+- the 10-second dog scene now clears the stronger video-plus-audio Gemini review path on the newer negative-guidance/rescaled-CFG path
+- nature and vintage natural scenes have not yet been revalidated on that newer path, so the current text-first `natural_audio` / `no_music` story is still not broad enough to promote as a natural-sound showcase pack
 
 ## Execution checklist
 
@@ -58,16 +58,17 @@ Current blocker for the original natural-audio showcase intent:
 
 ### B. Text-first prompt and workflow quality
 
-- [ ] use the new prompting guide as the source of truth for prompt shaping
+- [x] use the new prompting guide as the source of truth for prompt shaping
 - [x] add a repo-owned text-first prompt shaper shared by the LTX workflow layer and the showcase runner
 - [ ] keep the default UX text-first
-- [ ] improve the planner’s internal prompt shaping for:
+- [x] improve the planner’s internal prompt shaping for:
   - `natural_audio`
   - `no_music`
   - duration
   - orientation
-- [ ] keep all of those truthful as text-shaping aids, not hard guarantees
+- [x] keep all of those truthful as text-shaping aids, not hard guarantees
 - [ ] validate that prompt shaping helps without hiding model limitations
+- [x] add the first family-local negative-guidance slice and rescaled CFG recovery path for text-first natural-audio scenes
 
 ### C. Semantic validation workflow
 
@@ -103,13 +104,16 @@ Current blocker for the original natural-audio showcase intent:
 
 Current dog-showcase truth:
 
-- the first 10-second dog showcase receipt at `384x224 / 241f / 24fps` now produces the intended dog-with-owner park scene visually
-- Gemini still classifies its audio as `music`, so that clip is not promotable for the natural-audio/no-music scene
+- the early 10-second dog receipt at `tmp/showcase-runs/20260308T022707Z-showcase-dog-park-natural/` remained blocked on music-like audio
+- the improved 10-second dog receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/` now clears the stronger Gemini video-plus-audio review path
+- Gemini identifies a golden retriever with its owner in a park and classifies the audio as barking plus natural outdoor ambience
+- this is the first scene-level success for the natural-audio/no-music story, not yet broad proof for every natural scene
 
 Current natural-audio showcase truth:
 
-- the stronger video-plus-audio Gemini pass now also classifies the 10-second nature and vintage clips as visual matches with music-like audio
-- the blocker is no longer “weak review tooling”; it is the current text-first AV behavior on these natural scenes
+- the newer negative-guidance/rescaled-CFG path recovers the 10-second dog scene
+- the stronger video-plus-audio Gemini pass still classifies the previously generated 10-second nature and vintage clips as visual matches with music-like audio
+- the blocker is no longer “weak review tooling”; it is broadening the newer text-first natural-audio behavior beyond the dog scene
 
 Current score-friendly showcase truth:
 

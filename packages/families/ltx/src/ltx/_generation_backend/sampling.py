@@ -14,6 +14,38 @@ from .types import (
     _RuntimeModelConfig,
 )
 
+_VIDEO_CFG_SCALE = 3.0
+_AUDIO_CFG_SCALE = 7.0
+_GUIDANCE_RESCALE_SCALE = 0.7
+
+
+def _optional_context_width(value: object) -> int | None:
+    if value is None:
+        return None
+    return _context_width(value)
+
+
+def _guided_prediction(
+    conditioned: MLXArray,
+    unconditioned: MLXArray | None,
+    *,
+    scale: float,
+    rescale_scale: float,
+) -> MLXArray:
+    if unconditioned is None or scale == 1.0:
+        return conditioned
+    predicted = conditioned + (scale - 1.0) * (conditioned - unconditioned)
+    if rescale_scale == 0.0:
+        return predicted
+    conditioned_std = mx.std(conditioned)
+    predicted_std = mx.std(predicted)
+    scale_factor = conditioned_std / mx.maximum(
+        predicted_std,
+        mx.array(1e-6, dtype=predicted_std.dtype),
+    )
+    rescaled_factor = rescale_scale * scale_factor + (1.0 - rescale_scale)
+    return predicted * rescaled_factor
+
 
 def _assert_prompt_runtime_contract(
     prompt_context: PromptEncodingResult,
@@ -84,6 +116,42 @@ def _assert_prompt_runtime_contract(
         raise ValueError(
             "LTX prompt/generation config mismatch for cross_attention_adaln"
         )
+    negative_video_context_width = _optional_context_width(
+        prompt_context.negative_video_context
+    )
+    negative_audio_context_width = _optional_context_width(
+        prompt_context.negative_audio_context
+    )
+    if prompt_context.negative_prompt_text is None:
+        if (
+            negative_video_context_width is not None
+            or negative_audio_context_width is not None
+        ):
+            raise ValueError(
+                "LTX prompt contract mismatch: negative prompt contexts were populated "
+                "without negative_prompt_text"
+            )
+        return
+    if negative_video_context_width is None:
+        raise ValueError(
+            "LTX guided generation requires negative_video_context when negative_prompt_text is present"
+        )
+    if negative_audio_context_width is None:
+        raise ValueError(
+            "LTX guided generation requires negative_audio_context when negative_prompt_text is present"
+        )
+    if negative_video_context_width != runtime_config.cross_attention_dim:
+        raise ValueError(
+            "LTX negative prompt/generation config mismatch: negative video context width "
+            f"{negative_video_context_width} != runtime cross_attention_dim "
+            f"{runtime_config.cross_attention_dim}"
+        )
+    if negative_audio_context_width != runtime_config.audio_cross_attention_dim:
+        raise ValueError(
+            "LTX negative prompt/generation config mismatch: negative audio context width "
+            f"{negative_audio_context_width} != runtime audio_cross_attention_dim "
+            f"{runtime_config.audio_cross_attention_dim}"
+        )
 
 
 def _denoise_distilled_audio_video(
@@ -96,12 +164,17 @@ def _denoise_distilled_audio_video(
     audio_latents: MLXArray,
     audio_positions: MLXArray,
     audio_embeddings: MLXArray,
+    negative_text_embeddings: MLXArray | None,
+    negative_audio_embeddings: MLXArray | None,
     sigmas: tuple[float, ...],
     state: _LatentStateLike | None,
     runtime_config: _RuntimeModelConfig,
     freeze_audio: bool = False,
 ) -> tuple[MLXArray, MLXArray]:
     latents_dtype = latents.dtype
+    cfg_enabled = (
+        negative_text_embeddings is not None and negative_audio_embeddings is not None
+    )
     batch_size, channels, frames, latent_h, latent_w = latents.shape
     num_tokens = int(frames * latent_h * latent_w)
     audio_batch, audio_channels, audio_frames, audio_bins = audio_latents.shape
@@ -188,14 +261,76 @@ def _denoise_distilled_audio_video(
             (batch_size, channels, frames, latent_h, latent_w),
         )
         denoised = imports.to_denoised(latents, velocity, sigma)
-        if freeze_audio:
-            audio_denoised = audio_latents
-        else:
-            audio_velocity = mx.reshape(
-                audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
+        audio_velocity = mx.reshape(
+            audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
+        )
+        audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
+        audio_denoised = (
+            audio_latents
+            if freeze_audio
+            else imports.to_denoised(audio_latents, audio_velocity, sigma)
+        )
+        negative_denoised: MLXArray | None = None
+        negative_audio_denoised: MLXArray | None = None
+        if (
+            negative_text_embeddings is not None
+            and negative_audio_embeddings is not None
+        ):
+            negative_modality = _PatchedModality(
+                latent=flat_latents,
+                sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
+                timesteps=sigma * video_timesteps_mask,
+                positions=positions,
+                context=negative_text_embeddings,
+                context_mask=None,
+                enabled=True,
+                positional_embeddings=precomputed_rope,
             )
-            audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
-            audio_denoised = imports.to_denoised(audio_latents, audio_velocity, sigma)
+            negative_audio_modality = _PatchedModality(
+                latent=audio_flat,
+                sigma=mx.full((audio_batch,), float(sigma_value), dtype=latents_dtype),
+                timesteps=sigma * audio_timesteps_mask,
+                positions=audio_positions,
+                context=negative_audio_embeddings,
+                context_mask=None,
+                enabled=True,
+                positional_embeddings=precomputed_audio_rope,
+            )
+            negative_velocity, negative_audio_velocity = transformer(
+                video=negative_modality,
+                audio=negative_audio_modality,
+            )
+            negative_velocity = mx.reshape(
+                mx.transpose(negative_velocity, (0, 2, 1)),
+                (batch_size, channels, frames, latent_h, latent_w),
+            )
+            negative_denoised = imports.to_denoised(latents, negative_velocity, sigma)
+            if not freeze_audio:
+                negative_audio_velocity = mx.reshape(
+                    negative_audio_velocity,
+                    (audio_batch, audio_frames, audio_channels, audio_bins),
+                )
+                negative_audio_velocity = mx.transpose(
+                    negative_audio_velocity, (0, 2, 1, 3)
+                )
+                negative_audio_denoised = imports.to_denoised(
+                    audio_latents,
+                    negative_audio_velocity,
+                    sigma,
+                )
+        denoised = _guided_prediction(
+            denoised,
+            negative_denoised,
+            scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
+            rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+        )
+        if not freeze_audio:
+            audio_denoised = _guided_prediction(
+                audio_denoised,
+                negative_audio_denoised,
+                scale=_AUDIO_CFG_SCALE if cfg_enabled else 1.0,
+                rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+            )
         if state is not None:
             denoised = imports.apply_denoise_mask(
                 denoised, state.clean_latent, state.denoise_mask
