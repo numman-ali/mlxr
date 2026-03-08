@@ -107,6 +107,33 @@ The repo-owned smoke script writes a predictable run bundle under `tmp/manual-ru
 
 Treat the manifest as the run receipt. If a result later becomes part of repo truth, the manifest should explain what actually ran.
 
+## Gemini Review Pass
+
+Use `scripts/gemini_describe_video.py` as the default automated semantic cross-check for promoted clips.
+
+The helper stages the video into a non-ignored review directory, asks Gemini for one strict XML review, and saves:
+
+- the staged review copy
+- the exact review prompt
+- the raw Gemini response
+- the parsed review JSON
+
+Recommended pattern:
+
+```bash
+uv run python scripts/gemini_describe_video.py \
+  /absolute/path/to/clip.mp4 \
+  --save-dir /tmp/mlxr-gemini-review/dog-clip \
+  --strict
+```
+
+Promotion rule:
+
+- do not promote a clip if Gemini returns a semantically wrong scene or subject
+- do not promote a clip if Gemini reports soundtrack-like music when the prompt and manifest expect natural audio with no music
+- if Gemini and the runtime receipt disagree, inspect reviewer stills, ffprobe output, and keyframes before promoting anything
+- Gemini does not override runtime receipts, ffprobe output, or obvious manual-review contradictions
+
 ## How To Interpret Stage Snapshots
 
 The default stage-debug ladder is:

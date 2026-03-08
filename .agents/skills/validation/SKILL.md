@@ -22,12 +22,13 @@ For real `LTX-2.3` fidelity bring-up and stage-local smoke debugging, use the de
    - `uv run python scripts/dev.py verify`
    - `uv run python scripts/dev.py logs --tail 120`
 2. Inspect the relevant platform docs before interpreting results.
-3. Distinguish between:
+3. When a promoted clip or showcase result depends on semantic correctness, run `scripts/gemini_describe_video.py` as an automated semantic cross-check and keep the parsed XML review with the receipt.
+4. Distinguish between:
    - implementation bug
    - missing benchmark evidence
    - stale docs
    - still-open architecture question
-4. If the result is still uncertain, downgrade the claim instead of over-stating it.
+5. If the result is still uncertain, downgrade the claim instead of over-stating it.
 
 ## What to load
 
