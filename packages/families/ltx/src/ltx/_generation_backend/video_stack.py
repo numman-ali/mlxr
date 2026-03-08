@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import types
 from pathlib import Path
 
@@ -17,7 +16,6 @@ from .config import (
     _runtime_vocoder_config,
     _validate_upsampler_layout,
 )
-from .reference_imports import _reference_path_on_sys_path
 from .types import (
     MLXArray,
     _RuntimeVocoderArchitectureConfig,
@@ -371,12 +369,12 @@ def _validate_bwe_stft_buffers(
         )
 
 
-def _load_configured_vae_decoder(checkpoint_path: Path) -> _VideoDecoderLike:
+def _load_configured_vae_decoder(
+    checkpoint_path: Path,
+    *,
+    decoder_module: types.ModuleType,
+) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
-    with _reference_path_on_sys_path():
-        decoder_module = importlib.import_module(
-            "mlx_video.models.ltx.video_vae.decoder"
-        )
 
     spatial_padding_mode = decoder_module.PaddingModeType(
         vae_config.spatial_padding_mode
@@ -458,10 +456,11 @@ def _load_configured_vae_decoder(checkpoint_path: Path) -> _VideoDecoderLike:
     return decoder
 
 
-def _load_configured_upsampler(weights_path: Path) -> _UpsamplerLike:
-    with _reference_path_on_sys_path():
-        upsampler_module = importlib.import_module("mlx_video.models.ltx.upsampler")
-
+def _load_configured_upsampler(
+    weights_path: Path,
+    *,
+    upsampler_module: types.ModuleType,
+) -> _UpsamplerLike:
     _validate_upsampler_layout(weights_path)
     raw_weights = _require_weight_mapping(
         mx.load(str(weights_path)),

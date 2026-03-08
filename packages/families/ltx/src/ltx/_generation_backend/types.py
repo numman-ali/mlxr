@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Mapping, Protocol, TypeAlias
 
 import mlx.core as mx
@@ -456,6 +457,7 @@ class _ReferenceImports:
     scaled_dot_product_attention: _ScaledDotProductAttentionFn
     latent_state_class: _LatentStateFactory
     tiling_config_class: _TilingConfigLike
+    video_decoder_module: ModuleType
     condition_class: _ConditionFactory
     stage_1_sigmas: tuple[float, ...]
     stage_2_sigmas: tuple[float, ...]
@@ -465,7 +467,7 @@ class _ReferenceImports:
     create_audio_position_grid: _CreateAudioPositionGrid
     compute_audio_frames: _ComputeAudioFrames
     load_image: _ImageLoader
-    load_upsampler: object
+    upsampler_module: ModuleType
     load_vae_decoder: object
     load_vae_encoder: _LoadVAEEncoder
     load_audio_decoder: _LoadAudioDecoder

@@ -218,6 +218,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
         latent_state_class=LatentState,
         tiling_config_class=tiling_module.TilingConfig,
+        video_decoder_module=decoder_module,
         condition_class=_condition_ref,
         stage_1_sigmas=STAGE_1_SIGMAS,
         stage_2_sigmas=STAGE_2_SIGMAS,
@@ -227,7 +228,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         create_audio_position_grid=_create_audio_position_grid_ref,
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
-        load_upsampler=upsampler_module.load_upsampler,
+        upsampler_module=upsampler_module,
         load_vae_decoder=decoder_module.load_vae_decoder,
         load_vae_encoder=encoder_module.load_vae_encoder,
         load_audio_decoder=generate_module.load_audio_decoder,
@@ -361,9 +362,11 @@ def _ensure_transformer(
 def _ensure_vae_decoder(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _VideoDecoderLike:
-    del imports
     if self._vae_decoder is None:
-        vae_decoder = _load_configured_vae_decoder(self.checkpoint_path)
+        vae_decoder = _load_configured_vae_decoder(
+            self.checkpoint_path,
+            decoder_module=imports.video_decoder_module,
+        )
         mx.eval(vae_decoder.parameters())
         self._vae_decoder = vae_decoder
     return self._vae_decoder
@@ -381,9 +384,11 @@ def _ensure_vae_encoder(
 def _ensure_upsampler(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _UpsamplerLike:
-    del imports
     if self._upsampler is None:
-        upsampler = _load_configured_upsampler(self.spatial_upsampler_path)
+        upsampler = _load_configured_upsampler(
+            self.spatial_upsampler_path,
+            upsampler_module=imports.upsampler_module,
+        )
         mx.eval(upsampler.parameters())
         self._upsampler = upsampler
     return self._upsampler
