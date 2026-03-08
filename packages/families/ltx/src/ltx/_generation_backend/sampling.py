@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import mlx.core as mx
@@ -6,7 +5,14 @@ import mlx.core as mx
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import _attention_mask, _context_width
 from .debug import _debug_progress_enabled
-from .types import _PatchedModality, _ReferenceImports, _RuntimeModelConfig
+from .types import (
+    MLXArray,
+    _AudioVideoTransformer,
+    _LatentStateLike,
+    _PatchedModality,
+    _ReferenceImports,
+    _RuntimeModelConfig,
+)
 
 
 def _assert_prompt_runtime_contract(
@@ -83,18 +89,18 @@ def _assert_prompt_runtime_contract(
 def _denoise_distilled_audio_video(
     *,
     imports: _ReferenceImports,
-    transformer: object,
-    latents: object,
-    positions: object,
-    text_embeddings: object,
-    audio_latents: object,
-    audio_positions: object,
-    audio_embeddings: object,
+    transformer: _AudioVideoTransformer,
+    latents: MLXArray,
+    positions: MLXArray,
+    text_embeddings: MLXArray,
+    audio_latents: MLXArray,
+    audio_positions: MLXArray,
+    audio_embeddings: MLXArray,
     sigmas: tuple[float, ...],
-    state: object | None,
+    state: _LatentStateLike | None,
     runtime_config: _RuntimeModelConfig,
     freeze_audio: bool = False,
-) -> tuple[object, object]:
+) -> tuple[MLXArray, MLXArray]:
     latents_dtype = latents.dtype
     batch_size, channels, frames, latent_h, latent_w = latents.shape
     num_tokens = int(frames * latent_h * latent_w)

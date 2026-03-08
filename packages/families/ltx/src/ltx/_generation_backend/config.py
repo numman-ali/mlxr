@@ -1,23 +1,126 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
+from typing import Mapping, Protocol
 
 import mlx.core as mx
-import numpy as np
-import numpy.typing as npt
 from safetensors import safe_open
 
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import _attention_mask, _context_width
 from .reference_imports import _REFERENCE_MLX_VIDEO_ROOT
-from .types import _RuntimeModelConfig, _RuntimeVAEConfig, _RuntimeVocoderConfig
+from .types import (
+    _RuntimeAudioEncoderConfig,
+    _RuntimeModelConfig,
+    _RuntimeVAEConfig,
+    _RuntimeVocoderConfig,
+)
+
+
+class _SafeOpenHandle(Protocol):
+    def __enter__(self) -> "_SafeOpenHandle": ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None: ...
+    def metadata(self) -> dict[str, str] | None: ...
+    def keys(self) -> list[str]: ...
+
+
+def _safe_open_numpy(checkpoint_path: Path) -> _SafeOpenHandle:
+    return safe_open(str(checkpoint_path), framework="numpy")  # type: ignore[no-untyped-call]
+
+
+def _int_value(value: object, *, context: str) -> int:
+    if isinstance(value, bool):
+        raise RuntimeError(context)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        raise RuntimeError(context)
+    if isinstance(value, str):
+        return int(value)
+    raise RuntimeError(context)
+
+
+def _bool_value(value: object, *, context: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise RuntimeError(context)
+
+
+def _int_list(value: object, *, context: str) -> list[int]:
+    if not isinstance(value, (list, tuple)):
+        raise RuntimeError(context)
+    return [_int_value(item, context=context) for item in value]
+
+
+def _nested_int_tuples(
+    value: object,
+    *,
+    context: str,
+) -> tuple[tuple[int, ...], ...]:
+    if not isinstance(value, (list, tuple)):
+        raise RuntimeError(context)
+    nested: list[tuple[int, ...]] = []
+    for item in value:
+        if not isinstance(item, (list, tuple)):
+            raise RuntimeError(context)
+        nested.append(tuple(_int_value(entry, context=context) for entry in item))
+    return tuple(nested)
+
+
+def _int_or_default(value: object | None, default: int) -> int:
+    if value is None:
+        return default
+    return _int_value(value, context="Expected an integer-compatible value")
+
+
+def _float_or_default(value: object | None, default: float) -> float:
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return float(value)
+    raise RuntimeError("Expected a float-compatible value")
+
+
+def _int_tuple(value: object | None, default: tuple[int, ...]) -> tuple[int, ...]:
+    if value is None:
+        return default
+    if not isinstance(value, (list, tuple)):
+        raise RuntimeError("Expected a sequence of integer-compatible values")
+    return tuple(
+        _int_value(item, context="Expected a sequence of integer-compatible values")
+        for item in value
+    )
+
+
+def _int_set(value: object | None) -> set[int]:
+    if value is None:
+        return set()
+    if not isinstance(value, (list, tuple, set)):
+        raise RuntimeError("Expected a collection of integer-compatible values")
+    return {
+        _int_value(item, context="Expected a collection of integer-compatible values")
+        for item in value
+    }
 
 
 def _checkpoint_metadata(checkpoint_path: Path) -> dict[str, object]:
-    with safe_open(str(checkpoint_path), framework="numpy") as checkpoint:
+    with _safe_open_numpy(checkpoint_path) as checkpoint:
         metadata = checkpoint.metadata() or {}
     raw_config = metadata.get("config")
     if not isinstance(raw_config, str):
@@ -33,7 +136,7 @@ def _checkpoint_metadata(checkpoint_path: Path) -> dict[str, object]:
 
 
 def _checkpoint_keys(checkpoint_path: Path) -> set[str]:
-    with safe_open(str(checkpoint_path), framework="numpy") as checkpoint:
+    with _safe_open_numpy(checkpoint_path) as checkpoint:
         return set(checkpoint.keys())
 
 
@@ -46,6 +149,10 @@ def _load_checkpoint_prefixed_weights(
     # the current 22B checkpoint includes dtypes that do not round-trip cleanly
     # through the numpy view returned by safetensors here.
     weights = mx.load(str(checkpoint_path))
+    if not isinstance(weights, dict):
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' did not load into a weight mapping"
+        )
     selected: dict[str, mx.array] = {}
     for key, value in weights.items():
         if key.startswith(prefixes):
@@ -66,73 +173,9 @@ def _load_optional_json_config(config_path: Path) -> dict[str, object]:
     return raw
 
 
-def _decode_conditioning_audio_file(
-    audio_path: Path,
-    *,
-    sample_rate: int,
-    start_time_seconds: float,
-    max_duration_seconds: float | None,
-) -> tuple[npt.NDArray[np.float32], int]:
-    command = [
-        "ffmpeg",
-        "-v",
-        "error",
-    ]
-    if start_time_seconds > 0.0:
-        command.extend(["-ss", str(start_time_seconds)])
-    command.extend(["-i", str(audio_path)])
-    if max_duration_seconds is not None:
-        command.extend(["-t", str(max_duration_seconds)])
-    command.extend(
-        [
-            "-ac",
-            "2",
-            "-ar",
-            str(sample_rate),
-            "-f",
-            "f32le",
-            "pipe:1",
-        ]
-    )
-    result = subprocess.run(command, capture_output=True, check=False)
-    if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"ffmpeg failed to decode conditioning audio: {stderr}")
-    waveform = np.frombuffer(result.stdout, dtype=np.float32)
-    if waveform.size == 0:
-        raise RuntimeError(
-            f"Conditioning audio '{audio_path}' decoded to an empty waveform"
-        )
-    channels = 2
-    usable = waveform.size - (waveform.size % channels)
-    if usable == 0:
-        raise RuntimeError(
-            f"Conditioning audio '{audio_path}' did not decode to stereo PCM frames"
-        )
-    waveform = waveform[:usable].reshape(-1, channels)
-    return waveform.astype(np.float32), sample_rate
-
-
-def _fit_audio_latents(audio_latents: object, *, target_frames: int) -> object:
-    current_frames = int(audio_latents.shape[2])
-    if current_frames == target_frames:
-        return audio_latents
-    if current_frames > target_frames:
-        return audio_latents[:, :, :target_frames, :]
-    pad_frames = target_frames - current_frames
-    padding = mx.zeros(
-        (
-            int(audio_latents.shape[0]),
-            int(audio_latents.shape[1]),
-            pad_frames,
-            int(audio_latents.shape[3]),
-        ),
-        dtype=audio_latents.dtype,
-    )
-    return mx.concatenate((audio_latents, padding), axis=2)
-
-
-def _first_present(mapping: dict[str, object], keys: tuple[str, ...]) -> object | None:
+def _first_present(
+    mapping: Mapping[str, object], keys: tuple[str, ...]
+) -> object | None:
     for key in keys:
         if key in mapping:
             return mapping[key]
@@ -151,7 +194,10 @@ def _decoder_initial_feature_channels(
         params = (
             raw_params if isinstance(raw_params, dict) else {"num_layers": raw_params}
         )
-        multiplier = int(params.get("multiplier", 1))
+        multiplier = _int_value(
+            params.get("multiplier", 1),
+            context=f"LTX decoder block '{block_name}' has invalid multiplier metadata",
+        )
         if multiplier < 1:
             raise ValueError(
                 f"LTX decoder block '{block_name}' has invalid multiplier {multiplier}"
@@ -194,20 +240,44 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
         )
 
     return _RuntimeVAEConfig(
-        latent_channels=int(raw_vae_config.get("latent_channels", 128)),
-        out_channels=int(raw_vae_config.get("out_channels", 3)),
-        patch_size=int(raw_vae_config.get("patch_size", 4)),
+        latent_channels=_int_value(
+            raw_vae_config.get("latent_channels", 128),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid latent_channels metadata",
+        ),
+        out_channels=_int_value(
+            raw_vae_config.get("out_channels", 3),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid out_channels metadata",
+        ),
+        patch_size=_int_value(
+            raw_vae_config.get("patch_size", 4),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid patch_size metadata",
+        ),
         decoder_blocks=tuple(decoder_blocks),
-        base_channels=int(raw_vae_config.get("decoder_base_channels", 128)),
+        base_channels=_int_value(
+            raw_vae_config.get("decoder_base_channels", 128),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid decoder_base_channels metadata"
+            ),
+        ),
         spatial_padding_mode=str(
             raw_vae_config.get(
                 "decoder_spatial_padding_mode",
                 raw_vae_config.get("spatial_padding_mode", "reflect"),
             )
         ),
-        timestep_conditioning=bool(raw_vae_config.get("timestep_conditioning", True)),
+        timestep_conditioning=_bool_value(
+            raw_vae_config.get("timestep_conditioning", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid timestep_conditioning metadata"
+            ),
+        ),
         norm_layer=norm_layer,
-        causal_decoder=bool(raw_vae_config.get("causal_decoder", False)),
+        causal_decoder=_bool_value(
+            raw_vae_config.get("causal_decoder", False),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid causal_decoder metadata"
+            ),
+        ),
     )
 
 
@@ -229,51 +299,166 @@ def _runtime_vocoder_config(checkpoint_path: Path) -> _RuntimeVocoderConfig:
         )
     bwe_config = raw_vocoder_config.get("bwe") if uses_bwe else None
     bwe_output_sample_rate = (
-        int(bwe_config.get("output_sampling_rate"))
+        _int_value(
+            bwe_config.get("output_sampling_rate"),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid BWE output sample rate metadata"
+            ),
+        )
         if isinstance(bwe_config, dict)
         and bwe_config.get("output_sampling_rate") is not None
         else None
     )
     output_sample_rate = (
-        int(bwe_config.get("input_sampling_rate"))
+        _int_value(
+            bwe_config.get("input_sampling_rate"),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid BWE input sample rate metadata"
+            ),
+        )
         if isinstance(bwe_config, dict)
         and bwe_config.get("input_sampling_rate") is not None
-        else int(base_config.get("output_sampling_rate", 24000))
+        else _int_value(
+            base_config.get("output_sampling_rate", 24000),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder output sample rate metadata"
+            ),
+        )
     )
 
     return _RuntimeVocoderConfig(
         resblock_kernel_sizes=tuple(
-            int(value) for value in base_config.get("resblock_kernel_sizes", [3, 7, 11])
-        ),
-        upsample_rates=tuple(
-            int(value) for value in base_config.get("upsample_rates", [6, 5, 2, 2, 2])
-        ),
-        upsample_kernel_sizes=tuple(
-            int(value)
-            for value in base_config.get("upsample_kernel_sizes", [16, 15, 8, 4, 4])
-        ),
-        resblock_dilation_sizes=tuple(
-            tuple(int(v) for v in block)
-            for block in base_config.get(
-                "resblock_dilation_sizes",
-                [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+            _int_list(
+                base_config.get("resblock_kernel_sizes", [3, 7, 11]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder resblock_kernel_sizes metadata"
+                ),
             )
         ),
-        upsample_initial_channel=int(base_config.get("upsample_initial_channel", 1024)),
-        stereo=bool(base_config.get("stereo", True)),
+        upsample_rates=tuple(
+            _int_list(
+                base_config.get("upsample_rates", [6, 5, 2, 2, 2]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_rates metadata"
+                ),
+            )
+        ),
+        upsample_kernel_sizes=tuple(
+            _int_list(
+                base_config.get("upsample_kernel_sizes", [16, 15, 8, 4, 4]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_kernel_sizes metadata"
+                ),
+            )
+        ),
+        resblock_dilation_sizes=_nested_int_tuples(
+            base_config.get(
+                "resblock_dilation_sizes",
+                [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+            ),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder resblock_dilation_sizes metadata"
+            ),
+        ),
+        upsample_initial_channel=_int_value(
+            base_config.get("upsample_initial_channel", 1024),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_initial_channel metadata"
+            ),
+        ),
+        stereo=_bool_value(
+            base_config.get("stereo", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder stereo metadata"
+            ),
+        ),
         resblock=str(base_config.get("resblock", "1")),
         activation=str(base_config.get("activation", "snake")),
-        use_tanh_at_final=bool(base_config.get("use_tanh_at_final", True)),
-        apply_final_activation=bool(base_config.get("apply_final_activation", True)),
-        use_bias_at_final=bool(base_config.get("use_bias_at_final", True)),
+        use_tanh_at_final=_bool_value(
+            base_config.get("use_tanh_at_final", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder use_tanh_at_final metadata"
+            ),
+        ),
+        apply_final_activation=_bool_value(
+            base_config.get("apply_final_activation", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder apply_final_activation metadata"
+            ),
+        ),
+        use_bias_at_final=_bool_value(
+            base_config.get("use_bias_at_final", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder use_bias_at_final metadata"
+            ),
+        ),
         output_sample_rate=output_sample_rate,
         uses_bwe=uses_bwe,
         bwe_output_sample_rate=bwe_output_sample_rate,
     )
 
 
+def _runtime_audio_encoder_config(checkpoint_root: Path) -> _RuntimeAudioEncoderConfig:
+    raw_config = _load_optional_json_config(
+        checkpoint_root / "audio_vae" / "config.json"
+    )
+
+    raw_ch_mult = raw_config.get("ch_mult", (1, 2, 4))
+    if not isinstance(raw_ch_mult, (list, tuple)):
+        raise RuntimeError(
+            f"LTX audio VAE config '{checkpoint_root / 'audio_vae' / 'config.json'}' has invalid ch_mult metadata"
+        )
+    ch_mult: tuple[int, ...] = tuple(
+        _int_value(value, context="Expected integer ch_mult entries")
+        for value in raw_ch_mult
+    )
+
+    raw_attn_resolutions = raw_config.get("attn_resolutions") or []
+    if not isinstance(raw_attn_resolutions, (list, tuple, set)):
+        raise RuntimeError(
+            f"LTX audio VAE config '{checkpoint_root / 'audio_vae' / 'config.json'}' has invalid attn_resolutions metadata"
+        )
+    attn_resolutions = {
+        _int_value(value, context="Expected integer attention resolutions")
+        for value in raw_attn_resolutions
+    }
+
+    return _RuntimeAudioEncoderConfig(
+        base_channels=_int_or_default(raw_config.get("base_channels"), 128),
+        ch_mult=ch_mult,
+        num_res_blocks=_int_or_default(raw_config.get("num_res_blocks"), 2),
+        attn_resolutions=attn_resolutions,
+        resolution=_int_or_default(raw_config.get("resolution"), 256),
+        latent_channels=_int_or_default(raw_config.get("latent_channels"), 8),
+        dropout=_float_or_default(raw_config.get("dropout"), 0.0),
+        in_channels=_int_or_default(raw_config.get("in_channels"), 2),
+        norm_type=str(raw_config.get("norm_type", "pixel")),
+        causality_axis=str(raw_config.get("causality_axis", "height")),
+        mid_block_add_attention=_bool_value(
+            raw_config.get("mid_block_add_attention", True),
+            context="Expected boolean mid_block_add_attention value",
+        ),
+        sample_rate=_int_or_default(raw_config.get("sample_rate"), 16000),
+        mel_hop_length=_int_or_default(raw_config.get("mel_hop_length"), 160),
+        mel_bins=_int_or_default(raw_config.get("mel_bins"), 64),
+        n_fft=_int_or_default(raw_config.get("n_fft"), 1024),
+        is_causal=_bool_value(
+            raw_config.get("is_causal", True),
+            context="Expected boolean is_causal value",
+        ),
+        double_z=_bool_value(
+            raw_config.get("double_z", True),
+            context="Expected boolean double_z value",
+        ),
+    )
+
+
 def _validate_upsampler_layout(weights_path: Path) -> None:
     raw_weights = mx.load(str(weights_path))
+    if not isinstance(raw_weights, dict):
+        raise RuntimeError(
+            f"LTX spatial upsampler '{weights_path}' did not load into a weight mapping"
+        )
     if not any(
         key.startswith("upsampler.conv.") or key.startswith("upsampler.0.")
         for key in raw_weights
@@ -320,7 +505,12 @@ def _required_transformer_bool(
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' is missing required transformer field '{key}'"
         )
-    return bool(raw_transformer_config[key])
+    return _bool_value(
+        raw_transformer_config[key],
+        context=(
+            f"LTX checkpoint '{checkpoint_path}' has invalid transformer boolean field '{key}'"
+        ),
+    )
 
 
 def _resolved_transformer_flag(
@@ -333,7 +523,12 @@ def _resolved_transformer_flag(
     explicit = raw_transformer_config.get(key)
     if explicit is None:
         return inferred
-    explicit_bool = bool(explicit)
+    explicit_bool = _bool_value(
+        explicit,
+        context=(
+            f"LTX checkpoint '{checkpoint_path}' has invalid transformer boolean field '{key}'"
+        ),
+    )
     if inferred and not explicit_bool:
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' has transformer metadata {key}=False "
@@ -351,11 +546,6 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
         )
     checkpoint_keys = _checkpoint_keys(checkpoint_path)
     default_audio_channels = 8 * 16
-
-    def _int_or_default(value: object | None, default: int) -> int:
-        if value is None:
-            return default
-        return int(value)
 
     audio_enabled = any(
         key.startswith("model.diffusion_model.audio_")
@@ -380,13 +570,35 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
         ),
     )
     return _RuntimeModelConfig(
-        num_attention_heads=int(raw_transformer_config.get("num_attention_heads", 32)),
-        attention_head_dim=int(raw_transformer_config.get("attention_head_dim", 128)),
-        in_channels=int(raw_transformer_config.get("in_channels", 128)),
-        out_channels=int(raw_transformer_config.get("out_channels", 128)),
-        num_layers=int(raw_transformer_config.get("num_layers", 48)),
-        cross_attention_dim=int(
-            raw_transformer_config.get("cross_attention_dim", 4096)
+        num_attention_heads=_int_value(
+            raw_transformer_config.get("num_attention_heads", 32),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid num_attention_heads metadata"
+            ),
+        ),
+        attention_head_dim=_int_value(
+            raw_transformer_config.get("attention_head_dim", 128),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid attention_head_dim metadata"
+            ),
+        ),
+        in_channels=_int_value(
+            raw_transformer_config.get("in_channels", 128),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid in_channels metadata",
+        ),
+        out_channels=_int_value(
+            raw_transformer_config.get("out_channels", 128),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid out_channels metadata",
+        ),
+        num_layers=_int_value(
+            raw_transformer_config.get("num_layers", 48),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid num_layers metadata",
+        ),
+        cross_attention_dim=_int_value(
+            raw_transformer_config.get("cross_attention_dim", 4096),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid cross_attention_dim metadata"
+            ),
         ),
         audio_enabled=audio_enabled,
         audio_num_attention_heads=_int_or_default(
@@ -409,17 +621,29 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
             raw_transformer_config.get("audio_cross_attention_dim"),
             2048,
         ),
-        positional_embedding_theta=float(
-            raw_transformer_config.get("positional_embedding_theta", 10000.0)
+        positional_embedding_theta=_float_or_default(
+            raw_transformer_config.get("positional_embedding_theta"),
+            10000.0,
         ),
-        positional_embedding_max_pos=list(
-            raw_transformer_config.get("positional_embedding_max_pos", [20, 2048, 2048])
+        positional_embedding_max_pos=_int_list(
+            raw_transformer_config.get(
+                "positional_embedding_max_pos", [20, 2048, 2048]
+            ),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid positional_embedding_max_pos metadata"
+            ),
         ),
-        audio_positional_embedding_max_pos=list(
-            raw_transformer_config.get("audio_positional_embedding_max_pos", [20])
+        audio_positional_embedding_max_pos=_int_list(
+            raw_transformer_config.get("audio_positional_embedding_max_pos", [20]),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid audio_positional_embedding_max_pos metadata"
+            ),
         ),
-        use_middle_indices_grid=bool(
-            raw_transformer_config.get("use_middle_indices_grid", True)
+        use_middle_indices_grid=_bool_value(
+            raw_transformer_config.get("use_middle_indices_grid", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid use_middle_indices_grid metadata"
+            ),
         ),
         rope_type=_required_transformer_string(
             raw_transformer_config, checkpoint_path, "rope_type"
@@ -430,16 +654,22 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
             ).lower()
             == "float64"
         ),
-        timestep_scale_multiplier=int(
-            raw_transformer_config.get("timestep_scale_multiplier", 1000)
+        timestep_scale_multiplier=_int_value(
+            raw_transformer_config.get("timestep_scale_multiplier", 1000),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid timestep_scale_multiplier metadata"
+            ),
         ),
-        av_ca_timestep_scale_multiplier=int(
+        av_ca_timestep_scale_multiplier=_int_value(
             raw_transformer_config.get(
                 "av_ca_timestep_scale_multiplier",
                 raw_transformer_config.get("timestep_scale_multiplier", 1000),
-            )
+            ),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid av_ca_timestep_scale_multiplier metadata"
+            ),
         ),
-        norm_eps=float(raw_transformer_config.get("norm_eps", 1e-6)),
+        norm_eps=_float_or_default(raw_transformer_config.get("norm_eps"), 1e-6),
         apply_gated_attention=apply_gated_attention,
         cross_attention_adaln=cross_attention_adaln,
         caption_proj_before_connector=_required_transformer_bool(

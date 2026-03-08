@@ -1,9 +1,9 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import time
 from importlib import import_module
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import mlx.core as mx
 from mlx_runtime_core import ExecutionStage, LoadedModelHandle, StageResult
@@ -13,8 +13,13 @@ from ..generation import AudioConditioningInput, ConditioningInput, VideoGenerat
 from ..prompt_encoding import PromptEncoder
 from .state import LoadedLTXRuntimeState
 
+if TYPE_CHECKING:
+    from ..adapter import LTXFamilyAdapter
 
-def run_stage(self, loaded: LoadedModelHandle, stage: ExecutionStage) -> StageResult:
+
+def run_stage(
+    self: LTXFamilyAdapter, loaded: LoadedModelHandle, stage: ExecutionStage
+) -> StageResult:
     delay = stage.params.get("simulate_delay_seconds", 0.05)
     if isinstance(delay, (float, int)) and delay > 0:
         time.sleep(float(delay))
@@ -222,7 +227,7 @@ def run_stage(self, loaded: LoadedModelHandle, stage: ExecutionStage) -> StageRe
     )
 
 
-def unload(self, loaded: LoadedModelHandle) -> None:
+def unload(self: LTXFamilyAdapter, loaded: LoadedModelHandle) -> None:
     runtime_state = self._runtime_state(loaded)
     if runtime_state is not None:
         if runtime_state.prompt_encoder is not None:
@@ -239,14 +244,18 @@ def unload(self, loaded: LoadedModelHandle) -> None:
     return None
 
 
-def _runtime_state(self, loaded: LoadedModelHandle) -> LoadedLTXRuntimeState | None:
+def _runtime_state(
+    self: LTXFamilyAdapter, loaded: LoadedModelHandle
+) -> LoadedLTXRuntimeState | None:
     state = loaded.metadata.get(self._runtime_state_key)
     if isinstance(state, LoadedLTXRuntimeState):
         return state
     return None
 
 
-def _prompt_encoder(self, runtime_state: LoadedLTXRuntimeState) -> PromptEncoder:
+def _prompt_encoder(
+    self: LTXFamilyAdapter, runtime_state: LoadedLTXRuntimeState
+) -> PromptEncoder:
     if runtime_state.prompt_encoder is None:
         adapter_module = import_module("ltx.adapter")
         runtime_state.prompt_encoder = adapter_module.create_prompt_encoder(
@@ -256,7 +265,9 @@ def _prompt_encoder(self, runtime_state: LoadedLTXRuntimeState) -> PromptEncoder
     return runtime_state.prompt_encoder
 
 
-def _video_generator(self, runtime_state: LoadedLTXRuntimeState) -> VideoGenerator:
+def _video_generator(
+    self: LTXFamilyAdapter, runtime_state: LoadedLTXRuntimeState
+) -> VideoGenerator:
     if runtime_state.video_generator is None:
         adapter_module = import_module("ltx.adapter")
         runtime_state.video_generator = adapter_module.create_video_generator(
@@ -266,7 +277,7 @@ def _video_generator(self, runtime_state: LoadedLTXRuntimeState) -> VideoGenerat
     return runtime_state.video_generator
 
 
-def _prompt_text(self, inputs: dict[str, object]) -> str:
+def _prompt_text(self: LTXFamilyAdapter, inputs: dict[str, object]) -> str:
     prompt = inputs.get("prompt", "")
     if not isinstance(prompt, str):
         raise ValueError("LTX prompt_encode expects inputs.prompt to be a string")
@@ -274,7 +285,7 @@ def _prompt_text(self, inputs: dict[str, object]) -> str:
 
 
 def _prepared_conditioning_inputs(
-    self, stage: ExecutionStage
+    self: LTXFamilyAdapter, stage: ExecutionStage
 ) -> tuple[ConditioningInput, ...]:
     resolved_inputs = stage.params.get("resolved_inputs")
     if resolved_inputs is None:
@@ -329,7 +340,7 @@ def _prepared_conditioning_inputs(
 
 
 def _prepared_audio_conditioning_input(
-    self, stage: ExecutionStage
+    self: LTXFamilyAdapter, stage: ExecutionStage
 ) -> AudioConditioningInput | None:
     resolved_inputs = stage.params.get("resolved_inputs")
     if resolved_inputs is None:
@@ -381,7 +392,7 @@ def _prepared_audio_conditioning_input(
     )
 
 
-def _stage_dimension(self, value: object, *, name: str) -> int:
+def _stage_dimension(self: LTXFamilyAdapter, value: object, *, name: str) -> int:
     if value is None:
         return 768 if name == "width" else 512
     if not isinstance(value, int) or value < 32:
@@ -389,7 +400,7 @@ def _stage_dimension(self, value: object, *, name: str) -> int:
     return value
 
 
-def _num_frames(self, stage: ExecutionStage) -> int:
+def _num_frames(self: LTXFamilyAdapter, stage: ExecutionStage) -> int:
     value = stage.params.get("num_frames", stage.inputs.get("num_frames"))
     if value is None:
         return 121
@@ -398,7 +409,7 @@ def _num_frames(self, stage: ExecutionStage) -> int:
     return value
 
 
-def _fps(self, stage: ExecutionStage) -> int:
+def _fps(self: LTXFamilyAdapter, stage: ExecutionStage) -> int:
     value = stage.params.get("fps", stage.inputs.get("fps"))
     if value is None:
         return 24
@@ -407,7 +418,7 @@ def _fps(self, stage: ExecutionStage) -> int:
     return value
 
 
-def _seed(self, stage: ExecutionStage) -> int | None:
+def _seed(self: LTXFamilyAdapter, stage: ExecutionStage) -> int | None:
     value = stage.params.get("seed", stage.inputs.get("seed"))
     if value is None:
         return None
@@ -416,14 +427,16 @@ def _seed(self, stage: ExecutionStage) -> int | None:
     return value
 
 
-def _stage_task(self, stage: ExecutionStage) -> str:
+def _stage_task(self: LTXFamilyAdapter, stage: ExecutionStage) -> str:
     value = stage.params.get("task")
     if isinstance(value, str) and value:
         return value
     return "video.generate"
 
 
-def _reject_unsupported_negative_prompt(self, inputs: dict[str, object]) -> None:
+def _reject_unsupported_negative_prompt(
+    self: LTXFamilyAdapter, inputs: dict[str, object]
+) -> None:
     negative_prompt = inputs.get("negative_prompt")
     if negative_prompt in {None, ""}:
         return

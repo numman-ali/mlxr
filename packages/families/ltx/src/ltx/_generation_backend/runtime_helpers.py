@@ -1,8 +1,6 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import importlib
-from dataclasses import replace
 
 import mlx.core as mx
 import numpy as np
@@ -18,16 +16,28 @@ from .conditioning import (
     _require_audio_context,
     _resolve_latent_frame_index,
 )
-from .config import _load_checkpoint_prefixed_weights, _load_optional_json_config
+from .config import _load_checkpoint_prefixed_weights, _runtime_audio_encoder_config
 from .debug import _looks_like_metal_oom
 from .outputs import _audio_waveform_to_numpy
 from .reference import _patch_reference_modules
 from .reference_imports import _reference_path_on_sys_path
 from .types import (
+    MLXArray,
+    _AudioDecoderLike,
+    _AudioEncoderLike,
+    _AudioProcessorLike,
+    _AudioVideoTransformer,
     _ConditioningPlan,
+    _ConditionLike,
+    _LatentStateLike,
     _PaddedShape,
     _ReferenceImports,
+    _RuntimeHelperHost,
     _RuntimeModelConfig,
+    _UpsamplerLike,
+    _VAEEncoder,
+    _VideoDecoderLike,
+    _VocoderLike,
 )
 from .video_stack import (
     _load_configured_upsampler,
@@ -36,7 +46,7 @@ from .video_stack import (
 )
 
 
-def _imports(self) -> _ReferenceImports:
+def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
     if self._reference_imports is not None:
         return self._reference_imports
 
@@ -127,11 +137,11 @@ def _imports(self) -> _ReferenceImports:
 
 
 def _ensure_transformer(
-    self,
+    self: _RuntimeHelperHost,
     imports: _ReferenceImports,
     runtime_config: _RuntimeModelConfig,
     prompt_context: PromptEncodingResult,
-) -> object:
+) -> _AudioVideoTransformer:
     if self._transformer is not None:
         return self._transformer
 
@@ -230,30 +240,40 @@ def _ensure_transformer(
     return transformer
 
 
-def _ensure_vae_decoder(self, imports: _ReferenceImports) -> object:
+def _ensure_vae_decoder(
+    self: _RuntimeHelperHost, imports: _ReferenceImports
+) -> _VideoDecoderLike:
     del imports
     if self._vae_decoder is None:
-        self._vae_decoder = _load_configured_vae_decoder(self.checkpoint_path)
-        mx.eval(self._vae_decoder.parameters())
+        vae_decoder = _load_configured_vae_decoder(self.checkpoint_path)
+        mx.eval(vae_decoder.parameters())
+        self._vae_decoder = vae_decoder
     return self._vae_decoder
 
 
-def _ensure_vae_encoder(self, imports: _ReferenceImports) -> object:
+def _ensure_vae_encoder(
+    self: _RuntimeHelperHost, imports: _ReferenceImports
+) -> _VAEEncoder:
     if self._vae_encoder is None:
         self._vae_encoder = imports.load_vae_encoder(str(self.checkpoint_path))
         mx.eval(self._vae_encoder.parameters())
     return self._vae_encoder
 
 
-def _ensure_upsampler(self, imports: _ReferenceImports) -> object:
+def _ensure_upsampler(
+    self: _RuntimeHelperHost, imports: _ReferenceImports
+) -> _UpsamplerLike:
     del imports
     if self._upsampler is None:
-        self._upsampler = _load_configured_upsampler(self.spatial_upsampler_path)
-        mx.eval(self._upsampler.parameters())
+        upsampler = _load_configured_upsampler(self.spatial_upsampler_path)
+        mx.eval(upsampler.parameters())
+        self._upsampler = upsampler
     return self._upsampler
 
 
-def _ensure_audio_encoder(self, imports: _ReferenceImports) -> tuple[object, object]:
+def _ensure_audio_encoder(
+    self: _RuntimeHelperHost, imports: _ReferenceImports
+) -> tuple[_AudioEncoderLike, _AudioProcessorLike]:
     if self._audio_encoder is not None and self._audio_processor is not None:
         return self._audio_encoder, self._audio_processor
 
@@ -263,48 +283,29 @@ def _ensure_audio_encoder(self, imports: _ReferenceImports) -> tuple[object, obj
     )
     sanitized = imports.sanitize_audio_vae_weights(checkpoint_audio_weights)
     checkpoint_root = self.checkpoint_path.parent
-    raw_config = _load_optional_json_config(
-        checkpoint_root / "audio_vae" / "config.json"
-    )
-
-    ch = int(raw_config.get("base_channels", 128))
-    ch_mult = tuple(raw_config.get("ch_mult", (1, 2, 4)))
-    num_res_blocks = int(raw_config.get("num_res_blocks", 2))
-    attn_resolutions = set(raw_config.get("attn_resolutions") or [])
-    resolution = int(raw_config.get("resolution", 256))
-    z_channels = int(raw_config.get("latent_channels", 8))
-    dropout = float(raw_config.get("dropout", 0.0))
-    in_channels = int(raw_config.get("in_channels", 2))
-    norm_type = imports.audio_norm_type_enum(str(raw_config.get("norm_type", "pixel")))
-    causality_axis = imports.audio_causality_axis_enum(
-        str(raw_config.get("causality_axis", "height"))
-    )
-    mid_block_add_attention = bool(raw_config.get("mid_block_add_attention", True))
-    sample_rate = int(raw_config.get("sample_rate", 16000))
-    mel_hop_length = int(raw_config.get("mel_hop_length", 160))
-    mel_bins = int(raw_config.get("mel_bins", 64))
-    n_fft = int(raw_config.get("n_fft", 1024))
-    is_causal = bool(raw_config.get("is_causal", True))
+    audio_config = _runtime_audio_encoder_config(checkpoint_root)
+    norm_type = imports.audio_norm_type_enum(audio_config.norm_type)
+    causality_axis = imports.audio_causality_axis_enum(audio_config.causality_axis)
 
     encoder = imports.audio_encoder_class(
-        ch=ch,
-        ch_mult=ch_mult,
-        num_res_blocks=num_res_blocks,
-        attn_resolutions=attn_resolutions,
-        dropout=dropout,
+        ch=audio_config.base_channels,
+        ch_mult=audio_config.ch_mult,
+        num_res_blocks=audio_config.num_res_blocks,
+        attn_resolutions=audio_config.attn_resolutions,
+        dropout=audio_config.dropout,
         resamp_with_conv=True,
-        in_channels=in_channels,
-        resolution=resolution,
-        z_channels=z_channels,
-        double_z=bool(raw_config.get("double_z", True)),
+        in_channels=audio_config.in_channels,
+        resolution=audio_config.resolution,
+        z_channels=audio_config.latent_channels,
+        double_z=audio_config.double_z,
         norm_type=norm_type,
         causality_axis=causality_axis,
-        mid_block_add_attention=mid_block_add_attention,
-        sample_rate=sample_rate,
-        mel_hop_length=mel_hop_length,
-        n_fft=n_fft,
-        mel_bins=mel_bins,
-        is_causal=is_causal,
+        mid_block_add_attention=audio_config.mid_block_add_attention,
+        sample_rate=audio_config.sample_rate,
+        mel_hop_length=audio_config.mel_hop_length,
+        n_fft=audio_config.n_fft,
+        mel_bins=audio_config.mel_bins,
+        is_causal=audio_config.is_causal,
     )
     encoder_weights = {
         key.replace("encoder.", ""): value
@@ -322,10 +323,10 @@ def _ensure_audio_encoder(self, imports: _ReferenceImports) -> tuple[object, obj
             "per_channel_statistics._std_of_means"
         ]
     processor = imports.audio_processor_class(
-        sample_rate=sample_rate,
-        mel_bins=mel_bins,
-        mel_hop_length=mel_hop_length,
-        n_fft=n_fft,
+        sample_rate=audio_config.sample_rate,
+        mel_bins=audio_config.mel_bins,
+        mel_hop_length=audio_config.mel_hop_length,
+        n_fft=audio_config.n_fft,
     )
     mx.eval(encoder.parameters())
     self._audio_encoder = encoder
@@ -334,14 +335,14 @@ def _ensure_audio_encoder(self, imports: _ReferenceImports) -> tuple[object, obj
 
 
 def _encode_audio_conditioning(
-    self,
+    self: _RuntimeHelperHost,
     *,
     imports: _ReferenceImports,
     audio_conditioning: AudioConditioningInput,
     audio_frames: int,
     model_dtype: mx.Dtype,
-) -> tuple[object, npt.NDArray[np.float32], int]:
-    encoder, processor = self._ensure_audio_encoder(imports)
+) -> tuple[MLXArray, npt.NDArray[np.float32], int]:
+    encoder, processor = _ensure_audio_encoder(self, imports)
     default_duration = None
     if audio_conditioning.max_duration_seconds is not None:
         default_duration = audio_conditioning.max_duration_seconds
@@ -359,8 +360,8 @@ def _encode_audio_conditioning(
 
 
 def _ensure_audio_stack(
-    self, imports: _ReferenceImports
-) -> tuple[object, object, int, str]:
+    self: _RuntimeHelperHost, imports: _ReferenceImports
+) -> tuple[_AudioDecoderLike, _VocoderLike, int, str]:
     if (
         self._audio_decoder is not None
         and self._vocoder is not None
@@ -394,16 +395,26 @@ def _ensure_audio_stack(
         mx.eval(self._audio_decoder.parameters())
     if self._vocoder is None:
         (
-            self._vocoder,
-            self._audio_output_sample_rate,
-            self._audio_backend,
+            vocoder,
+            output_sample_rate,
+            backend_label,
         ) = _load_runtime_vocoder(
             checkpoint_path=self.checkpoint_path,
             checkpoint_weights=checkpoint_audio_weights,
             sanitize_vocoder_weights=imports.sanitize_vocoder_weights,
         )
-        mx.eval(self._vocoder.parameters())
+        mx.eval(vocoder.parameters())
+        self._vocoder = vocoder
+        self._audio_output_sample_rate = output_sample_rate
+        self._audio_backend = backend_label
     mx.clear_cache()
+    if (
+        self._audio_decoder is None
+        or self._vocoder is None
+        or self._audio_output_sample_rate is None
+        or self._audio_backend is None
+    ):
+        raise RuntimeError("LTX audio stack did not initialize correctly")
     return (
         self._audio_decoder,
         self._vocoder,
@@ -413,13 +424,13 @@ def _ensure_audio_stack(
 
 
 def _decode_audio_waveform(
-    self,
+    self: _RuntimeHelperHost,
     *,
     imports: _ReferenceImports,
-    audio_latents: object,
+    audio_latents: MLXArray,
 ) -> tuple[npt.NDArray[np.float32] | None, int, str]:
-    audio_decoder, vocoder, output_sample_rate, backend_label = (
-        self._ensure_audio_stack(imports)
+    audio_decoder, vocoder, output_sample_rate, backend_label = _ensure_audio_stack(
+        self, imports
     )
     decoded_audio = imports.decode_audio(
         audio_latents.astype(mx.float32),
@@ -435,7 +446,7 @@ def _decode_audio_waveform(
 
 
 def _prepare_conditionings(
-    self,
+    self: _RuntimeHelperHost,
     *,
     imports: _ReferenceImports,
     conditioning_inputs: tuple[ConditioningInput, ...],
@@ -447,11 +458,11 @@ def _prepare_conditionings(
     if not conditioning_inputs:
         return _ConditioningPlan(stage1=(), stage2=())
 
-    vae_encoder = self._ensure_vae_encoder(imports)
+    vae_encoder = _ensure_vae_encoder(self, imports)
     stage1_width = padded_shape.internal_width // 2
     stage1_height = padded_shape.internal_height // 2
-    stage1_conditionings: list[object] = []
-    stage2_conditionings: list[object] = []
+    stage1_conditionings: list[_ConditionLike] = []
+    stage2_conditionings: list[_ConditionLike] = []
 
     for conditioning_input in conditioning_inputs:
         resolved_index = _resolve_latent_frame_index(
@@ -497,13 +508,13 @@ def _prepare_conditionings(
 
 
 def _apply_conditionings_to_stage(
-    self,
+    self: _RuntimeHelperHost,
     *,
     imports: _ReferenceImports,
-    latents: object,
-    conditionings: tuple[object, ...],
+    latents: MLXArray,
+    conditionings: tuple[_ConditionLike, ...],
     sigmas: tuple[float, ...],
-) -> object:
+) -> _LatentStateLike:
     model_dtype = latents.dtype
     state = imports.latent_state_class(
         latent=latents,
@@ -522,18 +533,20 @@ def _apply_conditionings_to_stage(
         + state.latent * (mx.array(1.0, dtype=model_dtype) - scaled_mask)
     ).astype(model_dtype)
     mx.eval(conditioned)
-    return replace(state, latent=conditioned)
+    updated_state = state.clone()
+    updated_state.latent = conditioned
+    return updated_state
 
 
 def _decode_video(
-    self,
+    self: _RuntimeHelperHost,
     *,
     imports: _ReferenceImports,
-    vae_decoder: object,
-    latents: object,
+    vae_decoder: _VideoDecoderLike,
+    latents: MLXArray,
     padded_shape: _PaddedShape,
     num_frames: int,
-) -> tuple[object, str]:
+) -> tuple[MLXArray, str]:
     tiling_config = imports.tiling_config_class.auto(
         padded_shape.internal_height,
         padded_shape.internal_width,

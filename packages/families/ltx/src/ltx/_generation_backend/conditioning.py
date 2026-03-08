@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import hashlib
@@ -6,6 +5,7 @@ import json
 import math
 import subprocess
 from pathlib import Path
+from typing import TypeGuard
 
 import mlx.core as mx
 import numpy as np
@@ -14,7 +14,7 @@ from PIL import Image
 
 from ..generation import ConditioningInput
 from ..prompt_encoding import PromptEncodingResult
-from .types import _PaddedShape, _ReferenceImports
+from .types import MLXArray, _PaddedShape, _ReferenceImports, _VAEEncoder
 
 
 def _decode_conditioning_audio_file(
@@ -64,7 +64,7 @@ def _decode_conditioning_audio_file(
     return waveform.astype(np.float32), sample_rate
 
 
-def _fit_audio_latents(audio_latents: object, *, target_frames: int) -> object:
+def _fit_audio_latents(audio_latents: MLXArray, *, target_frames: int) -> MLXArray:
     current_frames = int(audio_latents.shape[2])
     if current_frames == target_frames:
         return audio_latents
@@ -80,7 +80,7 @@ def _fit_audio_latents(audio_latents: object, *, target_frames: int) -> object:
         ),
         dtype=audio_latents.dtype,
     )
-    return mx.concatenate((audio_latents, padding), axis=2)
+    return mx.concatenate([audio_latents, padding], axis=2)
 
 
 def _emit_debug_frame_snapshot(
@@ -100,12 +100,12 @@ def _emit_debug_frame_snapshot(
 def _encode_conditioning_latent(
     *,
     imports: _ReferenceImports,
-    vae_encoder: object,
+    vae_encoder: _VAEEncoder,
     payload_path: Path,
     width: int,
     height: int,
     dtype: mx.Dtype,
-) -> object:
+) -> MLXArray:
     image = imports.load_image(
         str(payload_path), height=height, width=width, dtype=dtype
     )
@@ -161,19 +161,19 @@ def _resolve_latent_frame_index(
     return int(max(0, min(latent_frames - 1, scaled)))
 
 
-def _require_video_context(prompt_context: PromptEncodingResult) -> object:
+def _require_video_context(prompt_context: PromptEncodingResult) -> MLXArray:
     if not _looks_like_mlx_array(prompt_context.video_context):
         raise ValueError("LTX real generation requires an MLX video prompt context")
     return prompt_context.video_context
 
 
-def _require_audio_context(prompt_context: PromptEncodingResult) -> object:
+def _require_audio_context(prompt_context: PromptEncodingResult) -> MLXArray:
     if not _looks_like_mlx_array(prompt_context.audio_context):
         raise ValueError("LTX real generation requires an MLX audio prompt context")
     return prompt_context.audio_context
 
 
-def _attention_mask(prompt_context: PromptEncodingResult) -> object | None:
+def _attention_mask(prompt_context: PromptEncodingResult) -> MLXArray | None:
     if not _looks_like_mlx_array(prompt_context.attention_mask):
         return None
     if int(mx.sum(prompt_context.attention_mask).item()) == int(
@@ -189,11 +189,11 @@ def _context_width(video_context: object) -> int:
     return int(video_context.shape[-1])
 
 
-def _looks_like_mlx_array(value: object) -> bool:
+def _looks_like_mlx_array(value: object) -> TypeGuard[MLXArray]:
     return hasattr(value, "shape") and hasattr(value, "dtype")
 
 
-def _prompt_context_dtype(context: object) -> mx.Dtype:
+def _prompt_context_dtype(context: MLXArray) -> mx.Dtype:
     return getattr(context, "dtype", mx.bfloat16)
 
 

@@ -1,20 +1,30 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import functools
 
-from . import runtime
+from .runtime import (
+    _RUNTIME_IMPORT_ERROR,
+    TextConfig,
+    create_attention_mask,
+    create_causal_mask,
+    mx,
+    nn,
+    np,
+)
 
-if runtime._RUNTIME_IMPORT_ERROR is None:
-    mx = runtime.mx
-    nn = runtime.nn
-    np = runtime.np
-    create_causal_mask = runtime.create_causal_mask
-    TextConfig = runtime.TextConfig
-    create_attention_mask = runtime.create_attention_mask
+if _RUNTIME_IMPORT_ERROR is None:
+
+    def _required_quantization_int(
+        quantization: dict[str, object],
+        key: str,
+    ) -> int:
+        value = quantization.get(key)
+        if not isinstance(value, int):
+            raise ValueError(f"LTX quantization '{key}' must be an integer")
+        return value
 
     def _apply_quantization(
-        model: nn.Module,
+        model: object,
         weights: set[str],
         quantization: dict[str, object],
     ) -> None:
@@ -27,10 +37,11 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 return False
             return f"{path}.scales" in weights
 
-        nn.quantize(
+        quantize = getattr(nn, "quantize")
+        quantize(
             model,
-            group_size=int(quantization["group_size"]),
-            bits=int(quantization["bits"]),
+            group_size=_required_quantization_int(quantization, "group_size"),
+            bits=_required_quantization_int(quantization, "bits"),
             mode=str(quantization.get("mode", "affine")),
             class_predicate=get_class_predicate,
         )
@@ -51,7 +62,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         attention_mask: mx.array | None,
         cache: list[object | None],
         config: TextConfig,
-    ) -> tuple[object | None, object | None]:
+    ) -> tuple[mx.array | None, mx.array | None]:
         if attention_mask is None:
             global_mask = create_attention_mask(
                 hidden, cache[config.sliding_window_pattern - 1]
@@ -111,7 +122,8 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
 
         fractional_positions = np.stack(
             [
-                np.arange(seq_len, dtype=np_dtype) / np_dtype(position_max)
+                np.arange(seq_len, dtype=np_dtype)
+                / np.asarray(position_max, dtype=np_dtype)
                 for position_max in max_pos
             ],
             axis=-1,

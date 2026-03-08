@@ -5,7 +5,7 @@ import base64
 import json
 import os
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Literal
 
 import httpx
 from mlx_runtime_core import RuntimeHome
@@ -21,6 +21,18 @@ from mlx_runtime_schemas import (
 )
 
 WorkflowQuality = Literal["auto", "fast", "balanced", "high"]
+
+
+def _workflow_quality(value: str) -> WorkflowQuality:
+    if value == "auto":
+        return "auto"
+    if value == "fast":
+        return "fast"
+    if value == "balanced":
+        return "balanced"
+    if value == "high":
+        return "high"
+    raise ValueError(f"Unsupported workflow quality: {value}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -142,7 +154,7 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
                 natural_audio=bool(args.natural_audio),
                 no_music=bool(args.no_music),
                 enhance_prompt=bool(args.enhance_prompt),
-                quality=cast(WorkflowQuality, args.quality),
+                quality=_workflow_quality(str(args.quality)),
             ),
             output=JobOutputPolicy(artifact_format=str(args.artifact_format)),
         )
@@ -194,8 +206,8 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _generation_params(args: argparse.Namespace) -> dict[str, Any]:
-    params: dict[str, Any] = {}
+def _generation_params(args: argparse.Namespace) -> dict[str, int]:
+    params: dict[str, int] = {}
     for key in ("width", "height", "fps", "seed"):
         value = getattr(args, key)
         if value is not None:

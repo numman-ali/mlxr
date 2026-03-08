@@ -176,6 +176,8 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not let compatibility facades become the de facto core API.
 - Do not let model-family bridges silently default or reshape through critical config or weight mismatches; fail closed when the checkpoint contract is uncertain.
 - Do not treat pipeline completion as visual correctness on model-family bring-up; promote claims only after stage-local and human-visible validation.
+- Do not use file-level validation bypasses such as `# mypy: ignore-errors` as a shortcut. If typing is broken, fix the typing, narrow the seam, add the needed stubs or protocols, or delete the dead code.
+- Do not hide validation debt behind broad suppressions. Per-line ignores must be rare, specific, and justified by a real upstream typing gap, not by local convenience.
 
 ## Mandatory Dev Loop
 

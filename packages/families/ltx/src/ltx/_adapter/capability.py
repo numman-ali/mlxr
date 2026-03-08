@@ -1,5 +1,6 @@
-# mypy: ignore-errors
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from mlx_runtime_core import (
     ConversionPlan,
@@ -20,8 +21,11 @@ from mlx_runtime_schemas import (
 
 from .state import LoadedLTXRuntimeState
 
+if TYPE_CHECKING:
+    from ..adapter import LTXFamilyAdapter
 
-def inspect_source(self, source: ResolvedSource) -> FamilyInspection:
+
+def inspect_source(self: LTXFamilyAdapter, source: ResolvedSource) -> FamilyInspection:
     role_candidates = self._role_candidates(source)
     return FamilyInspection(
         family=self.family_id,
@@ -50,7 +54,9 @@ def inspect_source(self, source: ResolvedSource) -> FamilyInspection:
     )
 
 
-def fetch_policy_for_conversion(self, role: str, source: ResolvedSource) -> FetchPolicy:
+def fetch_policy_for_conversion(
+    self: LTXFamilyAdapter, role: str, source: ResolvedSource
+) -> FetchPolicy:
     del source
     allow_patterns: tuple[str, ...]
     if role not in (*self._required_roles, "bundle"):
@@ -89,7 +95,9 @@ def fetch_policy_for_conversion(self, role: str, source: ResolvedSource) -> Fetc
 
 
 def convert(
-    self, sources: dict[str, ConversionSource], plan: ConversionPlan
+    self: LTXFamilyAdapter,
+    sources: dict[str, ConversionSource],
+    plan: ConversionPlan,
 ) -> PortableArtifact:
     prepared = self._prepare_components(sources)
     component_records, payload_items = self._artifact_components(prepared)
@@ -219,7 +227,7 @@ def convert(
 
 
 def load(
-    self, artifact: PortableArtifact, profile: ExecutionProfile
+    self: LTXFamilyAdapter, artifact: PortableArtifact, profile: ExecutionProfile
 ) -> LoadedModelHandle:
     if artifact.storage_path is None or not artifact.record.components:
         return LoadedModelHandle(
@@ -257,5 +265,7 @@ def load(
     )
 
 
-def capabilities(self, artifact: PortableArtifact) -> CapabilityDescriptor:
+def capabilities(
+    self: LTXFamilyAdapter, artifact: PortableArtifact
+) -> CapabilityDescriptor:
     return artifact.record.capability

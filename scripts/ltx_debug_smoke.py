@@ -24,6 +24,8 @@ DEFAULT_RUN_NAME = "ltx-fidelity-debug"
 DEFAULT_TMUX_SESSION = "mlxr-ltx-debug"
 DEFAULT_HEARTBEAT_SECONDS = 2.0
 DEFAULT_PROFILE_NAME = "safe-smoke"
+KNOWN_REAL_BACKENDS = frozenset({"mlx_video_distilled_two_stage_bridge"})
+KNOWN_REAL_PIPELINE_KINDS = frozenset({"distilled_two_stage"})
 PROFILE_PRESETS: dict[str, tuple[int, int, int, int]] = {
     "safe-smoke": (256, 160, 17, 24),
     "visual-gate": (384, 224, 17, 24),
@@ -67,6 +69,40 @@ class VideoGeneratorLike(Protocol):
     ) -> GeneratedVideoLike: ...
 
     def close(self) -> None: ...
+
+
+def _is_preview_backend(
+    backend: str, metadata: dict[str, object] | None = None
+) -> bool:
+    if "preview" in backend.lower():
+        return True
+    if metadata is None:
+        return False
+    pipeline_kind = metadata.get("pipeline_kind")
+    return isinstance(pipeline_kind, str) and "preview" in pipeline_kind.lower()
+
+
+def _assert_real_backend(
+    backend: str, metadata: dict[str, object] | None = None
+) -> None:
+    if _is_preview_backend(backend, metadata):
+        raise RuntimeError(
+            "LTX debug smoke fell back to the preview backend; this run is not valid "
+            "evidence for real generation"
+        )
+    if backend not in KNOWN_REAL_BACKENDS:
+        raise RuntimeError(
+            f"LTX debug smoke reported unexpected backend '{backend}'; this run is not valid evidence for the known real bridge"
+        )
+    if metadata is None:
+        raise RuntimeError(
+            "LTX debug smoke is missing backend metadata; this run is not valid evidence for the known real bridge"
+        )
+    pipeline_kind = metadata.get("pipeline_kind")
+    if pipeline_kind not in KNOWN_REAL_PIPELINE_KINDS:
+        raise RuntimeError(
+            "LTX debug smoke reported unexpected pipeline metadata; this run is not valid evidence for the known real bridge"
+        )
 
 
 def _default_prompt_encoder_factory(
@@ -404,6 +440,7 @@ def run_smoke(
                 seed=config.seed,
             )
             timings_ms["generate"] = _elapsed_ms(generate_started)
+            _assert_real_backend(generated_video.backend, generated_video.metadata)
 
             heartbeat_stop.set()
             encode_started = time.perf_counter()
@@ -417,6 +454,7 @@ def run_smoke(
 
             manifest["status"] = "success"
             manifest["backend"] = generated_video.backend
+            manifest["backend_verified"] = True
             manifest["prompt_signature"] = generated_video.prompt_signature
             manifest["conditioning_count"] = generated_video.conditioning_count
             manifest["video_metadata"] = generated_video.metadata
@@ -442,6 +480,7 @@ def run_smoke(
             )
     except Exception as exc:
         manifest["status"] = "failed"
+        manifest["backend_verified"] = False
         manifest["error"] = {
             "type": type(exc).__name__,
             "message": str(exc),

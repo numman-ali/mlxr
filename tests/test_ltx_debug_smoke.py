@@ -222,7 +222,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                         frames=frames,
                         fps=24,
                         seed=seed or 0,
-                        backend="ltx_test_backend",
+                        backend="mlx_video_distilled_two_stage_bridge",
                         conditioning_count=0,
                         prompt_signature="sig",
                         metadata={
@@ -335,6 +335,192 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
         self.assertIn("/tmp/manual-runs/dog-session.log", command)
         self.assertIn("--run-name", command)
         self.assertIn("--profile", command)
+
+    def test_run_smoke_fails_if_preview_backend_is_used(self) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_root = Path(tmp_dir) / "payload"
+            checkpoint = (
+                artifact_root / "checkpoint" / "ltx-2.3-22b-distilled.safetensors"
+            )
+            checkpoint.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint.write_text("ckpt", encoding="utf-8")
+            upsampler = (
+                artifact_root
+                / "spatial_upsampler"
+                / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+            )
+            upsampler.parent.mkdir(parents=True, exist_ok=True)
+            upsampler.write_text("upsampler", encoding="utf-8")
+            text_encoder = artifact_root / "text_encoder"
+            text_encoder.mkdir(parents=True, exist_ok=True)
+
+            config = module.build_config(
+                Namespace(
+                    artifact_root=artifact_root,
+                    checkpoint_path=None,
+                    spatial_upsampler_path=None,
+                    text_encoder_path=None,
+                    prompt="a dog in a park",
+                    profile="safe-smoke",
+                    width=256,
+                    height=160,
+                    num_frames=17,
+                    fps=24,
+                    seed=1234,
+                    output_root=Path(tmp_dir) / "runs",
+                    run_name="preview-should-fail",
+                    stage_debug=False,
+                    clean_lifecycle=True,
+                    backend_progress=False,
+                    heartbeat_seconds=0.01,
+                    print_tmux_command=False,
+                    tmux_session_name="mlxr-ltx-debug",
+                )
+            )
+
+            class FakeEncoder:
+                def encode(self, prompt: str) -> object:
+                    return types.SimpleNamespace(
+                        video_context=object(),
+                        audio_context=object(),
+                        attention_mask=object(),
+                        prompt_text=prompt,
+                        token_count=10,
+                        sequence_length=16,
+                    )
+
+                def close(self) -> None:
+                    return None
+
+            class FakePreviewGenerator:
+                def generate(
+                    self,
+                    *,
+                    prompt_context: object,
+                    conditioning_inputs: tuple[object, ...],
+                    width: int,
+                    height: int,
+                    num_frames: int,
+                    fps: int,
+                    seed: int | None = None,
+                ) -> _FakeGeneratedVideo:
+                    del prompt_context, conditioning_inputs, fps, seed
+                    frames = np.zeros((num_frames, height, width, 3), dtype=np.uint8)
+                    return _FakeGeneratedVideo(
+                        frames=frames,
+                        fps=24,
+                        seed=0,
+                        backend="mlx_prompt_conditioned_preview",
+                        conditioning_count=0,
+                        prompt_signature="sig",
+                        metadata={"pipeline_kind": "preview"},
+                    )
+
+                def close(self) -> None:
+                    return None
+
+            with self.assertRaisesRegex(RuntimeError, "preview backend"):
+                module.run_smoke(
+                    config,
+                    prompt_encoder_factory=lambda **_: FakeEncoder(),
+                    video_generator_factory=lambda **_: FakePreviewGenerator(),
+                    mp4_encoder=lambda *_args, **_kwargs: None,
+                    cache_clearer=lambda: None,
+                )
+
+    def test_run_smoke_fails_if_backend_is_unknown(self) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_root = Path(tmp_dir) / "payload"
+            checkpoint = (
+                artifact_root / "checkpoint" / "ltx-2.3-22b-distilled.safetensors"
+            )
+            checkpoint.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint.write_text("ckpt", encoding="utf-8")
+            upsampler = (
+                artifact_root
+                / "spatial_upsampler"
+                / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+            )
+            upsampler.parent.mkdir(parents=True, exist_ok=True)
+            upsampler.write_text("upsampler", encoding="utf-8")
+            text_encoder = artifact_root / "text_encoder"
+            text_encoder.mkdir(parents=True, exist_ok=True)
+
+            config = module.build_config(
+                Namespace(
+                    artifact_root=artifact_root,
+                    checkpoint_path=None,
+                    spatial_upsampler_path=None,
+                    text_encoder_path=None,
+                    prompt="a dog in a park",
+                    profile="safe-smoke",
+                    width=256,
+                    height=160,
+                    num_frames=17,
+                    fps=24,
+                    seed=1234,
+                    output_root=Path(tmp_dir) / "runs",
+                    run_name="unknown-backend-should-fail",
+                    stage_debug=False,
+                    clean_lifecycle=True,
+                    backend_progress=False,
+                    heartbeat_seconds=0.01,
+                    print_tmux_command=False,
+                    tmux_session_name="mlxr-ltx-debug",
+                )
+            )
+
+            class FakeEncoder:
+                def encode(self, prompt: str) -> object:
+                    return types.SimpleNamespace(
+                        video_context=object(),
+                        audio_context=object(),
+                        attention_mask=object(),
+                        prompt_text=prompt,
+                        token_count=10,
+                        sequence_length=16,
+                    )
+
+                def close(self) -> None:
+                    return None
+
+            class FakeUnknownGenerator:
+                def generate(
+                    self,
+                    *,
+                    prompt_context: object,
+                    conditioning_inputs: tuple[object, ...],
+                    width: int,
+                    height: int,
+                    num_frames: int,
+                    fps: int,
+                    seed: int | None = None,
+                ) -> _FakeGeneratedVideo:
+                    del prompt_context, conditioning_inputs, fps, seed
+                    frames = np.zeros((num_frames, height, width, 3), dtype=np.uint8)
+                    return _FakeGeneratedVideo(
+                        frames=frames,
+                        fps=24,
+                        seed=0,
+                        backend="unexpected_bridge_name",
+                        conditioning_count=0,
+                        prompt_signature="sig",
+                        metadata={"pipeline_kind": "distilled_two_stage"},
+                    )
+
+                def close(self) -> None:
+                    return None
+
+            with self.assertRaisesRegex(RuntimeError, "unexpected backend"):
+                module.run_smoke(
+                    config,
+                    prompt_encoder_factory=lambda **_: FakeEncoder(),
+                    video_generator_factory=lambda **_: FakeUnknownGenerator(),
+                    mp4_encoder=lambda *_args, **_kwargs: None,
+                    cache_clearer=lambda: None,
+                )
 
 
 if __name__ == "__main__":

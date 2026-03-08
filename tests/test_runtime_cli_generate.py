@@ -13,15 +13,21 @@ from mlx_runtime_cli.cli import (
     _references_from_args,
     build_parser,
 )
+from mlx_runtime_schemas import InputHandleRecord
 
 
 class _FakeClient(RuntimeClient):
     def __init__(self) -> None:
         self.calls: list[tuple[Path, str]] = []
 
-    def import_file(self, path: Path, *, kind: str):  # type: ignore[no-untyped-def]
+    def import_file(self, path: Path, *, kind: str) -> InputHandleRecord:
         self.calls.append((path, kind))
-        return type("Record", (), {"handle_id": f"{kind}-handle"})()
+        return InputHandleRecord(
+            handle_id=f"{kind}-handle",
+            media_type=None,
+            role=kind,
+            storage_key=f"inputs/{kind}-handle",
+        )
 
 
 class RuntimeCliGenerateTests(unittest.TestCase):

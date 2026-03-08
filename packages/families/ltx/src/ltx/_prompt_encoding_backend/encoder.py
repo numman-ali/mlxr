@@ -1,11 +1,14 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Protocol
+
+import numpy as np
 
 from ..prompt_encoding import PromptEncoder, PromptEncodingResult
 from . import runtime
+from .compat import safe_open
 from .components import (
     _V2_EXPECTED_CONFIG,
     Embeddings1DConnector,
@@ -19,10 +22,84 @@ from .components import (
     _TransformerConfigResolution,
 )
 
+
+class _TokenizerLike(Protocol):
+    padding_side: str
+    pad_token: str | None
+    eos_token: str
+
+    def __call__(
+        self,
+        prompt: str,
+        *,
+        return_tensors: str,
+        max_length: int,
+        truncation: bool,
+        padding: str,
+    ) -> dict[str, object]: ...
+
+
+def _require_weight_mapping(weights: object, *, context: str) -> dict[str, mx.array]:
+    if not isinstance(weights, dict):
+        raise RuntimeError(context)
+    return {
+        key: value
+        for key, value in weights.items()
+        if isinstance(key, str) and isinstance(value, mx.array)
+    }
+
+
+def _int_value(value: object, *, context: str) -> int:
+    if isinstance(value, bool):
+        raise RuntimeError(context)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        raise RuntimeError(context)
+    if isinstance(value, str):
+        return int(value)
+    raise RuntimeError(context)
+
+
+def _bool_value(value: object, *, context: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise RuntimeError(context)
+
+
+def _float_value(value: object, *, context: str) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        return float(value)
+    raise RuntimeError(context)
+
+
+def _int_list(value: object, *, context: str) -> list[int]:
+    if not isinstance(value, (list, tuple)):
+        raise RuntimeError(context)
+    return [_int_value(item, context=context) for item in value]
+
+
+def _require_array_input(
+    value: object, *, context: str
+) -> int | float | bool | list[object] | tuple[object, ...] | np.ndarray | mx.array:
+    if isinstance(value, (int, float, bool, list, tuple, np.ndarray, mx.array)):
+        return value
+    raise RuntimeError(context)
+
+
 if runtime._RUNTIME_IMPORT_ERROR is None:
     mx = runtime.mx
     AutoTokenizer = runtime.AutoTokenizer
-    safe_open = runtime.safe_open
 
     class _MLXLTXPromptEncoder:
         def __init__(self, checkpoint_path: Path, text_encoder_path: Path):
@@ -30,14 +107,16 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             self.text_encoder_path = text_encoder_path
             self.max_length = 1024
             self.language_model: LanguageModel | None = None
-            self.feature_extractor: object | None = None
+            self.feature_extractor: (
+                GemmaFeatureExtractorV1 | GemmaFeatureExtractorV2 | None
+            ) = None
             self.video_connector: Embeddings1DConnector | None = None
             self.audio_connector: Embeddings1DConnector | None = None
             self.layout: _PromptLayout | None = None
             self._transformer_config_resolution: _TransformerConfigResolution | None = (
                 None
             )
-            self.tokenizer: object | None = None
+            self.tokenizer: _TokenizerLike | None = None
 
         def encode(
             self,
@@ -56,6 +135,9 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 raise RuntimeError(
                     "LTX prompt encoder video connector failed to initialize"
                 )
+            if self.layout is None:
+                raise RuntimeError("LTX prompt encoder layout failed to initialize")
+            layout = self.layout
 
             inputs = self.tokenizer(
                 prompt,
@@ -64,8 +146,18 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 truncation=True,
                 padding="max_length",
             )
-            input_ids = mx.array(inputs["input_ids"])
-            attention_mask = mx.array(inputs["attention_mask"])
+            input_ids = mx.array(
+                _require_array_input(
+                    inputs["input_ids"],
+                    context="Tokenizer did not return input_ids",
+                )
+            )
+            attention_mask = mx.array(
+                _require_array_input(
+                    inputs["attention_mask"],
+                    context="Tokenizer did not return attention_mask",
+                )
+            )
             _, all_hidden_states = self.language_model(
                 inputs=input_ids,
                 input_embeddings=None,
@@ -112,20 +204,20 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 attention_mask_shape=tuple(int(size) for size in binary_mask.shape),
                 audio_context_shape=audio_shape,
                 context_representation="post_connector",
-                caption_proj_before_connector=self.layout.caption_proj_before_connector,
-                rope_type=self.layout.rope_type,
-                double_precision_rope=self.layout.double_precision_rope,
+                caption_proj_before_connector=layout.caption_proj_before_connector,
+                rope_type=layout.rope_type,
+                double_precision_rope=layout.double_precision_rope,
                 connector_apply_gated_attention=(
-                    self.layout.connector_apply_gated_attention
+                    layout.connector_apply_gated_attention
                 ),
-                transformer_context_dim=self.layout.transformer_context_dim,
+                transformer_context_dim=layout.transformer_context_dim,
                 transformer_apply_gated_attention=(
-                    self.layout.transformer_apply_gated_attention
+                    layout.transformer_apply_gated_attention
                 ),
                 transformer_cross_attention_adaln=(
-                    self.layout.transformer_cross_attention_adaln
+                    layout.transformer_cross_attention_adaln
                 ),
-                config_source=self.layout.config_source,
+                config_source=layout.config_source,
             )
 
         def close(self) -> None:
@@ -205,7 +297,12 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             audio_weights: dict[str, mx.array] = {}
 
             for candidate in self._connector_sources():
-                weights = mx.load(str(candidate))
+                weights = _require_weight_mapping(
+                    mx.load(str(candidate)),
+                    context=(
+                        f"LTX prompt connector shard '{candidate}' did not load into a weight mapping"
+                    ),
+                )
                 if projection_weights is None:
                     projection_weights = self._feature_projection(weights)
                 if not video_weights:
@@ -365,28 +462,33 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 connector_apply_gated_attention = self._required_transformer_bool(
                     transformer_config, "connector_apply_gated_attention"
                 )
-                video_heads = int(
-                    transformer_config.get("connector_num_attention_heads", 32)
+                video_heads = _int_value(
+                    transformer_config.get("connector_num_attention_heads", 32),
+                    context="Expected integer connector_num_attention_heads",
                 )
-                video_head_dim = int(
-                    transformer_config.get("connector_attention_head_dim", 128)
+                video_head_dim = _int_value(
+                    transformer_config.get("connector_attention_head_dim", 128),
+                    context="Expected integer connector_attention_head_dim",
                 )
                 video_dim = video_heads * video_head_dim
-                audio_heads = int(
+                audio_heads = _int_value(
                     transformer_config.get(
                         "audio_connector_num_attention_heads",
                         transformer_config.get("connector_num_attention_heads", 32),
-                    )
+                    ),
+                    context="Expected integer audio_connector_num_attention_heads",
                 )
-                audio_head_dim = int(
+                audio_head_dim = _int_value(
                     transformer_config.get(
                         "audio_connector_attention_head_dim",
                         transformer_config.get("connector_attention_head_dim", 128),
-                    )
+                    ),
+                    context="Expected integer audio_connector_attention_head_dim",
                 )
                 audio_dim = audio_heads * audio_head_dim
-                transformer_context_dim = int(
-                    transformer_config.get("cross_attention_dim", video_dim)
+                transformer_context_dim = _int_value(
+                    transformer_config.get("cross_attention_dim", video_dim),
+                    context="Expected integer cross_attention_dim",
                 )
                 if transformer_context_dim != video_dim:
                     raise NotImplementedError(
@@ -403,25 +505,34 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                     transformer_context_dim=transformer_context_dim,
                     video_heads=video_heads,
                     video_head_dim=video_head_dim,
-                    video_layers=int(transformer_config.get("connector_num_layers", 8)),
+                    video_layers=_int_value(
+                        transformer_config.get("connector_num_layers", 8),
+                        context="Expected integer connector_num_layers",
+                    ),
                     audio_heads=audio_heads,
                     audio_head_dim=audio_head_dim,
-                    audio_layers=int(
+                    audio_layers=_int_value(
                         transformer_config.get(
                             "audio_connector_num_layers",
                             transformer_config.get("connector_num_layers", 8),
-                        )
+                        ),
+                        context="Expected integer audio_connector_num_layers",
                     ),
-                    num_learnable_registers=int(
-                        transformer_config.get("connector_num_learnable_registers", 128)
+                    num_learnable_registers=_int_value(
+                        transformer_config.get(
+                            "connector_num_learnable_registers", 128
+                        ),
+                        context="Expected integer connector_num_learnable_registers",
                     ),
-                    positional_embedding_theta=float(
-                        transformer_config.get("positional_embedding_theta", 10000.0)
+                    positional_embedding_theta=_float_value(
+                        transformer_config.get("positional_embedding_theta", 10000.0),
+                        context="Expected float positional_embedding_theta",
                     ),
-                    positional_embedding_max_pos=list(
+                    positional_embedding_max_pos=_int_list(
                         transformer_config.get(
                             "connector_positional_embedding_max_pos", [4096]
-                        )
+                        ),
+                        context="Expected integer connector_positional_embedding_max_pos entries",
                     ),
                     rope_type=rope_type,
                     double_precision_rope=frequencies_precision == "float64",
@@ -501,14 +612,20 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 raise NotImplementedError(
                     f"Current V2 LTX prompt config is missing required field '{key}'"
                 )
-            return bool(transformer_config[key])
+            return _bool_value(
+                transformer_config[key],
+                context=f"Current V2 LTX prompt config field '{key}' must be boolean",
+            )
 
         def _optional_transformer_bool(
             self, transformer_config: dict[str, object], key: str
         ) -> bool | None:
             if key not in transformer_config:
                 return None
-            return bool(transformer_config[key])
+            return _bool_value(
+                transformer_config[key],
+                context=f"Current V2 LTX prompt config field '{key}' must be boolean",
+            )
 
         def _required_transformer_string(
             self, transformer_config: dict[str, object], key: str

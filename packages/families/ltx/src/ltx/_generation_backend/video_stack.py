@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import importlib
@@ -6,17 +5,26 @@ import types
 from pathlib import Path
 
 import mlx.core as mx
-import mlx.nn as nn
 
+from .. import _nn_compat as nn
 from .._audio_vocoder import AudioVocoder
 from .config import (
     _decoder_initial_feature_channels,
     _first_present,
+    _int_value,
     _runtime_vae_config,
     _runtime_vocoder_config,
     _validate_upsampler_layout,
 )
 from .reference_imports import _reference_path_on_sys_path
+from .types import (
+    MLXArray,
+    _SanitizeVocoderWeights,
+    _TilingConfigInstance,
+    _UpsamplerLike,
+    _VideoDecoderLike,
+    _VocoderLike,
+)
 
 
 class _WrappedCausalConv3d(nn.Module):
@@ -39,7 +47,8 @@ class _WrappedCausalConv3d(nn.Module):
         )
 
     def __call__(self, x: mx.array, *, causal: bool = False) -> mx.array:
-        return self.conv(x, causal=causal)
+        result: mx.array = self.conv(x, causal=causal)
+        return result
 
 
 class _ConfiguredVideoDecoder(nn.Module):
@@ -120,7 +129,10 @@ class _ConfiguredVideoDecoder(nn.Module):
     ) -> tuple[object, int]:
         decoder_module = self._decoder_module
         if block_name == "res_x":
-            num_layers = int(block_config.get("num_layers", 1))
+            num_layers = _int_value(
+                block_config.get("num_layers", 1),
+                context="Expected integer LTX decoder num_layers metadata",
+            )
             return (
                 decoder_module.ResBlockGroup(
                     in_channels,
@@ -131,7 +143,10 @@ class _ConfiguredVideoDecoder(nn.Module):
                 in_channels,
             )
 
-        reduction = int(block_config.get("multiplier", 1))
+        reduction = _int_value(
+            block_config.get("multiplier", 1),
+            context="Expected integer LTX decoder multiplier metadata",
+        )
         if reduction < 1:
             raise ValueError(
                 f"LTX decoder block '{block_name}' has invalid multiplier {reduction}"
@@ -197,7 +212,10 @@ class _ConfiguredVideoDecoder(nn.Module):
             elif isinstance(block, self._decoder_module.DepthToSpaceUpsample):
                 x = block(x, causal=effective_causal, chunked_conv=chunked_conv)
             else:
-                x = block(x, causal=effective_causal)
+                if not callable(block):
+                    raise TypeError("LTX decoder block must be callable")
+                block_result: MLXArray = block(x, causal=effective_causal)
+                x = block_result
 
         x = self.pixel_norm(x)
         if self.timestep_conditioning and scaled_timestep is not None:
@@ -223,17 +241,18 @@ class _ConfiguredVideoDecoder(nn.Module):
 
         x = self.act(x)
         x = self.conv_out(x, causal=effective_causal)
-        return self._decoder_module.unpatchify(
+        unpatchified: MLXArray = self._decoder_module.unpatchify(
             x,
             patch_size_hw=self.patch_size,
             patch_size_t=1,
         )
+        return unpatchified
 
     def decode_tiled(
         self,
         sample: mx.array,
         *,
-        tiling_config: object | None = None,
+        tiling_config: _TilingConfigInstance | None = None,
         tiling_mode: str = "auto",
         causal: bool = False,
         timestep: mx.array | None = None,
@@ -242,7 +261,10 @@ class _ConfiguredVideoDecoder(nn.Module):
     ) -> mx.array:
         effective_causal = causal or self.causal_decoder
         if tiling_config is None:
-            tiling_config = self._decoder_module.TilingConfig.default()
+            default_tiling_config: _TilingConfigInstance = (
+                self._decoder_module.TilingConfig.default()
+            )
+            tiling_config = default_tiling_config
 
         _, _, frames, latent_h, latent_w = sample.shape
         needs_spatial_tiling = False
@@ -250,14 +272,14 @@ class _ConfiguredVideoDecoder(nn.Module):
         spatial_scale = 32
         temporal_scale = 8
 
-        if getattr(tiling_config, "spatial_config", None) is not None:
-            spatial_config = tiling_config.spatial_config
+        spatial_config = tiling_config.spatial_config
+        if spatial_config is not None:
             tile_size_latent = spatial_config.tile_size_in_pixels // spatial_scale
             if latent_h > tile_size_latent or latent_w > tile_size_latent:
                 needs_spatial_tiling = True
 
-        if getattr(tiling_config, "temporal_config", None) is not None:
-            temporal_config = tiling_config.temporal_config
+        temporal_config = tiling_config.temporal_config
+        if temporal_config is not None:
             tile_size_latent = temporal_config.tile_size_in_frames // temporal_scale
             if frames > tile_size_latent:
                 needs_temporal_tiling = True
@@ -277,14 +299,14 @@ class _ConfiguredVideoDecoder(nn.Module):
                 debug=debug,
                 chunked_conv=use_chunked_conv,
             )
-            if on_frames_ready is not None:
+            if callable(on_frames_ready):
                 try:
                     on_frames_ready(decoded, 0)
                 except Exception:
                     return decoded
             return decoded
 
-        return self._decoder_module.decode_with_tiling(
+        decoded_tiled: MLXArray = self._decoder_module.decode_with_tiling(
             decoder_fn=self,
             latents=sample,
             tiling_config=tiling_config,
@@ -295,9 +317,26 @@ class _ConfiguredVideoDecoder(nn.Module):
             chunked_conv=use_chunked_conv,
             on_frames_ready=on_frames_ready,
         )
+        return decoded_tiled
 
 
-def _load_configured_vae_decoder(checkpoint_path: Path) -> _ConfiguredVideoDecoder:
+def _require_weight_mapping(weights: object, *, context: str) -> dict[str, MLXArray]:
+    if not isinstance(weights, dict):
+        raise RuntimeError(context)
+    return {
+        key: value
+        for key, value in weights.items()
+        if isinstance(key, str) and isinstance(value, mx.array)
+    }
+
+
+def _require_array(value: object, *, context: str) -> MLXArray:
+    if not isinstance(value, mx.array):
+        raise RuntimeError(context)
+    return value
+
+
+def _load_configured_vae_decoder(checkpoint_path: Path) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
     with _reference_path_on_sys_path():
         decoder_module = importlib.import_module(
@@ -319,8 +358,11 @@ def _load_configured_vae_decoder(checkpoint_path: Path) -> _ConfiguredVideoDecod
         causal_decoder=vae_config.causal_decoder,
     )
 
-    weights = mx.load(str(checkpoint_path))
-    decoder_weights: dict[str, object] = {}
+    weights = _require_weight_mapping(
+        mx.load(str(checkpoint_path)),
+        context=f"LTX checkpoint '{checkpoint_path}' did not load into a decoder weight mapping",
+    )
+    decoder_weights: dict[str, MLXArray] = {}
     for key, value in weights.items():
         if not key.startswith("vae.decoder."):
             continue
@@ -356,40 +398,51 @@ def _load_configured_vae_decoder(checkpoint_path: Path) -> _ConfiguredVideoDecod
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' is missing VAE per-channel statistics"
         )
+    mean_array = _require_array(
+        mean,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid latents_mean weights",
+    )
+    std_array = _require_array(
+        std,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid latents_std weights",
+    )
     expected_shape = (vae_config.latent_channels,)
-    if tuple(int(size) for size in mean.shape) != expected_shape:
+    if tuple(int(size) for size in mean_array.shape) != expected_shape:
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' has invalid latents_mean shape "
-            f"{tuple(int(size) for size in mean.shape)!r}; expected {expected_shape!r}"
+            f"{tuple(int(size) for size in mean_array.shape)!r}; expected {expected_shape!r}"
         )
-    if tuple(int(size) for size in std.shape) != expected_shape:
+    if tuple(int(size) for size in std_array.shape) != expected_shape:
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' has invalid latents_std shape "
-            f"{tuple(int(size) for size in std.shape)!r}; expected {expected_shape!r}"
+            f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
         )
-    decoder_weights["latents_mean"] = mean
-    decoder_weights["latents_std"] = std
+    decoder_weights["latents_mean"] = mean_array
+    decoder_weights["latents_std"] = std_array
     decoder.load_weights(list(decoder_weights.items()), strict=True)
     return decoder
 
 
-def _load_configured_upsampler(weights_path: Path) -> object:
+def _load_configured_upsampler(weights_path: Path) -> _UpsamplerLike:
     with _reference_path_on_sys_path():
         upsampler_module = importlib.import_module("mlx_video.models.ltx.upsampler")
 
     _validate_upsampler_layout(weights_path)
-    raw_weights = mx.load(str(weights_path))
+    raw_weights = _require_weight_mapping(
+        mx.load(str(weights_path)),
+        context=f"LTX spatial upsampler '{weights_path}' did not load into a weight mapping",
+    )
     sample_key = "res_blocks.0.conv1.weight"
     mid_channels = (
         int(raw_weights[sample_key].shape[0]) if sample_key in raw_weights else 1024
     )
-    upsampler = upsampler_module.LatentUpsampler(
+    upsampler: _UpsamplerLike = upsampler_module.LatentUpsampler(
         in_channels=128,
         mid_channels=mid_channels,
         num_blocks_per_stage=4,
     )
 
-    sanitized: dict[str, object] = {}
+    sanitized: dict[str, MLXArray] = {}
     for key, value in raw_weights.items():
         new_key = key
         if value.ndim == 5 and "conv" in key and "weight" in key:
@@ -410,8 +463,8 @@ def _load_runtime_vocoder(
     *,
     checkpoint_path: Path,
     checkpoint_weights: dict[str, mx.array],
-    sanitize_vocoder_weights: object,
-) -> tuple[object, int, str]:
+    sanitize_vocoder_weights: _SanitizeVocoderWeights,
+) -> tuple[_VocoderLike, int, str]:
     runtime_vocoder_config = _runtime_vocoder_config(checkpoint_path)
 
     raw_base_weights = {

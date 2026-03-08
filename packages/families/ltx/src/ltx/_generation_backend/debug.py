@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
@@ -11,7 +10,7 @@ import numpy as np
 import numpy.typing as npt
 from PIL import Image
 
-from .types import _PaddedShape, _ReferenceImports
+from .types import MLXArray, _PaddedShape, _ReferenceImports, _VAEEncoder
 
 
 def _debug_stage_dump_dir() -> Path | None:
@@ -40,12 +39,12 @@ def _emit_debug_frame_snapshot(
 def _encode_conditioning_latent(
     *,
     imports: _ReferenceImports,
-    vae_encoder: object,
+    vae_encoder: _VAEEncoder,
     payload_path: Path,
     width: int,
     height: int,
     dtype: mx.Dtype,
-) -> object:
+) -> MLXArray:
     image = imports.load_image(
         str(payload_path), height=height, width=width, dtype=dtype
     )
@@ -114,7 +113,7 @@ def _debug_progress(message: str) -> None:
         print(f"[ltx] {message}", flush=True)
 
 
-def _latent_stats(latents: object) -> dict[str, object]:
+def _latent_stats(latents: MLXArray) -> dict[str, object]:
     latents_f32 = latents.astype(mx.float32)
     return {
         "shape": [int(size) for size in latents.shape],

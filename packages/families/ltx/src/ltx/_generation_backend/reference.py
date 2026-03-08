@@ -1,37 +1,255 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Callable, Protocol, TypeGuard
 
 import mlx.core as mx
-import mlx.nn as nn
 
+from .. import _nn_compat as nn
 from .types import (
+    MLXArray,
     _PatchedModality,
     _PatchedTransformerArgs,
     _ReferenceImports,
+    _TransformerConfigLike,
 )
+
+
+class _PatchableAttention(Protocol):
+    heads: int
+    rope_type: object
+    to_q: Callable[[MLXArray], MLXArray]
+    to_k: Callable[[MLXArray], MLXArray]
+    to_v: Callable[[MLXArray], MLXArray]
+    q_norm: Callable[[MLXArray], MLXArray]
+    k_norm: Callable[[MLXArray], MLXArray]
+    to_out: Callable[[MLXArray], MLXArray]
+    to_gate_logits: nn.Linear | None
+
+    def __call__(
+        self,
+        x: MLXArray,
+        *,
+        context: MLXArray | None = None,
+        mask: MLXArray | None = None,
+        pe: tuple[MLXArray, MLXArray] | None = None,
+        k_pe: tuple[MLXArray, MLXArray] | None = None,
+    ) -> MLXArray: ...
+
+
+class _PatchablePreprocessor(Protocol):
+    patchify_proj: Callable[[MLXArray], MLXArray]
+    prompt_adaln: object | None
+    timestep_scale_multiplier: int
+    inner_dim: int
+    max_pos: list[int]
+    use_middle_indices_grid: bool
+    num_attention_heads: int
+
+    def _prepare_timestep(
+        self, timestep: MLXArray, batch_size: int, *, hidden_dtype: mx.Dtype
+    ) -> tuple[MLXArray, MLXArray]: ...
+
+    def _prepare_context(
+        self,
+        context: MLXArray,
+        x: MLXArray,
+        attention_mask: MLXArray | None = None,
+    ) -> tuple[MLXArray, MLXArray | None]: ...
+
+    def _prepare_attention_mask(
+        self,
+        attention_mask: MLXArray | None,
+        hidden_dtype: mx.Dtype,
+    ) -> MLXArray | None: ...
+
+    def _prepare_positional_embeddings(
+        self,
+        *,
+        positions: MLXArray,
+        inner_dim: int,
+        max_pos: list[int],
+        use_middle_indices_grid: bool,
+        num_attention_heads: int,
+    ) -> tuple[MLXArray, MLXArray]: ...
+
+
+class _PatchableSimplePreprocessor(_PatchablePreprocessor, Protocol):
+    def prepare(self, modality: _PatchedModality) -> _PatchedTransformerArgs: ...
+
+
+class _PatchableMultiPreprocessor(Protocol):
+    simple_preprocessor: _PatchableSimplePreprocessor
+    audio_cross_attention_dim: int
+    cross_pe_max_pos: int
+
+    def prepare(
+        self,
+        modality: _PatchedModality,
+        cross_modality: _PatchedModality | None = None,
+    ) -> _PatchedTransformerArgs: ...
+
+    def _prepare_cross_attention_timestep(
+        self,
+        *,
+        timestep: MLXArray,
+        timestep_scale_multiplier: int,
+        batch_size: int,
+        hidden_dtype: mx.Dtype,
+    ) -> tuple[MLXArray, MLXArray]: ...
+
+
+class _PatchableModelType(Protocol):
+    def is_audio_enabled(self) -> bool: ...
+
+    def is_video_enabled(self) -> bool: ...
+
+
+class _PatchableRuntimeConfig(Protocol):
+    double_precision_rope: bool
+
+
+class _PatchableModalityConfig(Protocol):
+    dim: int
+    heads: int
+    apply_gated_attention: bool
+    cross_attention_adaln: bool
+
+
+class _PatchableModel(Protocol):
+    _mlxr_22b_patch: bool
+    model_type: _PatchableModelType
+    inner_dim: int
+    audio_inner_dim: int
+    num_attention_heads: int
+    audio_num_attention_heads: int
+    positional_embedding_max_pos: list[int]
+    audio_positional_embedding_max_pos: list[int]
+    use_middle_indices_grid: bool
+    audio_cross_attention_dim: int
+    timestep_scale_multiplier: int
+    av_ca_timestep_scale_multiplier: int
+    positional_embedding_theta: float
+    rope_type: object
+    config: _PatchableRuntimeConfig
+    patchify_proj: object
+    audio_patchify_proj: object
+    caption_projection: object | None
+    audio_caption_projection: object | None
+    adaln_single: object
+    audio_adaln_single: object
+    prompt_adaln_single: object
+    audio_prompt_adaln_single: object
+    av_ca_video_scale_shift_adaln_single: object
+    av_ca_a2v_gate_adaln_single: object
+    av_ca_audio_scale_shift_adaln_single: object
+    av_ca_v2a_gate_adaln_single: object
+    scale_shift_table: object
+    norm_out: object
+    proj_out: object
+    audio_scale_shift_table: object
+    audio_norm_out: object
+    audio_proj_out: object
+    transformer_blocks: object
+    video_args_preprocessor: _PatchablePreprocessor | _PatchableMultiPreprocessor
+    audio_args_preprocessor: _PatchableMultiPreprocessor
+
+    def _process_transformer_blocks(
+        self,
+        *,
+        video: _PatchedTransformerArgs | None,
+        audio: _PatchedTransformerArgs | None,
+    ) -> tuple[_PatchedTransformerArgs | None, _PatchedTransformerArgs | None]: ...
+
+    def _process_output(
+        self,
+        scale_shift_table: object,
+        norm_out: object,
+        proj_out: object,
+        x: MLXArray,
+        embedded_timestep: MLXArray,
+    ) -> MLXArray: ...
+
+
+class _PatchableBlock(Protocol):
+    norm_eps: float
+    scale_shift_table: MLXArray
+    prompt_scale_shift_table: MLXArray
+    audio_scale_shift_table: MLXArray
+    audio_prompt_scale_shift_table: MLXArray
+    scale_shift_table_a2v_ca_audio: object
+    scale_shift_table_a2v_ca_video: object
+    attn1: _PatchableAttention
+    attn2: _PatchableAttention
+    audio_attn1: _PatchableAttention
+    audio_attn2: _PatchableAttention
+    audio_to_video_attn: _PatchableAttention
+    video_to_audio_attn: _PatchableAttention
+    ff: Callable[[MLXArray], MLXArray]
+    audio_ff: Callable[[MLXArray], MLXArray]
+
+    def get_ada_values(
+        self,
+        scale_shift_table: MLXArray,
+        batch_size: int,
+        timestep: MLXArray,
+        block_slice: slice,
+    ) -> tuple[MLXArray, MLXArray, MLXArray]: ...
+
+    def get_av_ca_ada_values(
+        self,
+        scale_shift_table: object,
+        batch_size: int,
+        cross_scale_shift_timestep: MLXArray,
+        cross_gate_timestep: MLXArray,
+    ) -> tuple[MLXArray, MLXArray, MLXArray, MLXArray, MLXArray]: ...
+
+
+def _is_multi_preprocessor(
+    value: object,
+) -> TypeGuard[_PatchableMultiPreprocessor]:
+    return hasattr(value, "simple_preprocessor") and hasattr(value, "prepare")
 
 
 def _patch_reference_modules(imports: _ReferenceImports) -> None:
     if getattr(imports.model_class, "_mlxr_22b_patch", False):
         return
 
-    original_get_video_config = imports.model_config_class.get_video_config
-    original_get_audio_config = imports.model_config_class.get_audio_config
-    original_attention_init = imports.attention_class.__init__
-    original_preprocessor_init = imports.preprocessor_class.__init__
-    original_multi_preprocessor_init = imports.multi_preprocessor_class.__init__
-    original_prepare_context = imports.preprocessor_class._prepare_context
-    original_model_init_video = imports.model_class._init_video
-    original_model_init_audio = imports.model_class._init_audio
-    original_model_init_transformer_blocks = (
-        imports.model_class._init_transformer_blocks
+    original_get_video_config: Callable[[object], object | None] = getattr(
+        imports.model_config_class, "get_video_config"
     )
-    original_block_init = imports.BasicAVTransformerBlock.__init__
-    original_model_call = imports.model_class.__call__
+    original_get_audio_config: Callable[[object], object | None] = getattr(
+        imports.model_config_class, "get_audio_config"
+    )
+    original_attention_init: Callable[..., None] = getattr(
+        imports.attention_class, "__init__"
+    )
+    original_preprocessor_init: Callable[..., None] = getattr(
+        imports.preprocessor_class, "__init__"
+    )
+    original_multi_preprocessor_init: Callable[..., None] = getattr(
+        imports.multi_preprocessor_class, "__init__"
+    )
+    original_prepare_context: Callable[..., tuple[MLXArray, MLXArray | None]] = getattr(
+        imports.preprocessor_class, "_prepare_context"
+    )
+    original_model_init_video: Callable[..., None] = getattr(
+        imports.model_class, "_init_video"
+    )
+    original_model_init_audio: Callable[..., None] = getattr(
+        imports.model_class, "_init_audio"
+    )
+    original_model_init_transformer_blocks: Callable[..., None] = getattr(
+        imports.model_class, "_init_transformer_blocks"
+    )
+    original_block_init: Callable[..., None] = getattr(
+        imports.BasicAVTransformerBlock, "__init__"
+    )
+    original_model_call: Callable[..., tuple[MLXArray | None, MLXArray | None]] = (
+        getattr(imports.model_class, "__call__")
+    )
 
-    def patched_get_video_config(config_self: object) -> object:
+    def patched_get_video_config(config_self: _TransformerConfigLike) -> object | None:
         video_config = original_get_video_config(config_self)
         if video_config is None:
             return None
@@ -47,7 +265,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
         return video_config
 
-    def patched_get_audio_config(config_self: object) -> object:
+    def patched_get_audio_config(config_self: _TransformerConfigLike) -> object | None:
         audio_config = original_get_audio_config(config_self)
         if audio_config is None:
             return None
@@ -64,7 +282,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         return audio_config
 
     def patched_attention_init(
-        attention_self: object,
+        attention_self: _PatchableAttention,
         query_dim: int,
         context_dim: int | None = None,
         heads: int = 8,
@@ -74,7 +292,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         apply_gated_attention: bool = False,
     ) -> None:
         if rope_type is None:
-            rope_type = imports.rope_type_enum.INTERLEAVED
+            rope_type = getattr(imports.rope_type_enum, "INTERLEAVED")
         original_attention_init(
             attention_self,
             query_dim=query_dim,
@@ -89,13 +307,13 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             attention_self.to_gate_logits = nn.Linear(query_dim, heads, bias=True)
 
     def patched_attention_call(
-        attention_self: object,
-        x: object,
-        context: object | None = None,
-        mask: object | None = None,
-        pe: object | None = None,
-        k_pe: object | None = None,
-    ) -> object:
+        attention_self: _PatchableAttention,
+        x: MLXArray,
+        context: MLXArray | None = None,
+        mask: MLXArray | None = None,
+        pe: tuple[MLXArray, MLXArray] | None = None,
+        k_pe: tuple[MLXArray, MLXArray] | None = None,
+    ) -> MLXArray:
         query = attention_self.to_q(x)
         context = x if context is None else context
         key = attention_self.to_k(context)
@@ -130,7 +348,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         return attention_self.to_out(out)
 
     def patched_preprocessor_init(
-        preprocessor_self: object,
+        preprocessor_self: _PatchablePreprocessor,
         patchify_proj: object,
         adaln: object,
         caption_projection: object | None,
@@ -144,6 +362,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         double_precision_rope: bool = False,
         prompt_adaln: object | None = None,
     ) -> None:
+        prompt_adaln_callable = prompt_adaln if callable(prompt_adaln) else None
         original_preprocessor_init(
             preprocessor_self,
             patchify_proj=patchify_proj,
@@ -158,10 +377,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             rope_type=rope_type,
             double_precision_rope=double_precision_rope,
         )
-        preprocessor_self.prompt_adaln = prompt_adaln
+        preprocessor_self.prompt_adaln = prompt_adaln_callable
 
     def patched_multi_preprocessor_init(
-        preprocessor_self: object,
+        preprocessor_self: _PatchableMultiPreprocessor,
         patchify_proj: object,
         adaln: object,
         caption_projection: object | None,
@@ -180,6 +399,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         double_precision_rope: bool = False,
         prompt_adaln: object | None = None,
     ) -> None:
+        prompt_adaln_callable = prompt_adaln if callable(prompt_adaln) else None
         original_multi_preprocessor_init(
             preprocessor_self,
             patchify_proj=patchify_proj,
@@ -199,16 +419,15 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             av_ca_timestep_scale_multiplier=av_ca_timestep_scale_multiplier,
             double_precision_rope=double_precision_rope,
         )
-        preprocessor_self.simple_preprocessor.prompt_adaln = prompt_adaln
+        preprocessor_self.simple_preprocessor.prompt_adaln = prompt_adaln_callable
 
     def patched_multi_preprocessor_prepare(
-        preprocessor_self: object,
+        preprocessor_self: _PatchableMultiPreprocessor,
         modality: _PatchedModality,
         cross_modality: _PatchedModality | None = None,
     ) -> _PatchedTransformerArgs:
-        from dataclasses import replace as dataclass_replace
-
-        transformer_args = preprocessor_self.simple_preprocessor.prepare(modality)
+        simple_preprocessor = preprocessor_self.simple_preprocessor
+        transformer_args = simple_preprocessor.prepare(modality)
         if cross_modality is None:
             return transformer_args
 
@@ -217,39 +436,42 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                 "Cross modality timesteps must have the same batch size as the modality"
             )
 
-        cross_pe = preprocessor_self.simple_preprocessor._prepare_positional_embeddings(
+        cross_pe = simple_preprocessor._prepare_positional_embeddings(
             positions=modality.positions[:, 0:1, :],
             inner_dim=preprocessor_self.audio_cross_attention_dim,
             max_pos=[preprocessor_self.cross_pe_max_pos],
             use_middle_indices_grid=True,
-            num_attention_heads=(
-                preprocessor_self.simple_preprocessor.num_attention_heads
-            ),
+            num_attention_heads=simple_preprocessor.num_attention_heads,
         )
         cross_scale_shift_timestep, cross_gate_timestep = (
             preprocessor_self._prepare_cross_attention_timestep(
                 timestep=modality.timesteps,
-                timestep_scale_multiplier=(
-                    preprocessor_self.simple_preprocessor.timestep_scale_multiplier
-                ),
+                timestep_scale_multiplier=simple_preprocessor.timestep_scale_multiplier,
                 batch_size=transformer_args.x.shape[0],
                 hidden_dtype=transformer_args.x.dtype,
             )
         )
 
-        return dataclass_replace(
-            transformer_args,
+        return _PatchedTransformerArgs(
+            x=transformer_args.x,
+            context=transformer_args.context,
+            context_mask=transformer_args.context_mask,
+            timesteps=transformer_args.timesteps,
+            embedded_timestep=transformer_args.embedded_timestep,
+            positional_embeddings=transformer_args.positional_embeddings,
             cross_positional_embeddings=cross_pe,
             cross_scale_shift_timestep=cross_scale_shift_timestep,
             cross_gate_timestep=cross_gate_timestep,
+            enabled=transformer_args.enabled,
+            prompt_timestep=transformer_args.prompt_timestep,
         )
 
     def patched_prepare_context(
-        preprocessor_self: object,
-        context: object,
-        x: object,
-        attention_mask: object | None = None,
-    ) -> tuple[object, object | None]:
+        preprocessor_self: _PatchablePreprocessor,
+        context: MLXArray,
+        x: MLXArray,
+        attention_mask: MLXArray | None = None,
+    ) -> tuple[MLXArray, MLXArray | None]:
         caption_projection = getattr(preprocessor_self, "caption_projection", None)
         if caption_projection is None:
             if context.ndim != 3 or int(context.shape[-1]) != int(x.shape[-1]):
@@ -267,7 +489,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
 
     def patched_prepare(
-        preprocessor_self: object, modality: _PatchedModality
+        preprocessor_self: _PatchablePreprocessor, modality: _PatchedModality
     ) -> _PatchedTransformerArgs:
         x = preprocessor_self.patchify_proj(modality.latent)
         timesteps, embedded_timestep = preprocessor_self._prepare_timestep(
@@ -277,7 +499,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
         prompt_timestep = None
         prompt_adaln = getattr(preprocessor_self, "prompt_adaln", None)
-        if prompt_adaln is not None:
+        if callable(prompt_adaln):
             sigma_scaled = modality.sigma * preprocessor_self.timestep_scale_multiplier
             prompt_values, _ = prompt_adaln(
                 mx.reshape(sigma_scaled, (-1,)),
@@ -320,12 +542,15 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             prompt_timestep=prompt_timestep,
         )
 
-    def patched_model_init_video(model_self: object, config: object) -> None:
+    def patched_model_init_video(
+        model_self: _PatchableModel, config: _TransformerConfigLike
+    ) -> None:
         original_model_init_video(model_self, config)
+        adaln_factory: Callable[..., object] = imports.adaln_class
         adaln_coefficient = (
             9 if bool(getattr(config, "cross_attention_adaln", False)) else 6
         )
-        model_self.adaln_single = imports.adaln_class(
+        model_self.adaln_single = adaln_factory(
             model_self.inner_dim,
             embedding_coefficient=adaln_coefficient,
         )
@@ -333,17 +558,20 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             if hasattr(model_self, "caption_projection"):
                 delattr(model_self, "caption_projection")
         if bool(getattr(config, "cross_attention_adaln", False)):
-            model_self.prompt_adaln_single = imports.adaln_class(
+            model_self.prompt_adaln_single = adaln_factory(
                 model_self.inner_dim,
                 embedding_coefficient=2,
             )
 
-    def patched_model_init_audio(model_self: object, config: object) -> None:
+    def patched_model_init_audio(
+        model_self: _PatchableModel, config: _TransformerConfigLike
+    ) -> None:
         original_model_init_audio(model_self, config)
+        adaln_factory: Callable[..., object] = imports.adaln_class
         adaln_coefficient = (
             9 if bool(getattr(config, "cross_attention_adaln", False)) else 6
         )
-        model_self.audio_adaln_single = imports.adaln_class(
+        model_self.audio_adaln_single = adaln_factory(
             model_self.audio_inner_dim,
             embedding_coefficient=adaln_coefficient,
         )
@@ -351,16 +579,18 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             if hasattr(model_self, "audio_caption_projection"):
                 delattr(model_self, "audio_caption_projection")
         if bool(getattr(config, "cross_attention_adaln", False)):
-            model_self.audio_prompt_adaln_single = imports.adaln_class(
+            model_self.audio_prompt_adaln_single = adaln_factory(
                 model_self.audio_inner_dim,
                 embedding_coefficient=2,
             )
 
     def patched_model_init_preprocessors(
-        model_self: object,
-        config: object,
+        model_self: _PatchableModel,
+        config: _TransformerConfigLike,
         cross_pe_max_pos: object = None,
     ) -> None:
+        multi_preprocessor_factory = getattr(imports, "multi_preprocessor_class")
+        preprocessor_factory = getattr(imports, "preprocessor_class")
         if model_self.model_type.is_audio_enabled():
             effective_cross_pe_max_pos = cross_pe_max_pos
             if effective_cross_pe_max_pos is None:
@@ -368,7 +598,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                     model_self.positional_embedding_max_pos[0],
                     model_self.audio_positional_embedding_max_pos[0],
                 )
-            model_self.video_args_preprocessor = imports.multi_preprocessor_class(
+            model_self.video_args_preprocessor = multi_preprocessor_factory(
                 patchify_proj=model_self.patchify_proj,
                 adaln=model_self.adaln_single,
                 caption_projection=getattr(model_self, "caption_projection", None),
@@ -387,7 +617,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                 double_precision_rope=model_self.config.double_precision_rope,
                 prompt_adaln=getattr(model_self, "prompt_adaln_single", None),
             )
-            model_self.audio_args_preprocessor = imports.multi_preprocessor_class(
+            model_self.audio_args_preprocessor = multi_preprocessor_factory(
                 patchify_proj=model_self.audio_patchify_proj,
                 adaln=model_self.audio_adaln_single,
                 caption_projection=getattr(
@@ -409,7 +639,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                 prompt_adaln=getattr(model_self, "audio_prompt_adaln_single", None),
             )
             return
-        model_self.video_args_preprocessor = imports.preprocessor_class(
+        model_self.video_args_preprocessor = preprocessor_factory(
             patchify_proj=model_self.patchify_proj,
             adaln=model_self.adaln_single,
             caption_projection=getattr(model_self, "caption_projection", None),
@@ -425,14 +655,15 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
 
     def patched_model_init_transformer_blocks(
-        model_self: object, config: object
+        model_self: _PatchableModel, config: _TransformerConfigLike
     ) -> None:
         if model_self.model_type.is_audio_enabled():
             original_model_init_transformer_blocks(model_self, config)
             return
         video_config = config.get_video_config()
+        block_factory = getattr(imports, "BasicAVTransformerBlock")
         model_self.transformer_blocks = {
-            index: imports.BasicAVTransformerBlock(
+            index: block_factory(
                 idx=index,
                 video=video_config,
                 rope_type=config.rope_type,
@@ -442,15 +673,15 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         }
 
     def patched_block_init(
-        block_self: object,
+        block_self: _PatchableBlock,
         idx: int,
-        video: object | None = None,
-        audio: object | None = None,
+        video: _PatchableModalityConfig | None = None,
+        audio: _PatchableModalityConfig | None = None,
         rope_type: object = None,
         norm_eps: float = 1e-6,
     ) -> None:
         if rope_type is None:
-            rope_type = imports.rope_type_enum.INTERLEAVED
+            rope_type = getattr(imports.rope_type_enum, "INTERLEAVED")
         original_block_init(
             block_self,
             idx=idx,
@@ -492,17 +723,17 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
 
     def apply_cross_attention_adaln(
         *,
-        block: object,
-        x: object,
-        context: object,
-        attn: object,
-        scale_shift_table: object,
-        prompt_scale_shift_table: object,
-        timestep: object,
-        prompt_timestep: object | None,
-        context_mask: object | None,
+        block: _PatchableBlock,
+        x: MLXArray,
+        context: MLXArray,
+        attn: _PatchableAttention,
+        scale_shift_table: MLXArray,
+        prompt_scale_shift_table: MLXArray,
+        timestep: MLXArray,
+        prompt_timestep: MLXArray | None,
+        context_mask: MLXArray | None,
         norm_eps: float,
-    ) -> object:
+    ) -> MLXArray:
         if prompt_timestep is None:
             raise ValueError(
                 "LTX prompt timestep is required for cross-attention AdaLN"
@@ -529,89 +760,135 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
 
     def patched_block_call(
-        block_self: object,
+        block_self: _PatchableBlock,
         video: _PatchedTransformerArgs | None = None,
         audio: _PatchedTransformerArgs | None = None,
-    ) -> tuple[object | None, object | None]:
+    ) -> tuple[_PatchedTransformerArgs | None, _PatchedTransformerArgs | None]:
         if video is None and audio is None:
             raise ValueError("At least one of video or audio must be provided")
 
         vx = video.x if video is not None else None
         ax = audio.x if audio is not None else None
-        run_vx = video is not None and video.enabled and vx.size > 0
-        run_ax = audio is not None and audio.enabled and ax.size > 0
+        run_vx = video is not None and vx is not None and video.enabled and vx.size > 0
+        run_ax = audio is not None and ax is not None and audio.enabled and ax.size > 0
         run_a2v = run_vx and run_ax
         run_v2a = run_ax and run_vx
 
-        if run_vx:
+        if run_vx and video is not None and vx is not None:
+            video_args = video
+            video_x = vx
             vshift_msa, vscale_msa, vgate_msa = block_self.get_ada_values(
-                block_self.scale_shift_table, vx.shape[0], video.timesteps, slice(0, 3)
+                block_self.scale_shift_table,
+                video_x.shape[0],
+                video_args.timesteps,
+                slice(0, 3),
             )
             norm_vx = (
-                imports.rms_norm(vx, eps=block_self.norm_eps) * (1 + vscale_msa)
+                imports.rms_norm(video_x, eps=block_self.norm_eps) * (1 + vscale_msa)
                 + vshift_msa
             )
             vx = (
-                vx
-                + block_self.attn1(norm_vx, pe=video.positional_embeddings) * vgate_msa
+                video_x
+                + block_self.attn1(norm_vx, pe=video_args.positional_embeddings)
+                * vgate_msa
             )
             if hasattr(block_self, "prompt_scale_shift_table"):
                 vx = vx + apply_cross_attention_adaln(
                     block=block_self,
                     x=vx,
-                    context=video.context,
+                    context=video_args.context,
                     attn=block_self.attn2,
                     scale_shift_table=block_self.scale_shift_table,
                     prompt_scale_shift_table=block_self.prompt_scale_shift_table,
-                    timestep=video.timesteps,
-                    prompt_timestep=video.prompt_timestep,
-                    context_mask=video.context_mask,
+                    timestep=video_args.timesteps,
+                    prompt_timestep=video_args.prompt_timestep,
+                    context_mask=video_args.context_mask,
                     norm_eps=block_self.norm_eps,
                 )
             else:
                 vx = vx + block_self.attn2(
                     imports.rms_norm(vx, eps=block_self.norm_eps),
-                    context=video.context,
-                    mask=video.context_mask,
+                    context=video_args.context,
+                    mask=video_args.context_mask,
                 )
 
-        if run_ax:
+        if run_ax and audio is not None and ax is not None:
+            audio_args = audio
+            audio_x = ax
             ashift_msa, ascale_msa, agate_msa = block_self.get_ada_values(
                 block_self.audio_scale_shift_table,
-                ax.shape[0],
-                audio.timesteps,
+                audio_x.shape[0],
+                audio_args.timesteps,
                 slice(0, 3),
             )
             norm_ax = (
-                imports.rms_norm(ax, eps=block_self.norm_eps) * (1 + ascale_msa)
+                imports.rms_norm(audio_x, eps=block_self.norm_eps) * (1 + ascale_msa)
                 + ashift_msa
             )
             ax = (
-                ax
-                + block_self.audio_attn1(norm_ax, pe=audio.positional_embeddings)
+                audio_x
+                + block_self.audio_attn1(norm_ax, pe=audio_args.positional_embeddings)
                 * agate_msa
             )
             if hasattr(block_self, "audio_prompt_scale_shift_table"):
                 ax = ax + apply_cross_attention_adaln(
                     block=block_self,
                     x=ax,
-                    context=audio.context,
+                    context=audio_args.context,
                     attn=block_self.audio_attn2,
                     scale_shift_table=block_self.audio_scale_shift_table,
                     prompt_scale_shift_table=block_self.audio_prompt_scale_shift_table,
-                    timestep=audio.timesteps,
-                    prompt_timestep=audio.prompt_timestep,
-                    context_mask=audio.context_mask,
+                    timestep=audio_args.timesteps,
+                    prompt_timestep=audio_args.prompt_timestep,
+                    context_mask=audio_args.context_mask,
                     norm_eps=block_self.norm_eps,
                 )
             else:
                 ax = ax + block_self.audio_attn2(
                     imports.rms_norm(ax, eps=block_self.norm_eps),
-                    context=audio.context,
-                    mask=audio.context_mask,
+                    context=audio_args.context,
+                    mask=audio_args.context_mask,
                 )
 
-        if run_a2v or run_v2a:
+        if (run_a2v or run_v2a) and video is not None and audio is not None:
+            missing_cross_inputs = (
+                vx is None
+                or ax is None
+                or video.cross_scale_shift_timestep is None
+                or video.cross_gate_timestep is None
+                or audio.cross_scale_shift_timestep is None
+                or audio.cross_gate_timestep is None
+                or video.cross_positional_embeddings is None
+                or audio.cross_positional_embeddings is None
+            )
+            if missing_cross_inputs:
+                raise RuntimeError(
+                    "LTX AV cross-attention requested but cross-modality preparation is incomplete"
+                )
+
+        if (
+            (run_a2v or run_v2a)
+            and video is not None
+            and audio is not None
+            and vx is not None
+            and ax is not None
+            and video.cross_scale_shift_timestep is not None
+            and video.cross_gate_timestep is not None
+            and audio.cross_scale_shift_timestep is not None
+            and audio.cross_gate_timestep is not None
+            and video.cross_positional_embeddings is not None
+            and audio.cross_positional_embeddings is not None
+        ):
+            video_args = video
+            audio_args = audio
+            video_cross_scale_shift_timestep = video_args.cross_scale_shift_timestep
+            video_cross_gate_timestep = video_args.cross_gate_timestep
+            audio_cross_scale_shift_timestep = audio_args.cross_scale_shift_timestep
+            audio_cross_gate_timestep = audio_args.cross_gate_timestep
+            assert video_cross_scale_shift_timestep is not None
+            assert video_cross_gate_timestep is not None
+            assert audio_cross_scale_shift_timestep is not None
+            assert audio_cross_gate_timestep is not None
             vx_norm3 = imports.rms_norm(vx, eps=block_self.norm_eps)
             ax_norm3 = imports.rms_norm(ax, eps=block_self.norm_eps)
             (
@@ -623,8 +900,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             ) = block_self.get_av_ca_ada_values(
                 block_self.scale_shift_table_a2v_ca_audio,
                 ax.shape[0],
-                audio.cross_scale_shift_timestep,
-                audio.cross_gate_timestep,
+                audio_cross_scale_shift_timestep,
+                audio_cross_gate_timestep,
             )
             (
                 scale_ca_video_a2v,
@@ -635,8 +912,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             ) = block_self.get_av_ca_ada_values(
                 block_self.scale_shift_table_a2v_ca_video,
                 vx.shape[0],
-                video.cross_scale_shift_timestep,
-                video.cross_gate_timestep,
+                video_cross_scale_shift_timestep,
+                video_cross_gate_timestep,
             )
             if run_a2v:
                 vx_scaled = vx_norm3 * (1 + scale_ca_video_a2v) + shift_ca_video_a2v
@@ -645,8 +922,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                     block_self.audio_to_video_attn(
                         vx_scaled,
                         context=ax_scaled,
-                        pe=video.cross_positional_embeddings,
-                        k_pe=audio.cross_positional_embeddings,
+                        pe=video_args.cross_positional_embeddings,
+                        k_pe=audio_args.cross_positional_embeddings,
                     )
                     * gate_out_a2v
                 )
@@ -657,13 +934,13 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
                     block_self.video_to_audio_attn(
                         ax_scaled,
                         context=vx_scaled,
-                        pe=audio.cross_positional_embeddings,
-                        k_pe=video.cross_positional_embeddings,
+                        pe=audio_args.cross_positional_embeddings,
+                        k_pe=video_args.cross_positional_embeddings,
                     )
                     * gate_out_v2a
                 )
 
-        if run_vx:
+        if run_vx and video is not None and vx is not None:
             vshift_mlp, vscale_mlp, vgate_mlp = block_self.get_ada_values(
                 block_self.scale_shift_table, vx.shape[0], video.timesteps, slice(3, 6)
             )
@@ -673,7 +950,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             )
             vx = vx + block_self.ff(vx_scaled) * vgate_mlp
 
-        if run_ax:
+        if run_ax and audio is not None and ax is not None:
             ashift_mlp, ascale_mlp, agate_mlp = block_self.get_ada_values(
                 block_self.audio_scale_shift_table,
                 ax.shape[0],
@@ -687,15 +964,15 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             ax = ax + block_self.audio_ff(ax_scaled) * agate_mlp
 
         return (
-            replace(video, x=vx) if video is not None else None,
-            replace(audio, x=ax) if audio is not None else None,
+            replace(video, x=vx) if video is not None and vx is not None else None,
+            replace(audio, x=ax) if audio is not None and ax is not None else None,
         )
 
     def patched_model_call(
-        model_self: object,
+        model_self: _PatchableModel,
         video: _PatchedModality | None = None,
         audio: _PatchedModality | None = None,
-    ) -> tuple[object | None, object | None]:
+    ) -> tuple[MLXArray | None, MLXArray | None]:
         if not model_self.model_type.is_video_enabled() and video is not None:
             raise ValueError("Video is not enabled for this model")
         if not model_self.model_type.is_audio_enabled() and audio is not None:
@@ -705,15 +982,17 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             or not model_self.model_type.is_video_enabled()
         ):
             return original_model_call(model_self, video=video, audio=audio)
+        if not _is_multi_preprocessor(model_self.video_args_preprocessor):
+            raise RuntimeError("Expected multi-modal video preprocessor")
+        if not _is_multi_preprocessor(model_self.audio_args_preprocessor):
+            raise RuntimeError("Expected multi-modal audio preprocessor")
+        video_preprocessor = model_self.video_args_preprocessor
+        audio_preprocessor = model_self.audio_args_preprocessor
         video_args = (
-            model_self.video_args_preprocessor.prepare(video, audio)
-            if video is not None
-            else None
+            video_preprocessor.prepare(video, audio) if video is not None else None
         )
         audio_args = (
-            model_self.audio_args_preprocessor.prepare(audio, video)
-            if audio is not None
-            else None
+            audio_preprocessor.prepare(audio, video) if audio is not None else None
         )
         video_out, audio_out = model_self._process_transformer_blocks(
             video=video_args,
@@ -743,20 +1022,36 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
         return vx, ax
 
-    imports.model_config_class.get_video_config = patched_get_video_config
-    imports.model_config_class.get_audio_config = patched_get_audio_config
-    imports.attention_class.__init__ = patched_attention_init
-    imports.attention_class.__call__ = patched_attention_call
-    imports.preprocessor_class.__init__ = patched_preprocessor_init
-    imports.multi_preprocessor_class.__init__ = patched_multi_preprocessor_init
-    imports.multi_preprocessor_class.prepare = patched_multi_preprocessor_prepare
-    imports.preprocessor_class._prepare_context = patched_prepare_context
-    imports.preprocessor_class.prepare = patched_prepare
-    imports.model_class._init_video = patched_model_init_video
-    imports.model_class._init_audio = patched_model_init_audio
-    imports.model_class._init_preprocessors = patched_model_init_preprocessors
-    imports.model_class._init_transformer_blocks = patched_model_init_transformer_blocks
-    imports.model_class.__call__ = patched_model_call
-    imports.BasicAVTransformerBlock.__init__ = patched_block_init
-    imports.BasicAVTransformerBlock.__call__ = patched_block_call
-    imports.model_class._mlxr_22b_patch = True
+    setattr(imports.model_config_class, "get_video_config", patched_get_video_config)
+    setattr(imports.model_config_class, "get_audio_config", patched_get_audio_config)
+    setattr(imports.attention_class, "__init__", patched_attention_init)
+    setattr(imports.attention_class, "__call__", patched_attention_call)
+    setattr(imports.preprocessor_class, "__init__", patched_preprocessor_init)
+    setattr(
+        imports.multi_preprocessor_class,
+        "__init__",
+        patched_multi_preprocessor_init,
+    )
+    setattr(
+        imports.multi_preprocessor_class,
+        "prepare",
+        patched_multi_preprocessor_prepare,
+    )
+    setattr(imports.preprocessor_class, "_prepare_context", patched_prepare_context)
+    setattr(imports.preprocessor_class, "prepare", patched_prepare)
+    setattr(imports.model_class, "_init_video", patched_model_init_video)
+    setattr(imports.model_class, "_init_audio", patched_model_init_audio)
+    setattr(
+        imports.model_class,
+        "_init_preprocessors",
+        patched_model_init_preprocessors,
+    )
+    setattr(
+        imports.model_class,
+        "_init_transformer_blocks",
+        patched_model_init_transformer_blocks,
+    )
+    setattr(imports.model_class, "__call__", patched_model_call)
+    setattr(imports.BasicAVTransformerBlock, "__init__", patched_block_init)
+    setattr(imports.BasicAVTransformerBlock, "__call__", patched_block_call)
+    setattr(imports.model_class, "_mlxr_22b_patch", True)

@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 from . import runtime
@@ -10,7 +9,7 @@ from .runtime import _RUNTIME_IMPORT_ERROR
 if _RUNTIME_IMPORT_ERROR is None:
     from .encoder import _MLXLTXPromptEncoder
 
-    mx = runtime.mx
+    mx: object | None = runtime.mx
 
     __all__ = [
         "_MLXLTXPromptEncoder",

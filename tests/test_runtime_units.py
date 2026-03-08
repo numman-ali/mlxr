@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 import numpy as np
 from ltx import LTXFamilyAdapter
+from ltx._generation_backend.conditioning import _resolve_padded_shape
+from ltx._generation_backend.reference_imports import _REFERENCE_MLX_VIDEO_ROOT
 from mlx_runtime_core import (
     ExecutionProfile,
     ExecutionStage,
@@ -822,6 +824,23 @@ class RuntimeUnitTests(unittest.TestCase):
                 RuntimeError, "missing required VAE per-channel statistics"
             ):
                 backend._validate_reference_backend_compatibility(checkpoint_path)
+
+    def test_ltx_generation_reference_import_root_points_to_repo_checkout(self) -> None:
+        expected = (
+            Path(__file__).resolve().parents[1]
+            / "references"
+            / "ecosystem"
+            / "mlx-video"
+        )
+        self.assertEqual(_REFERENCE_MLX_VIDEO_ROOT, expected)
+        self.assertTrue(_REFERENCE_MLX_VIDEO_ROOT.is_dir())
+
+    def test_ltx_generation_padded_shape_is_constructible(self) -> None:
+        padded = _resolve_padded_shape(width=384, height=224)
+        self.assertEqual(padded.output_width, 384)
+        self.assertEqual(padded.output_height, 224)
+        self.assertEqual(padded.internal_width % 64, 0)
+        self.assertEqual(padded.internal_height % 64, 0)
 
     def test_ltx_generation_prompt_contract_rejects_runtime_mismatch(self) -> None:
         from ltx import _generation_backend as backend

@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import shutil
@@ -163,7 +162,7 @@ def _mux_mp4_with_audio(
 
 
 def _decode_to_uint8_frames(
-    decoded_video: object,
+    decoded_video: mx.array,
     *,
     padded_shape: _PaddedShape,
 ) -> npt.NDArray[np.uint8]:

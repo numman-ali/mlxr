@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-# mypy: ignore-errors
 import math
-from typing import Iterable
+from typing import Callable, Iterable, Protocol
 
 import mlx.core as mx
-import mlx.nn as nn
 import numpy as np
 
+from ._nn_compat import (
+    Conv1d,
+    ConvTranspose1d,
+    LeakyReLU,
+    Module,
+    leaky_relu,
+)
+
 LRELU_SLOPE = 0.1
+
+
+class _ArrayModule(Protocol):
+    def __call__(self, x: mx.array) -> mx.array: ...
 
 
 def _get_padding(kernel_size: int, dilation: int = 1) -> int:
@@ -54,7 +64,7 @@ def _kaiser_sinc_filter1d(
     return filter_.reshape(1, kernel_size, 1)
 
 
-class Snake(nn.Module):
+class Snake(Module):
     def __init__(
         self,
         in_features: int,
@@ -77,7 +87,7 @@ class Snake(nn.Module):
         return x + (1.0 / (alpha + 1e-9)) * mx.power(mx.sin(x * alpha), 2)
 
 
-class SnakeBeta(nn.Module):
+class SnakeBeta(Module):
     def __init__(
         self,
         in_features: int,
@@ -104,7 +114,7 @@ class SnakeBeta(nn.Module):
         return x + (1.0 / (beta + 1e-9)) * mx.power(mx.sin(x * alpha), 2)
 
 
-class LowPassFilter1d(nn.Module):
+class LowPassFilter1d(Module):
     def __init__(
         self,
         *,
@@ -134,7 +144,7 @@ class LowPassFilter1d(nn.Module):
         if self.padding:
             x = mx.pad(
                 x,
-                ((0, 0), (self.pad_left, self.pad_right), (0, 0)),
+                [(0, 0), (self.pad_left, self.pad_right), (0, 0)],
                 mode=self.padding_mode,
             )
         expanded_filter = mx.broadcast_to(
@@ -143,7 +153,7 @@ class LowPassFilter1d(nn.Module):
         return mx.conv1d(x, expanded_filter, stride=self.stride, groups=channels)
 
 
-class UpSample1d(nn.Module):
+class UpSample1d(Module):
     def __init__(
         self,
         ratio: int = 2,
@@ -168,7 +178,7 @@ class UpSample1d(nn.Module):
 
     def __call__(self, x: mx.array) -> mx.array:
         _, _, channels = x.shape
-        x = mx.pad(x, ((0, 0), (self.pad, self.pad), (0, 0)), mode="edge")
+        x = mx.pad(x, [(0, 0), (self.pad, self.pad), (0, 0)], mode="edge")
         expanded_filter = mx.broadcast_to(
             self.filter, (channels, self.filter.shape[1], self.filter.shape[2])
         )
@@ -181,7 +191,7 @@ class UpSample1d(nn.Module):
         return x[:, self.pad_left : -self.pad_right, :]
 
 
-class DownSample1d(nn.Module):
+class DownSample1d(Module):
     def __init__(
         self,
         ratio: int = 2,
@@ -201,10 +211,10 @@ class DownSample1d(nn.Module):
         return self.lowpass(x)
 
 
-class Activation1d(nn.Module):
+class Activation1d(Module):
     def __init__(
         self,
-        activation: nn.Module,
+        activation: _ArrayModule,
         *,
         up_ratio: int = 2,
         down_ratio: int = 2,
@@ -212,9 +222,9 @@ class Activation1d(nn.Module):
         down_kernel_size: int = 12,
     ) -> None:
         super().__init__()
-        self.act = activation
-        self.upsample = UpSample1d(up_ratio, up_kernel_size)
-        self.downsample = DownSample1d(down_ratio, down_kernel_size)
+        self.act: _ArrayModule = activation
+        self.upsample: _ArrayModule = UpSample1d(up_ratio, up_kernel_size)
+        self.downsample: _ArrayModule = DownSample1d(down_ratio, down_kernel_size)
 
     def __call__(self, x: mx.array) -> mx.array:
         x = self.upsample(x)
@@ -222,7 +232,7 @@ class Activation1d(nn.Module):
         return self.downsample(x)
 
 
-class ResBlock1(nn.Module):
+class ResBlock1(Module):
     def __init__(
         self,
         channels: int,
@@ -231,7 +241,7 @@ class ResBlock1(nn.Module):
     ) -> None:
         super().__init__()
         self.convs1 = [
-            nn.Conv1d(
+            Conv1d(
                 channels,
                 channels,
                 kernel_size,
@@ -242,7 +252,7 @@ class ResBlock1(nn.Module):
             for d in dilation
         ]
         self.convs2 = [
-            nn.Conv1d(
+            Conv1d(
                 channels,
                 channels,
                 kernel_size,
@@ -263,7 +273,7 @@ class ResBlock1(nn.Module):
         return x
 
 
-class ResBlock2(nn.Module):
+class ResBlock2(Module):
     def __init__(
         self,
         channels: int,
@@ -272,7 +282,7 @@ class ResBlock2(nn.Module):
     ) -> None:
         super().__init__()
         self.convs = [
-            nn.Conv1d(
+            Conv1d(
                 channels,
                 channels,
                 kernel_size,
@@ -291,7 +301,7 @@ class ResBlock2(nn.Module):
         return x
 
 
-class AMPBlock1(nn.Module):
+class AMPBlock1(Module):
     def __init__(
         self,
         channels: int,
@@ -303,7 +313,7 @@ class AMPBlock1(nn.Module):
         super().__init__()
         act_cls = SnakeBeta if activation == "snakebeta" else Snake
         self.convs1 = [
-            nn.Conv1d(
+            Conv1d(
                 channels,
                 channels,
                 kernel_size,
@@ -314,7 +324,7 @@ class AMPBlock1(nn.Module):
             for d in dilation
         ]
         self.convs2 = [
-            nn.Conv1d(
+            Conv1d(
                 channels,
                 channels,
                 kernel_size,
@@ -347,7 +357,7 @@ class AMPBlock1(nn.Module):
         return x
 
 
-class AudioVocoder(nn.Module):
+class AudioVocoder(Module):
     def __init__(
         self,
         *,
@@ -380,7 +390,7 @@ class AudioVocoder(nn.Module):
         self.is_amp = resblock == "AMP1"
 
         in_channels = 128 if stereo else 64
-        self.conv_pre = nn.Conv1d(
+        self.conv_pre = Conv1d(
             in_channels,
             upsample_initial_channel,
             kernel_size=7,
@@ -388,8 +398,8 @@ class AudioVocoder(nn.Module):
             padding=3,
         )
 
-        self.ups = [
-            nn.ConvTranspose1d(
+        self.ups: list[Callable[[mx.array], mx.array]] = [
+            ConvTranspose1d(
                 upsample_initial_channel // (2**i),
                 upsample_initial_channel // (2 ** (i + 1)),
                 kernel_size,
@@ -402,15 +412,15 @@ class AudioVocoder(nn.Module):
         ]
 
         if resblock == "1":
-            resblock_cls: type[nn.Module] = ResBlock1
+            resblock_factory: Callable[..., _ArrayModule] = ResBlock1
         elif resblock == "2":
-            resblock_cls = ResBlock2
+            resblock_factory = ResBlock2
         elif resblock == "AMP1":
-            resblock_cls = AMPBlock1
+            resblock_factory = AMPBlock1
         else:
             raise ValueError(f"Unsupported LTX vocoder resblock {resblock!r}")
 
-        self.resblocks = []
+        self.resblocks: list[_ArrayModule] = []
         for i in range(len(self.ups)):
             channels = upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilations in zip(
@@ -419,14 +429,14 @@ class AudioVocoder(nn.Module):
                 strict=True,
             ):
                 if resblock == "AMP1":
-                    block = resblock_cls(
+                    block = resblock_factory(
                         channels,
                         kernel_size=kernel_size,
                         dilation=tuple(int(v) for v in dilations),
                         activation=activation,
                     )
                 else:
-                    block = resblock_cls(
+                    block = resblock_factory(
                         channels,
                         kernel_size=kernel_size,
                         dilation=tuple(int(v) for v in dilations),
@@ -436,14 +446,14 @@ class AudioVocoder(nn.Module):
         final_channels = upsample_initial_channel // (2 ** len(self.ups))
         if self.is_amp:
             act_cls = SnakeBeta if activation == "snakebeta" else Snake
-            self.act_post: nn.Module = Activation1d(
+            self.act_post: Callable[[mx.array], mx.array] = Activation1d(
                 act_cls(final_channels, alpha_logscale=True)
             )
         else:
-            self.act_post = nn.LeakyReLU()
+            self.act_post = LeakyReLU()
 
         out_channels = 2 if stereo else 1
-        self.conv_post = nn.Conv1d(
+        self.conv_post: Callable[[mx.array], mx.array] = Conv1d(
             final_channels,
             out_channels,
             kernel_size=7,
@@ -469,7 +479,7 @@ class AudioVocoder(nn.Module):
             block_outputs = [self.resblocks[idx](x) for idx in range(start, end)]
             x = mx.mean(mx.stack(block_outputs, axis=0), axis=0)
 
-        x = self.act_post(x) if self.is_amp else nn.leaky_relu(x)
+        x = self.act_post(x) if self.is_amp else leaky_relu(x)
         x = self.conv_post(x)
         if self.apply_final_activation:
             x = mx.tanh(x) if self.use_tanh_at_final else mx.clip(x, -1.0, 1.0)

@@ -65,9 +65,11 @@ def create_video_generator(
     checkpoint_path: Path,
     spatial_upsampler_path: Path,
 ) -> VideoGenerator:
-    backend_module = import_module("ltx._generation_backend")
-    create_backend_video_generator = backend_module.create_video_generator
-    return create_backend_video_generator(  # type: ignore[no-any-return]
+    from ._generation_backend import (
+        create_video_generator as create_backend_video_generator,
+    )
+
+    return create_backend_video_generator(
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
     )

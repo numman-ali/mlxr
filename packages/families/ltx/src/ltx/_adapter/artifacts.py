@@ -1,9 +1,9 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from mlx_runtime_core import ArtifactPayloadItem, ConversionPlan, ConversionSource
 from mlx_runtime_schemas import (
@@ -14,8 +14,11 @@ from mlx_runtime_schemas import (
 
 from .state import PreparedComponent
 
+if TYPE_CHECKING:
+    from ..adapter import LTXFamilyAdapter
 
-def _role_candidates(self, source: ResolvedSource) -> list[str]:
+
+def _role_candidates(self: LTXFamilyAdapter, source: ResolvedSource) -> list[str]:
     file_paths = {record.path for record in source.files}
     candidates: list[str] = []
     if self._checkpoint_filename in file_paths:
@@ -38,7 +41,7 @@ def _role_candidates(self, source: ResolvedSource) -> list[str]:
 
 
 def _prepare_components(
-    self, sources: dict[str, ConversionSource]
+    self: LTXFamilyAdapter, sources: dict[str, ConversionSource]
 ) -> dict[str, PreparedComponent]:
     if set(sources) == {"bundle"}:
         return self._prepare_bundle_components(sources["bundle"])
@@ -99,7 +102,7 @@ def _prepare_components(
 
 
 def _prepare_bundle_components(
-    self, bundle_source: ConversionSource
+    self: LTXFamilyAdapter, bundle_source: ConversionSource
 ) -> dict[str, PreparedComponent]:
     bundle_root = bundle_source.materialization.local_path
     if bundle_root is None or not bundle_root.is_dir():
@@ -143,7 +146,7 @@ def _prepare_bundle_components(
 
 
 def _artifact_components(
-    self, prepared: dict[str, PreparedComponent]
+    self: LTXFamilyAdapter, prepared: dict[str, PreparedComponent]
 ) -> tuple[list[PortableArtifactComponentRecord], list[ArtifactPayloadItem]]:
     components: list[PortableArtifactComponentRecord] = []
     payload_items: list[ArtifactPayloadItem] = []
@@ -198,7 +201,7 @@ def _artifact_components(
 
 
 def _artifact_digest(
-    self,
+    self: LTXFamilyAdapter,
     components: list[PortableArtifactComponentRecord],
     plan: ConversionPlan,
 ) -> str:
@@ -223,7 +226,9 @@ def _artifact_digest(
     return f"sha256:{digest}"
 
 
-def _combined_policy(self, prepared: dict[str, PreparedComponent]) -> PolicyDescriptor:
+def _combined_policy(
+    self: LTXFamilyAdapter, prepared: dict[str, PreparedComponent]
+) -> PolicyDescriptor:
     provenances = [component.provenance for component in prepared.values()]
     remote_code_required = any(
         provenance.remote_code_required for provenance in provenances
@@ -241,7 +246,7 @@ def _combined_policy(self, prepared: dict[str, PreparedComponent]) -> PolicyDesc
 
 
 def _component_paths(
-    self,
+    self: LTXFamilyAdapter,
     artifact_root: Path,
     components: list[PortableArtifactComponentRecord],
 ) -> dict[str, Path]:
@@ -271,7 +276,7 @@ def _component_paths(
 
 
 def _resolve_required_file(
-    self, local_path: Path | None, filename: str, *, role: str
+    self: LTXFamilyAdapter, local_path: Path | None, filename: str, *, role: str
 ) -> Path:
     if local_path is None:
         raise ValueError(f"LTX {role} source is missing a local materialization path")
@@ -287,7 +292,9 @@ def _resolve_required_file(
     raise ValueError(f"LTX {role} source is missing '{filename}'")
 
 
-def _resolve_text_encoder_dir(self, local_path: Path | None, *, role: str) -> Path:
+def _resolve_text_encoder_dir(
+    self: LTXFamilyAdapter, local_path: Path | None, *, role: str
+) -> Path:
     if local_path is None:
         raise ValueError(f"LTX {role} source is missing a local text-encoder directory")
     if local_path.is_file():
@@ -309,7 +316,9 @@ def _resolve_text_encoder_dir(self, local_path: Path | None, *, role: str) -> Pa
     )
 
 
-def _validate_text_encoder_dir(self, text_encoder_root: Path, *, role: str) -> None:
+def _validate_text_encoder_dir(
+    self: LTXFamilyAdapter, text_encoder_root: Path, *, role: str
+) -> None:
     if not text_encoder_root.is_dir():
         raise ValueError(f"LTX {role} text encoder source must be a directory")
     config_path = text_encoder_root / "config.json"
@@ -331,7 +340,9 @@ def _validate_text_encoder_dir(self, text_encoder_root: Path, *, role: str) -> N
         )
 
 
-def _looks_like_text_encoder_snapshot(self, file_paths: set[str]) -> bool:
+def _looks_like_text_encoder_snapshot(
+    self: LTXFamilyAdapter, file_paths: set[str]
+) -> bool:
     has_config = "config.json" in file_paths
     has_tokenizer = any(
         name in file_paths
@@ -341,21 +352,21 @@ def _looks_like_text_encoder_snapshot(self, file_paths: set[str]) -> bool:
     return has_config and has_tokenizer and has_weights
 
 
-def _directory_files(self, root: Path) -> tuple[Path, ...]:
+def _directory_files(self: LTXFamilyAdapter, root: Path) -> tuple[Path, ...]:
     return tuple(sorted(path for path in root.rglob("*") if path.is_file()))
 
 
-def _directory_size(self, root: Path) -> int:
+def _directory_size(self: LTXFamilyAdapter, root: Path) -> int:
     return sum(path.stat().st_size for path in self._directory_files(root))
 
 
-def _file_digest(self, source_path: Path) -> str:
+def _file_digest(self: LTXFamilyAdapter, source_path: Path) -> str:
     hasher = hashlib.sha256()
     hasher.update(source_path.read_bytes())
     return f"sha256:{hasher.hexdigest()}"
 
 
-def _directory_digest(self, root: Path) -> str:
+def _directory_digest(self: LTXFamilyAdapter, root: Path) -> str:
     hasher = hashlib.sha256()
     for file_path in self._directory_files(root):
         relative_path = file_path.relative_to(root).as_posix()
@@ -364,7 +375,7 @@ def _directory_digest(self, root: Path) -> str:
     return f"sha256:{hasher.hexdigest()}"
 
 
-def _media_type_for_format(self, artifact_format: str) -> str:
+def _media_type_for_format(self: LTXFamilyAdapter, artifact_format: str) -> str:
     if artifact_format == "mp4":
         return "video/mp4"
     if artifact_format == "mov":
@@ -374,7 +385,7 @@ def _media_type_for_format(self, artifact_format: str) -> str:
     return "application/octet-stream"
 
 
-def _require_str(self, value: object, name: str) -> str:
+def _require_str(self: LTXFamilyAdapter, value: object, name: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"LTX artifact metadata '{name}' must be a non-empty string")
     return value

@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 from __future__ import annotations
 
 import json
@@ -7,6 +6,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import runtime
+from .compat import (
+    Dropout,
+    Gemma3Model,
+    Linear,
+    Module,
+    RMSNorm,
+    TextConfig,
+    gelu_approx,
+    mx,
+    safe_open,
+)
 from .masks import (
     _apply_quantization,
     _connector_precomputed_freqs,
@@ -15,14 +25,8 @@ from .masks import (
 )
 
 if runtime._RUNTIME_IMPORT_ERROR is None:
-    mx = runtime.mx
-    nn = runtime.nn
-    np = runtime.np
-    TextConfig = runtime.TextConfig
-    Gemma3Model = runtime.Gemma3Model
-    safe_open = runtime.safe_open
 
-    class LanguageModel(nn.Module):
+    class LanguageModel(Module):
         def __init__(self, config: TextConfig):
             super().__init__()
             self.config = config
@@ -104,6 +108,10 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             prefix = "language_model."
             for weight_file in weight_files:
                 shard = mx.load(str(weight_file))
+                if not isinstance(shard, dict):
+                    raise RuntimeError(
+                        f"Gemma text encoder shard '{weight_file}' did not load into a weight mapping"
+                    )
                 items: list[tuple[str, mx.array]] = []
                 for key, value in shard.items():
                     if not key.startswith(prefix):
@@ -119,7 +127,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
 
             return language_model
 
-    class ConnectorAttention(nn.Module):
+    class ConnectorAttention(Module):
         def __init__(
             self,
             dim: int = 3840,
@@ -135,14 +143,14 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             self.rope_type = rope_type
             inner_dim = num_heads * head_dim
             self.scale = 1.0 / float(head_dim) ** 0.5
-            self.to_q = nn.Linear(dim, inner_dim, bias=True)
-            self.to_k = nn.Linear(dim, inner_dim, bias=True)
-            self.to_v = nn.Linear(dim, inner_dim, bias=True)
-            self.to_out = nn.Linear(inner_dim, dim, bias=True)
-            self.q_norm = nn.RMSNorm(inner_dim, eps=1e-6)
-            self.k_norm = nn.RMSNorm(inner_dim, eps=1e-6)
+            self.to_q = Linear(dim, inner_dim, bias=True)
+            self.to_k = Linear(dim, inner_dim, bias=True)
+            self.to_v = Linear(dim, inner_dim, bias=True)
+            self.to_out = Linear(inner_dim, dim, bias=True)
+            self.q_norm = RMSNorm(inner_dim, eps=1e-6)
+            self.k_norm = RMSNorm(inner_dim, eps=1e-6)
             self.to_gate_logits = (
-                nn.Linear(dim, num_heads, bias=True) if apply_gated_attention else None
+                Linear(dim, num_heads, bias=True) if apply_gated_attention else None
             )
 
         def __call__(
@@ -228,20 +236,20 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             out2 = x2 * cos_freq + x1 * sin_freq
             return mx.concatenate([out1, out2], axis=-1).astype(input_dtype)
 
-    class ConnectorFeedForward(nn.Module):
+    class ConnectorFeedForward(Module):
         def __init__(self, dim: int = 3840, mult: int = 4, dropout: float = 0.0):
             super().__init__()
             inner_dim = dim * mult
-            self.proj_in = nn.Linear(dim, inner_dim, bias=True)
-            self.dropout = nn.Dropout(dropout)
-            self.proj_out = nn.Linear(inner_dim, dim, bias=True)
+            self.proj_in = Linear(dim, inner_dim, bias=True)
+            self.dropout = Dropout(dropout)
+            self.proj_out = Linear(inner_dim, dim, bias=True)
 
         def __call__(self, x: mx.array) -> mx.array:
-            x = nn.gelu_approx(self.proj_in(x))
+            x = gelu_approx(self.proj_in(x))
             x = self.dropout(x)
             return self.proj_out(x)
 
-    class ConnectorTransformerBlock(nn.Module):
+    class ConnectorTransformerBlock(Module):
         def __init__(
             self,
             dim: int = 3840,
@@ -273,7 +281,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             ff_out = self.ff(_rms_norm(x))
             return x + ff_out
 
-    class Embeddings1DConnector(nn.Module):
+    class Embeddings1DConnector(Module):
         def __init__(
             self,
             dim: int = 3840,
@@ -478,10 +486,10 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         binary_mask = binary_mask.reshape(encoded.shape[0], encoded.shape[1], 1)
         return encoded * binary_mask.astype(encoded.dtype), binary_mask[:, :, 0]
 
-    class GemmaFeatureExtractorV1(nn.Module):
+    class GemmaFeatureExtractorV1(Module):
         def __init__(self, input_dim: int, output_dim: int):
             super().__init__()
-            self.aggregate_embed = nn.Linear(input_dim, output_dim, bias=False)
+            self.aggregate_embed = Linear(input_dim, output_dim, bias=False)
 
         def __call__(
             self,
@@ -498,7 +506,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             features = self.aggregate_embed(normalized)
             return features, features
 
-    class GemmaFeatureExtractorV2(nn.Module):
+    class GemmaFeatureExtractorV2(Module):
         def __init__(
             self,
             input_dim: int,
@@ -508,11 +516,9 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         ):
             super().__init__()
             self.embedding_dim = embedding_dim
-            self.video_aggregate_embed = nn.Linear(
-                input_dim, video_output_dim, bias=True
-            )
+            self.video_aggregate_embed = Linear(input_dim, video_output_dim, bias=True)
             self.audio_aggregate_embed = (
-                nn.Linear(input_dim, audio_output_dim, bias=True)
+                Linear(input_dim, audio_output_dim, bias=True)
                 if audio_output_dim is not None
                 else None
             )
