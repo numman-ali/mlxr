@@ -38,7 +38,7 @@ Runs the required pre-commit gate:
 - `ruff check packages tests scripts`
 - `mypy --strict packages tests scripts`
 - `python scripts/check_type_escapes.py`
-- `coverage run -m unittest discover -s tests -v`
+- `coverage run scripts/run_unittests.py -v`
 - `coverage report` with the current repo floor set to `85%` line coverage across `packages/`
 - `uv build --all-packages`
 
@@ -72,6 +72,7 @@ Use it when:
 - `mypy --strict` is the type gate
 - `check_type_escapes.py` forbids `typing.cast` and explicit `Any` in the agent-facing runtime and test surfaces covered by the script
 - `unittest` is the current test runner
+- `scripts/run_unittests.py` discovers both repo-level `tests/` and package-local `packages/*/*/tests/`
 - `coverage.py` enforces the current line-coverage floor for repo-owned Python packages
 - `uv build --all-packages` is the build gate
 

@@ -67,6 +67,17 @@ class _WrappedCausalConv3d(nn.Module):
         return result
 
 
+class _RuntimeVocoderWrapper:
+    def __init__(self, impl: AudioVocoder | AudioVocoderWithBWE) -> None:
+        self._impl = impl
+
+    def parameters(self) -> object:
+        return self._impl.parameters()
+
+    def __call__(self, decoded_audio: MLXArray) -> MLXArray:
+        return self._impl(decoded_audio)
+
+
 def _upsample_latents(
     latent: MLXArray,
     upsampler: _UpsamplerLike,
@@ -704,7 +715,12 @@ def _load_runtime_vocoder(
         raw_weights=raw_base_weights,
     )
     if runtime_vocoder_config.bwe is None:
-        return base_vocoder, runtime_vocoder_config.output_sample_rate, "mlx_vocoder"
+        runtime_vocoder: _VocoderLike = _RuntimeVocoderWrapper(base_vocoder)
+        return (
+            runtime_vocoder,
+            runtime_vocoder_config.output_sample_rate,
+            "mlx_vocoder",
+        )
 
     raw_bwe_weights = {
         key[len("vocoder.bwe_generator.") :]: value
@@ -757,8 +773,9 @@ def _load_runtime_vocoder(
         output_sample_rate=runtime_vocoder_config.bwe.output_sample_rate,
         hop_length=runtime_vocoder_config.bwe.hop_length,
     )
+    runtime_vocoder_with_bwe: _VocoderLike = _RuntimeVocoderWrapper(vocoder_with_bwe)
     return (
-        vocoder_with_bwe,
+        runtime_vocoder_with_bwe,
         runtime_vocoder_config.bwe.output_sample_rate,
         "mlxr_vocoder_with_bwe",
     )

@@ -170,8 +170,11 @@ class _UpsamplerLike(_GeneratorModule, Protocol):
 
 
 class _AudioEncoderLike(_GeneratorModule, Protocol):
-    per_channel_statistics: "_PerChannelStatistics"
-    in_channels: int
+    @property
+    def per_channel_statistics(self) -> "_PerChannelStatistics": ...
+
+    @property
+    def in_channels(self) -> int: ...
 
     def __call__(self, mel: MLXArray) -> MLXArray: ...
 
@@ -181,19 +184,23 @@ class _AudioEncoderLike(_GeneratorModule, Protocol):
 
 
 class _AudioDecoderLike(_GeneratorModule, Protocol):
-    per_channel_statistics: "_PerChannelStatistics"
+    @property
+    def per_channel_statistics(self) -> "_PerChannelStatistics": ...
+
+    def __call__(self, audio_latents: MLXArray) -> MLXArray: ...
 
 
 class _AudioProcessorLike(Protocol):
-    sample_rate: int
+    @property
+    def sample_rate(self) -> int: ...
 
     def waveform_to_mel(
         self, waveform: npt.NDArray[np.float32], sample_rate: int
     ) -> npt.NDArray[np.float32]: ...
 
 
-class _VocoderLike(_GeneratorModule, Protocol):
-    pass
+class _VocoderLike(Protocol):
+    def __call__(self, decoded_audio: MLXArray) -> MLXArray: ...
 
 
 class _PerChannelStatistics(Protocol):

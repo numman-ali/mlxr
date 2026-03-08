@@ -9,6 +9,8 @@ import numpy.typing as npt
 
 from ..generation import AudioConditioningInput, ConditioningInput
 from ..prompt_encoding import PromptEncodingResult
+from .audio_processor import AudioProcessor
+from .audio_render import decode_audio
 from .conditioning import (
     _context_width,
     _decode_conditioning_audio_file,
@@ -179,6 +181,28 @@ def _prepare_image_for_encoding_ref(
     )
 
 
+def _audio_processor_factory(
+    *,
+    sample_rate: int,
+    mel_bins: int,
+    mel_hop_length: int,
+    n_fft: int,
+) -> _AudioProcessorLike:
+    return AudioProcessor(
+        sample_rate=sample_rate,
+        mel_bins=mel_bins,
+        mel_hop_length=mel_hop_length,
+        n_fft=n_fft,
+    )
+
+
+def _parameters_for_eval(module: object) -> object:
+    parameters = getattr(module, "parameters", None)
+    if not callable(parameters):
+        raise RuntimeError("Expected MLX module with callable parameters()")
+    return parameters()
+
+
 def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
     if self._reference_imports is not None:
         return self._reference_imports
@@ -240,10 +264,10 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         ),
         audio_encoder_class=audio_vae_module.AudioEncoder,
         audio_decoder_class=audio_vae_init_module.AudioDecoder,
-        audio_processor_class=audio_vae_init_module.AudioProcessor,
+        audio_processor_class=_audio_processor_factory,
         audio_norm_type_enum=audio_vae_init_module.NormType,
         audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
-        decode_audio=audio_vae_module.decode_audio,
+        decode_audio=decode_audio,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
         audio_latent_channels=audio_runtime_config.latent_channels,
@@ -546,7 +570,7 @@ def _ensure_audio_stack(
             checkpoint_weights=checkpoint_audio_weights,
             sanitize_vocoder_weights=sanitize_vocoder_weights,
         )
-        mx.eval(vocoder.parameters())
+        mx.eval(_parameters_for_eval(vocoder))
         self._vocoder = vocoder
         self._audio_output_sample_rate = output_sample_rate
         self._audio_backend = backend_label

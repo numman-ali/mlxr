@@ -38,7 +38,7 @@ def cmd_typecheck() -> None:
 
 
 def cmd_test() -> None:
-    run_command([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])
+    run_command([sys.executable, "scripts/run_unittests.py", "-v"])
 
 
 def cmd_build() -> None:
@@ -52,7 +52,7 @@ def cmd_verify() -> None:
     run_command([sys.executable, "scripts/check_type_escapes.py"])
     Path("tmp").mkdir(parents=True, exist_ok=True)
     run_command(["coverage", "erase"])
-    run_command(["coverage", "run", "-m", "unittest", "discover", "-s", "tests", "-v"])
+    run_command(["coverage", "run", "scripts/run_unittests.py", "-v"])
     run_command(["coverage", "report"])
     run_command(["uv", "build", "--all-packages"])
 

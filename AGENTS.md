@@ -45,6 +45,12 @@ The workspace is grouped by role rather than by historical package names:
 - `packages/adapters/` contains host or integration adapters such as `comfyui` and `ltx-desktop`
 - `packages/clients/` contains first-party clients such as `runtime-cli`
 
+Tests should mirror ownership too:
+
+- package-specific unit tests live under the package root at `packages/.../tests/unit/`
+- top-level `tests/` is reserved for integration, e2e, shared fixtures, and legacy test files that have not been migrated yet
+- do not add new package-specific unit coverage to giant root-level monolithic test files when a package-local unit test home exists
+
 When moving files or updating imports, keep both layers clean:
 
 - repo paths should communicate the package role clearly
@@ -327,6 +333,7 @@ Use these support docs when you need the deeper operational details:
 
 - [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
 - [dev-harness.md](/Users/numman/Repos/mlxr/docs/dev-harness.md)
+- [test-layout.md](/Users/numman/Repos/mlxr/docs/test-layout.md)
 - [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
 - [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md)
 - [skill-policy.md](/Users/numman/Repos/mlxr/docs/skill-policy.md)
