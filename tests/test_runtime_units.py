@@ -13,6 +13,7 @@ import numpy as np
 from ltx import LTXFamilyAdapter
 from ltx._generation_backend.conditioning import _resolve_padded_shape
 from ltx._generation_backend.reference_imports import _REFERENCE_MLX_VIDEO_ROOT
+from ltx._generation_backend.runtime_helpers import _normalize_audio_mel_layout
 from mlx_runtime_core import (
     ExecutionProfile,
     ExecutionStage,
@@ -1286,3 +1287,12 @@ class RuntimeUnitTests(unittest.TestCase):
             )
             self.assertTrue(output_path.exists())
             self.assertIn(b"ftyp", output_path.read_bytes()[:32])
+
+    def test_ltx_audio_conditioning_normalizes_mel_layout_for_encoder(self) -> None:
+        mel_bins_first = np.zeros((1, 64, 2, 65), dtype=np.float32)
+        normalized = _normalize_audio_mel_layout(mel_bins_first, input_channels=2)
+        self.assertEqual(normalized.shape, (1, 2, 65, 64))
+
+        channels_first = np.zeros((1, 2, 65, 64), dtype=np.float32)
+        preserved = _normalize_audio_mel_layout(channels_first, input_channels=2)
+        self.assertEqual(preserved.shape, (1, 2, 65, 64))

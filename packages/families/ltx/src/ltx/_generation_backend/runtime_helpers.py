@@ -352,11 +352,33 @@ def _encode_audio_conditioning(
         start_time_seconds=audio_conditioning.start_time_seconds,
         max_duration_seconds=default_duration,
     )
-    mel = processor.waveform_to_mel(waveform.T, sample_rate)
+    mel = _normalize_audio_mel_layout(
+        processor.waveform_to_mel(waveform.T, sample_rate),
+        input_channels=encoder.in_channels,
+    )
     audio_latents = encoder(mx.array(mel).astype(mx.float32)).astype(model_dtype)
     audio_latents = _fit_audio_latents(audio_latents, target_frames=audio_frames)
     mx.eval(audio_latents)
     return audio_latents, waveform.astype(np.float32), int(sample_rate)
+
+
+def _normalize_audio_mel_layout(
+    mel: npt.NDArray[np.float32], *, input_channels: int
+) -> npt.NDArray[np.float32]:
+    if mel.ndim != 4:
+        raise RuntimeError(
+            f"LTX audio conditioning mel spectrogram must be 4D, got shape {mel.shape}"
+        )
+    if mel.shape[1] == input_channels:
+        return mel.astype(np.float32, copy=False)
+    if mel.shape[2] == input_channels:
+        return np.transpose(mel, (0, 2, 3, 1)).astype(np.float32, copy=False)
+    if mel.shape[3] == input_channels:
+        return np.transpose(mel, (0, 3, 1, 2)).astype(np.float32, copy=False)
+    raise RuntimeError(
+        "LTX audio conditioning mel spectrogram must expose the encoder input channels "
+        f"on axis 1, 2, or 3; got shape {mel.shape}"
+    )
 
 
 def _ensure_audio_stack(

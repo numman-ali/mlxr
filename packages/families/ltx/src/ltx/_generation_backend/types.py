@@ -154,6 +154,7 @@ class _UpsamplerLike(_GeneratorModule, Protocol):
 
 class _AudioEncoderLike(_GeneratorModule, Protocol):
     per_channel_statistics: "_PerChannelStatistics"
+    in_channels: int
 
     def __call__(self, mel: MLXArray) -> MLXArray: ...
 

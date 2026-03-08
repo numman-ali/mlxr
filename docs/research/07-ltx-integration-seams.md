@@ -175,16 +175,18 @@ Execution implications:
 
 - `prompt_encode` now runs through a repo-owned strict-local MLX Gemma path using the artifactized `checkpoint` and `text_encoder` payloads
 - `condition_inputs` now resolves imported image handles into worker-local conditioning inputs before generation
+- `condition_inputs` now also resolves imported audio handles into worker-local audio-conditioning inputs before generation
 - prompt context stays worker-local and is now an explicit post-connector contract into denoise/generate work
 - the current runtime path now emits real runtime-managed `mp4` and `wav` artifacts plus per-stage timing and memory telemetry, while keeping the generation backend explicitly narrow
 - the current runtime path now restores audible checkpoint-backed audio through a repo-owned MLX `AMP1` base-vocoder bridge instead of the older silent-ish fallback path
+- the first truthful `video.condition.audio` slice now preserves resolved reference audio through the artifact-backed bridge instead of silently ignoring audio references
 - the bridge now fails closed on prompt/generation config drift, missing VAE per-channel statistics, and unsupported x2 upsampler layouts instead of silently approximating them
 - the current fixed-seed dog validation ladder now passes a clear-dog `384x224 / 17f / 24fps` rung and a coherent `768x512 / 33f / 24fps` rung using the repo-owned smoke/debug workflow
 - negative-prompt support is still intentionally excluded for the fast path instead of being silently ignored
 
 Still intentionally out of scope for this slice:
 
-- audio-conditioned input, reference-video input, temporal upsamplers, x1.5 upsampler, LoRAs, and prompt enhancement
+- reference-video input, temporal upsamplers, x1.5 upsampler, LoRAs, and prompt enhancement
 - recommended-resolution and HQ profile validation
 - claiming that the LTX artifact shape has already validated the platform across families
 - full `LTX-2.3` BWE audio parity beyond the now-audible base-vocoder bridge
