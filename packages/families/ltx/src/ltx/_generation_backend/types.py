@@ -487,7 +487,7 @@ class _RuntimeModelConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class _RuntimeVocoderConfig:
+class _RuntimeVocoderArchitectureConfig:
     resblock_kernel_sizes: tuple[int, ...]
     upsample_rates: tuple[int, ...]
     upsample_kernel_sizes: tuple[int, ...]
@@ -500,8 +500,39 @@ class _RuntimeVocoderConfig:
     apply_final_activation: bool
     use_bias_at_final: bool
     output_sample_rate: int
-    uses_bwe: bool
-    bwe_output_sample_rate: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeBWEConfig:
+    generator: _RuntimeVocoderArchitectureConfig
+    input_sample_rate: int
+    output_sample_rate: int
+    hop_length: int
+    n_fft: int
+    win_size: int
+    num_mels: int
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeVocoderConfig:
+    vocoder: _RuntimeVocoderArchitectureConfig
+    bwe: _RuntimeBWEConfig | None
+
+    @property
+    def uses_bwe(self) -> bool:
+        return self.bwe is not None
+
+    @property
+    def output_sample_rate(self) -> int:
+        if self.bwe is not None:
+            return self.bwe.input_sample_rate
+        return self.vocoder.output_sample_rate
+
+    @property
+    def bwe_output_sample_rate(self) -> int | None:
+        if self.bwe is None:
+            return None
+        return self.bwe.output_sample_rate
 
 
 @dataclass(frozen=True, slots=True)

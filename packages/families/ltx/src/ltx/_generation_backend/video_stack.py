@@ -7,6 +7,7 @@ from pathlib import Path
 import mlx.core as mx
 
 from .. import _nn_compat as nn
+from .._audio_bwe import AudioMelSTFT, AudioVocoderWithBWE
 from .._audio_vocoder import AudioVocoder
 from .config import (
     _decoder_initial_feature_channels,
@@ -19,6 +20,7 @@ from .config import (
 from .reference_imports import _reference_path_on_sys_path
 from .types import (
     MLXArray,
+    _RuntimeVocoderArchitectureConfig,
     _SanitizeVocoderWeights,
     _TilingConfigInstance,
     _UpsamplerLike,
@@ -336,6 +338,39 @@ def _require_array(value: object, *, context: str) -> MLXArray:
     return value
 
 
+def _validate_bwe_stft_buffers(
+    *,
+    checkpoint_path: Path,
+    mel_basis: MLXArray,
+    forward_basis: MLXArray,
+    inverse_basis: MLXArray,
+    num_mels: int,
+    n_fft: int,
+) -> None:
+    expected_mel_shape = (num_mels, n_fft // 2 + 1)
+    mel_shape = tuple(int(size) for size in mel_basis.shape)
+    if mel_shape != expected_mel_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid mel basis shape "
+            f"{mel_shape!r}; expected {expected_mel_shape!r}"
+        )
+
+    expected_stft_shape = (n_fft + 2, 1, n_fft)
+    forward_shape = tuple(int(size) for size in forward_basis.shape)
+    if forward_shape != expected_stft_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid STFT forward basis shape "
+            f"{forward_shape!r}; expected {expected_stft_shape!r}"
+        )
+
+    inverse_shape = tuple(int(size) for size in inverse_basis.shape)
+    if inverse_shape != expected_stft_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid STFT inverse basis shape "
+            f"{inverse_shape!r}; expected {expected_stft_shape!r}"
+        )
+
+
 def _load_configured_vae_decoder(checkpoint_path: Path) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
     with _reference_path_on_sys_path():
@@ -484,32 +519,96 @@ def _load_runtime_vocoder(
             f"LTX checkpoint '{checkpoint_path}' is missing base vocoder weights"
         )
 
-    sanitized_weights = sanitize_vocoder_weights(raw_base_weights)
-    sanitized_weights = {
-        key: value
-        for key, value in sanitized_weights.items()
-        if not key.endswith(".filter")
+    def _build_vocoder(
+        *,
+        architecture: _RuntimeVocoderArchitectureConfig,
+        raw_weights: dict[str, mx.array],
+    ) -> AudioVocoder:
+        sanitized_weights = sanitize_vocoder_weights(raw_weights)
+        sanitized_weights = {
+            key: value
+            for key, value in sanitized_weights.items()
+            if not key.endswith(".filter")
+        }
+        vocoder = AudioVocoder(
+            resblock_kernel_sizes=list(architecture.resblock_kernel_sizes),
+            upsample_rates=list(architecture.upsample_rates),
+            upsample_kernel_sizes=list(architecture.upsample_kernel_sizes),
+            resblock_dilation_sizes=[
+                list(block) for block in architecture.resblock_dilation_sizes
+            ],
+            upsample_initial_channel=architecture.upsample_initial_channel,
+            stereo=architecture.stereo,
+            resblock=architecture.resblock,
+            output_sample_rate=architecture.output_sample_rate,
+            activation=architecture.activation,
+            use_tanh_at_final=architecture.use_tanh_at_final,
+            apply_final_activation=architecture.apply_final_activation,
+            use_bias_at_final=architecture.use_bias_at_final,
+        )
+        vocoder.load_weights(list(sanitized_weights.items()), strict=False)
+        return vocoder
+
+    base_vocoder = _build_vocoder(
+        architecture=runtime_vocoder_config.vocoder,
+        raw_weights=raw_base_weights,
+    )
+    if runtime_vocoder_config.bwe is None:
+        return base_vocoder, runtime_vocoder_config.output_sample_rate, "mlx_vocoder"
+
+    raw_bwe_weights = {
+        key[len("vocoder.bwe_generator.") :]: value
+        for key, value in checkpoint_weights.items()
+        if key.startswith("vocoder.bwe_generator.")
     }
-    vocoder = AudioVocoder(
-        resblock_kernel_sizes=list(runtime_vocoder_config.resblock_kernel_sizes),
-        upsample_rates=list(runtime_vocoder_config.upsample_rates),
-        upsample_kernel_sizes=list(runtime_vocoder_config.upsample_kernel_sizes),
-        resblock_dilation_sizes=[
-            list(block) for block in runtime_vocoder_config.resblock_dilation_sizes
-        ],
-        upsample_initial_channel=runtime_vocoder_config.upsample_initial_channel,
-        stereo=runtime_vocoder_config.stereo,
-        resblock=runtime_vocoder_config.resblock,
-        output_sample_rate=runtime_vocoder_config.output_sample_rate,
-        activation=runtime_vocoder_config.activation,
-        use_tanh_at_final=runtime_vocoder_config.use_tanh_at_final,
-        apply_final_activation=runtime_vocoder_config.apply_final_activation,
-        use_bias_at_final=runtime_vocoder_config.use_bias_at_final,
+    if not raw_bwe_weights:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' declares BWE support but is missing BWE generator weights"
+        )
+
+    mel_basis = checkpoint_weights.get("vocoder.mel_stft.mel_basis")
+    forward_basis = checkpoint_weights.get("vocoder.mel_stft.stft_fn.forward_basis")
+    inverse_basis = checkpoint_weights.get("vocoder.mel_stft.stft_fn.inverse_basis")
+    if mel_basis is None or forward_basis is None or inverse_basis is None:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' declares BWE support but is missing mel STFT buffers"
+        )
+    _validate_bwe_stft_buffers(
+        checkpoint_path=checkpoint_path,
+        mel_basis=mel_basis,
+        forward_basis=forward_basis,
+        inverse_basis=inverse_basis,
+        num_mels=runtime_vocoder_config.bwe.num_mels,
+        n_fft=runtime_vocoder_config.bwe.n_fft,
     )
-    vocoder.load_weights(list(sanitized_weights.items()), strict=False)
-    backend_label = (
-        "mlx_vocoder_amp1_base_only"
-        if runtime_vocoder_config.uses_bwe
-        else "mlx_vocoder"
+
+    bwe_generator = _build_vocoder(
+        architecture=runtime_vocoder_config.bwe.generator,
+        raw_weights=raw_bwe_weights,
     )
-    return vocoder, runtime_vocoder_config.output_sample_rate, backend_label
+    mel_stft = AudioMelSTFT(
+        filter_length=runtime_vocoder_config.bwe.n_fft,
+        hop_length=runtime_vocoder_config.bwe.hop_length,
+        win_length=runtime_vocoder_config.bwe.win_size,
+        n_mel_channels=runtime_vocoder_config.bwe.num_mels,
+    )
+    mel_stft.mel_basis = mel_basis.astype(mx.float32)
+    mel_stft.stft_fn.forward_basis = mx.transpose(
+        forward_basis.astype(mx.float32), (0, 2, 1)
+    )
+    mel_stft.stft_fn.inverse_basis = mx.transpose(
+        inverse_basis.astype(mx.float32), (0, 2, 1)
+    )
+    vocoder_with_bwe = AudioVocoderWithBWE(
+        vocoder=base_vocoder,
+        bwe_generator=bwe_generator,
+        mel_stft=mel_stft,
+        input_sample_rate=runtime_vocoder_config.bwe.input_sample_rate,
+        output_sample_rate=runtime_vocoder_config.bwe.output_sample_rate,
+        hop_length=runtime_vocoder_config.bwe.hop_length,
+    )
+    return (
+        vocoder_with_bwe,
+        runtime_vocoder_config.bwe.output_sample_rate,
+        "mlx_vocoder_with_bwe",
+    )

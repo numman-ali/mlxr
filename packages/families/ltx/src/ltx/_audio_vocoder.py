@@ -311,7 +311,13 @@ class AMPBlock1(Module):
         activation: str = "snakebeta",
     ) -> None:
         super().__init__()
-        act_cls = SnakeBeta if activation == "snakebeta" else Snake
+        act_cls: type[Snake] | type[SnakeBeta]
+        if activation == "snakebeta":
+            act_cls = SnakeBeta
+        elif activation == "snake":
+            act_cls = Snake
+        else:
+            raise ValueError(f"Unsupported LTX vocoder activation {activation!r}")
         self.convs1 = [
             Conv1d(
                 channels,
@@ -379,6 +385,8 @@ class AudioVocoder(Module):
         kernel_sizes = list(resblock_kernel_sizes or [3, 7, 11])
         up_rates = list(upsample_rates or [6, 5, 2, 2, 2])
         up_kernels = list(upsample_kernel_sizes or [16, 15, 8, 4, 4])
+        if activation not in {"snake", "snakebeta"}:
+            raise ValueError(f"Unsupported LTX vocoder activation {activation!r}")
         dilation_sizes = [
             tuple(int(v) for v in block)
             for block in (resblock_dilation_sizes or ([1, 3, 5], [1, 3, 5], [1, 3, 5]))

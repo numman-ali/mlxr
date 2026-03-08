@@ -27,16 +27,16 @@ Still not true:
 
 - text-first AV still drifts semantically on some clips
 - the current `video.condition.audio` example proved the bridge, but not strong scene quality
-- full upstream audio-fidelity parity is not complete yet
+- conditioned-scene quality on `video.condition.audio` is still not strong enough to promote
 - the five-scene showcase pack is not ready to promote
 
 ## Execution checklist
 
 ### A. Audio quality and conditioning
 
-- [ ] close the remaining BWE-related audio-fidelity gap on the checkpoint-backed path
-- [ ] compare current MLXR audio output against official `LTX-2` vocoder/BWE expectations
-- [ ] confirm whether the current weakness is mostly audio fidelity, scene semantics, or both
+- [x] close the remaining BWE-related audio-fidelity gap on the checkpoint-backed path
+- [x] compare current MLXR audio output against official `LTX-2` vocoder/BWE expectations
+- [x] confirm that the current remaining weakness is now mostly scene semantics on the conditioned path, not raw audio-fidelity plumbing
 - [ ] improve `video.condition.audio` scene quality so the output actually matches the intended prompt/reference pairing
 - [ ] keep the passthrough/reference-audio truth explicit until full parity is proven
 

@@ -12,8 +12,10 @@ from .conditioning import _attention_mask, _context_width
 from .reference_imports import _REFERENCE_MLX_VIDEO_ROOT
 from .types import (
     _RuntimeAudioEncoderConfig,
+    _RuntimeBWEConfig,
     _RuntimeModelConfig,
     _RuntimeVAEConfig,
+    _RuntimeVocoderArchitectureConfig,
     _RuntimeVocoderConfig,
 )
 
@@ -281,6 +283,88 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
     )
 
 
+def _runtime_vocoder_architecture_config(
+    *,
+    raw_config: dict[str, object],
+    checkpoint_path: Path,
+    context_label: str,
+    output_sample_rate: int,
+) -> _RuntimeVocoderArchitectureConfig:
+    activation = str(raw_config.get("activation", "snake"))
+    if activation not in {"snake", "snakebeta"}:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has unsupported {context_label} activation {activation!r}"
+        )
+    return _RuntimeVocoderArchitectureConfig(
+        resblock_kernel_sizes=tuple(
+            _int_list(
+                raw_config.get("resblock_kernel_sizes", [3, 7, 11]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} resblock_kernel_sizes metadata"
+                ),
+            )
+        ),
+        upsample_rates=tuple(
+            _int_list(
+                raw_config.get("upsample_rates", [6, 5, 2, 2, 2]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} upsample_rates metadata"
+                ),
+            )
+        ),
+        upsample_kernel_sizes=tuple(
+            _int_list(
+                raw_config.get("upsample_kernel_sizes", [16, 15, 8, 4, 4]),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} upsample_kernel_sizes metadata"
+                ),
+            )
+        ),
+        resblock_dilation_sizes=_nested_int_tuples(
+            raw_config.get(
+                "resblock_dilation_sizes",
+                [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+            ),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} resblock_dilation_sizes metadata"
+            ),
+        ),
+        upsample_initial_channel=_int_value(
+            raw_config.get("upsample_initial_channel", 1024),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} upsample_initial_channel metadata"
+            ),
+        ),
+        stereo=_bool_value(
+            raw_config.get("stereo", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} stereo metadata"
+            ),
+        ),
+        resblock=str(raw_config.get("resblock", "1")),
+        activation=activation,
+        use_tanh_at_final=_bool_value(
+            raw_config.get("use_tanh_at_final", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} use_tanh_at_final metadata"
+            ),
+        ),
+        apply_final_activation=_bool_value(
+            raw_config.get("apply_final_activation", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} apply_final_activation metadata"
+            ),
+        ),
+        use_bias_at_final=_bool_value(
+            raw_config.get("use_bias_at_final", True),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {context_label} use_bias_at_final metadata"
+            ),
+        ),
+        output_sample_rate=output_sample_rate,
+    )
+
+
 def _runtime_vocoder_config(checkpoint_path: Path) -> _RuntimeVocoderConfig:
     metadata = _checkpoint_metadata(checkpoint_path)
     raw_vocoder_config = metadata.get("vocoder")
@@ -289,9 +373,13 @@ def _runtime_vocoder_config(checkpoint_path: Path) -> _RuntimeVocoderConfig:
             f"LTX checkpoint '{checkpoint_path}' is missing vocoder metadata"
         )
 
-    uses_bwe = isinstance(raw_vocoder_config.get("bwe"), dict) and isinstance(
-        raw_vocoder_config.get("vocoder"), dict
-    )
+    has_nested_bwe = isinstance(raw_vocoder_config.get("bwe"), dict)
+    has_nested_vocoder = isinstance(raw_vocoder_config.get("vocoder"), dict)
+    if has_nested_bwe != has_nested_vocoder:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has partial nested BWE vocoder metadata"
+        )
+    uses_bwe = has_nested_bwe and has_nested_vocoder
     base_config = raw_vocoder_config["vocoder"] if uses_bwe else raw_vocoder_config
     if not isinstance(base_config, dict):
         raise RuntimeError(
@@ -326,75 +414,69 @@ def _runtime_vocoder_config(checkpoint_path: Path) -> _RuntimeVocoderConfig:
         )
     )
 
-    return _RuntimeVocoderConfig(
-        resblock_kernel_sizes=tuple(
-            _int_list(
-                base_config.get("resblock_kernel_sizes", [3, 7, 11]),
-                context=(
-                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder resblock_kernel_sizes metadata"
-                ),
-            )
-        ),
-        upsample_rates=tuple(
-            _int_list(
-                base_config.get("upsample_rates", [6, 5, 2, 2, 2]),
-                context=(
-                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_rates metadata"
-                ),
-            )
-        ),
-        upsample_kernel_sizes=tuple(
-            _int_list(
-                base_config.get("upsample_kernel_sizes", [16, 15, 8, 4, 4]),
-                context=(
-                    f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_kernel_sizes metadata"
-                ),
-            )
-        ),
-        resblock_dilation_sizes=_nested_int_tuples(
-            base_config.get(
-                "resblock_dilation_sizes",
-                [[1, 3, 5], [1, 3, 5], [1, 3, 5]],
-            ),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder resblock_dilation_sizes metadata"
-            ),
-        ),
-        upsample_initial_channel=_int_value(
-            base_config.get("upsample_initial_channel", 1024),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder upsample_initial_channel metadata"
-            ),
-        ),
-        stereo=_bool_value(
-            base_config.get("stereo", True),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder stereo metadata"
-            ),
-        ),
-        resblock=str(base_config.get("resblock", "1")),
-        activation=str(base_config.get("activation", "snake")),
-        use_tanh_at_final=_bool_value(
-            base_config.get("use_tanh_at_final", True),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder use_tanh_at_final metadata"
-            ),
-        ),
-        apply_final_activation=_bool_value(
-            base_config.get("apply_final_activation", True),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder apply_final_activation metadata"
-            ),
-        ),
-        use_bias_at_final=_bool_value(
-            base_config.get("use_bias_at_final", True),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid vocoder use_bias_at_final metadata"
-            ),
-        ),
+    vocoder_config = _runtime_vocoder_architecture_config(
+        raw_config=base_config,
+        checkpoint_path=checkpoint_path,
+        context_label="vocoder",
         output_sample_rate=output_sample_rate,
-        uses_bwe=uses_bwe,
-        bwe_output_sample_rate=bwe_output_sample_rate,
+    )
+
+    bwe_runtime_config: _RuntimeBWEConfig | None = None
+    if uses_bwe:
+        if not isinstance(bwe_config, dict):
+            raise RuntimeError(
+                f"LTX checkpoint '{checkpoint_path}' has invalid BWE metadata"
+            )
+        bwe_input_sample_rate = _int_value(
+            bwe_config.get("input_sampling_rate"),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid BWE input sample rate metadata"
+            ),
+        )
+        bwe_output_sample_rate = _int_value(
+            bwe_config.get("output_sampling_rate"),
+            context=(
+                f"LTX checkpoint '{checkpoint_path}' has invalid BWE output sample rate metadata"
+            ),
+        )
+        bwe_runtime_config = _RuntimeBWEConfig(
+            generator=_runtime_vocoder_architecture_config(
+                raw_config=bwe_config,
+                checkpoint_path=checkpoint_path,
+                context_label="BWE generator",
+                output_sample_rate=bwe_output_sample_rate,
+            ),
+            input_sample_rate=bwe_input_sample_rate,
+            output_sample_rate=bwe_output_sample_rate,
+            hop_length=_int_value(
+                bwe_config.get("hop_length"),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid BWE hop_length metadata"
+                ),
+            ),
+            n_fft=_int_value(
+                bwe_config.get("n_fft"),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid BWE n_fft metadata"
+                ),
+            ),
+            win_size=_int_value(
+                bwe_config.get("win_size"),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid BWE win_size metadata"
+                ),
+            ),
+            num_mels=_int_value(
+                bwe_config.get("num_mels"),
+                context=(
+                    f"LTX checkpoint '{checkpoint_path}' has invalid BWE num_mels metadata"
+                ),
+            ),
+        )
+
+    return _RuntimeVocoderConfig(
+        vocoder=vocoder_config,
+        bwe=bwe_runtime_config,
     )
 
 
