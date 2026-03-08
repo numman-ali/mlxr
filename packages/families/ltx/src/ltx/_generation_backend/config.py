@@ -19,6 +19,20 @@ from .types import (
     _RuntimeVocoderConfig,
 )
 
+_DEFAULT_VAE_ENCODER_BLOCKS: tuple[tuple[str, object], ...] = (
+    ("res_x", {"num_layers": 4}),
+    ("compress_space_res", {"multiplier": 2}),
+    ("res_x", {"num_layers": 6}),
+    ("compress_time_res", {"multiplier": 2}),
+    ("res_x", {"num_layers": 6}),
+    ("compress_all_res", {"multiplier": 2}),
+    ("res_x", {"num_layers": 2}),
+    ("compress_all_res", {"multiplier": 2}),
+    ("res_x", {"num_layers": 2}),
+)
+
+_SUPPORTED_VAE_LATENT_LOG_VAR = {"uniform", "per_channel", "constant", "none"}
+
 
 class _SafeOpenHandle(Protocol):
     def __enter__(self) -> "_SafeOpenHandle": ...
@@ -216,24 +230,45 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
             f"LTX checkpoint '{checkpoint_path}' is missing VAE metadata"
         )
 
-    raw_decoder_blocks = raw_vae_config.get("decoder_blocks")
-    if not isinstance(raw_decoder_blocks, list) or not raw_decoder_blocks:
-        raise RuntimeError(
-            f"LTX checkpoint '{checkpoint_path}' is missing decoder_blocks metadata"
-        )
+    def _parse_vae_blocks(
+        raw_blocks: object | None,
+        *,
+        field_name: str,
+        default: tuple[tuple[str, object], ...] | None = None,
+    ) -> tuple[tuple[str, object], ...]:
+        if raw_blocks is None:
+            if default is None:
+                raise RuntimeError(
+                    f"LTX checkpoint '{checkpoint_path}' is missing {field_name} metadata"
+                )
+            return default
+        if not isinstance(raw_blocks, list) or not raw_blocks:
+            raise RuntimeError(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {field_name} metadata"
+            )
+        parsed_blocks: list[tuple[str, object]] = []
+        for raw_block in raw_blocks:
+            if (
+                isinstance(raw_block, list)
+                and len(raw_block) == 2
+                and isinstance(raw_block[0], str)
+            ):
+                parsed_blocks.append((raw_block[0], raw_block[1]))
+                continue
+            raise RuntimeError(
+                f"LTX checkpoint '{checkpoint_path}' has invalid {field_name} metadata: {raw_block!r}"
+            )
+        return tuple(parsed_blocks)
 
-    decoder_blocks: list[tuple[str, object]] = []
-    for raw_block in raw_decoder_blocks:
-        if (
-            isinstance(raw_block, list)
-            and len(raw_block) == 2
-            and isinstance(raw_block[0], str)
-        ):
-            decoder_blocks.append((raw_block[0], raw_block[1]))
-            continue
-        raise RuntimeError(
-            f"LTX checkpoint '{checkpoint_path}' has invalid decoder block metadata: {raw_block!r}"
-        )
+    decoder_blocks = _parse_vae_blocks(
+        raw_vae_config.get("decoder_blocks"),
+        field_name="decoder_blocks",
+    )
+    encoder_blocks = _parse_vae_blocks(
+        raw_vae_config.get("encoder_blocks"),
+        field_name="encoder_blocks",
+        default=_DEFAULT_VAE_ENCODER_BLOCKS,
+    )
 
     norm_layer = str(raw_vae_config.get("norm_layer", "pixel_norm"))
     if norm_layer != "pixel_norm":
@@ -241,7 +276,17 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
             f"LTX real generation only supports pixel_norm VAE decoders, got {norm_layer!r}"
         )
 
+    latent_log_var = str(raw_vae_config.get("latent_log_var", "uniform"))
+    if latent_log_var not in _SUPPORTED_VAE_LATENT_LOG_VAR:
+        raise NotImplementedError(
+            f"LTX real generation only supports {sorted(_SUPPORTED_VAE_LATENT_LOG_VAR)!r} latent_log_var values, got {latent_log_var!r}"
+        )
+
     return _RuntimeVAEConfig(
+        in_channels=_int_value(
+            raw_vae_config.get("in_channels", 3),
+            context=f"LTX checkpoint '{checkpoint_path}' has invalid in_channels metadata",
+        ),
         latent_channels=_int_value(
             raw_vae_config.get("latent_channels", 128),
             context=f"LTX checkpoint '{checkpoint_path}' has invalid latent_channels metadata",
@@ -254,12 +299,16 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
             raw_vae_config.get("patch_size", 4),
             context=f"LTX checkpoint '{checkpoint_path}' has invalid patch_size metadata",
         ),
-        decoder_blocks=tuple(decoder_blocks),
+        encoder_blocks=encoder_blocks,
+        decoder_blocks=decoder_blocks,
         base_channels=_int_value(
             raw_vae_config.get("decoder_base_channels", 128),
             context=(
                 f"LTX checkpoint '{checkpoint_path}' has invalid decoder_base_channels metadata"
             ),
+        ),
+        encoder_spatial_padding_mode=str(
+            raw_vae_config.get("encoder_spatial_padding_mode", "zeros")
         ),
         spatial_padding_mode=str(
             raw_vae_config.get(
@@ -267,6 +316,7 @@ def _runtime_vae_config(checkpoint_path: Path) -> _RuntimeVAEConfig:
                 raw_vae_config.get("spatial_padding_mode", "reflect"),
             )
         ),
+        latent_log_var=latent_log_var,
         timestep_conditioning=_bool_value(
             raw_vae_config.get("timestep_conditioning", True),
             context=(

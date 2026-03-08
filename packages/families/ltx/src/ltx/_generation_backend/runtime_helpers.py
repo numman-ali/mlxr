@@ -58,6 +58,7 @@ from .video_stack import (
     _load_configured_upsampler,
     _load_configured_vae_decoder,
     _load_runtime_audio_decoder,
+    _load_runtime_vae_encoder,
     _load_runtime_vocoder,
     _upsample_latents,
 )
@@ -189,8 +190,8 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         decoder_module = importlib.import_module(
             "mlx_video.models.ltx.video_vae.decoder"
         )
-        encoder_module = importlib.import_module(
-            "mlx_video.models.ltx.video_vae.encoder"
+        video_vae_module = importlib.import_module(
+            "mlx_video.models.ltx.video_vae.video_vae"
         )
         audio_vae_module = importlib.import_module(
             "mlx_video.models.ltx.audio_vae.audio_vae"
@@ -222,6 +223,10 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         latent_state_class=LatentState,
         tiling_config_class=tiling_module.TilingConfig,
         video_decoder_module=decoder_module,
+        video_encoder_class=video_vae_module.VideoEncoder,
+        video_norm_layer_enum=video_vae_module.NormLayerType,
+        video_log_variance_enum=video_vae_module.LogVarianceType,
+        video_padding_mode_enum=video_vae_module.PaddingModeType,
         condition_class=_condition_ref,
         stage_1_sigmas=STAGE_1_SIGMAS,
         stage_2_sigmas=STAGE_2_SIGMAS,
@@ -232,7 +237,13 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
         upsampler_module=upsampler_module,
-        load_vae_encoder=encoder_module.load_vae_encoder,
+        load_vae_encoder=lambda checkpoint_path: _load_runtime_vae_encoder(
+            checkpoint_path,
+            video_encoder_class=video_vae_module.VideoEncoder,
+            norm_layer_enum=video_vae_module.NormLayerType,
+            log_variance_enum=video_vae_module.LogVarianceType,
+            padding_mode_enum=video_vae_module.PaddingModeType,
+        ),
         load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
             _load_runtime_audio_decoder(
                 checkpoint_root=checkpoint_root,
@@ -251,9 +262,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         decode_audio=audio_vae_module.decode_audio,
         sanitize_audio_vae_weights=convert_module.sanitize_audio_vae_weights,
         sanitize_vocoder_weights=convert_module.sanitize_vocoder_weights,
-        audio_vocoder_class=importlib.import_module(
-            "mlx_video.models.ltx.audio_vae.vocoder"
-        ).Vocoder,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
         audio_latent_channels=audio_runtime_config.latent_channels,
@@ -385,7 +393,7 @@ def _ensure_vae_encoder(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _VAEEncoder:
     if self._vae_encoder is None:
-        self._vae_encoder = imports.load_vae_encoder(str(self.checkpoint_path))
+        self._vae_encoder = imports.load_vae_encoder(self.checkpoint_path)
         mx.eval(self._vae_encoder.parameters())
     return self._vae_encoder
 

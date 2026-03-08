@@ -35,7 +35,13 @@ class _PreparedImageEncoder(Protocol):
 
 
 class _VAEEncoder(Protocol):
+    per_channel_statistics: "_PerChannelStatistics"
+
     def parameters(self) -> object: ...
+
+    def load_weights(
+        self, weights: list[tuple[str, MLXArray]], *, strict: bool = ...
+    ) -> None: ...
 
     def __call__(self, image: MLXArray) -> MLXArray: ...
 
@@ -247,7 +253,26 @@ class _ModelFactory(Protocol):
 
 
 class _LoadVAEEncoder(Protocol):
-    def __call__(self, checkpoint_path: str) -> _VAEEncoder: ...
+    def __call__(self, checkpoint_path: Path) -> _VAEEncoder: ...
+
+
+class _ValueEnumFactory(Protocol):
+    def __call__(self, value: str) -> object: ...
+
+
+class _VAEEncoderFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        convolution_dimensions: int,
+        in_channels: int,
+        out_channels: int,
+        encoder_blocks: list[tuple[str, object]],
+        patch_size: int,
+        norm_layer: object,
+        latent_log_var: object,
+        encoder_spatial_padding_mode: object,
+    ) -> _VAEEncoder: ...
 
 
 class _LoadAudioDecoder(Protocol):
@@ -473,6 +498,10 @@ class _ReferenceImports:
     latent_state_class: _LatentStateFactory
     tiling_config_class: _TilingConfigLike
     video_decoder_module: ModuleType
+    video_encoder_class: _VAEEncoderFactory
+    video_norm_layer_enum: _ValueEnumFactory
+    video_log_variance_enum: _ValueEnumFactory
+    video_padding_mode_enum: _ValueEnumFactory
     condition_class: _ConditionFactory
     stage_1_sigmas: tuple[float, ...]
     stage_2_sigmas: tuple[float, ...]
@@ -493,7 +522,6 @@ class _ReferenceImports:
     decode_audio: _DecodeAudio
     sanitize_audio_vae_weights: _SanitizeAudioVAEWeights
     sanitize_vocoder_weights: _SanitizeVocoderWeights
-    audio_vocoder_class: object
     prepare_image_for_encoding: _PreparedImageEncoder
     upsample_latents: _UpsampleLatents
     audio_latent_channels: int
@@ -586,12 +614,16 @@ class _RuntimeVocoderConfig:
 
 @dataclass(frozen=True, slots=True)
 class _RuntimeVAEConfig:
+    in_channels: int
     latent_channels: int
     out_channels: int
     patch_size: int
+    encoder_blocks: tuple[tuple[str, object], ...]
     decoder_blocks: tuple[tuple[str, object], ...]
     base_channels: int
+    encoder_spatial_padding_mode: str
     spatial_padding_mode: str
+    latent_log_var: str
     timestep_conditioning: bool
     norm_layer: str
     causal_decoder: bool

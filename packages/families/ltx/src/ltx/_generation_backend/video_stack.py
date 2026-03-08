@@ -27,6 +27,9 @@ from .types import (
     _SanitizeVocoderWeights,
     _TilingConfigInstance,
     _UpsamplerLike,
+    _VAEEncoder,
+    _VAEEncoderFactory,
+    _ValueEnumFactory,
     _VideoDecoderLike,
     _VocoderLike,
 )
@@ -509,6 +512,95 @@ def _load_configured_upsampler(
 
     upsampler.load_weights(list(sanitized.items()), strict=False)
     return upsampler
+
+
+def _load_runtime_vae_encoder(
+    checkpoint_path: Path,
+    *,
+    video_encoder_class: _VAEEncoderFactory,
+    norm_layer_enum: _ValueEnumFactory,
+    log_variance_enum: _ValueEnumFactory,
+    padding_mode_enum: _ValueEnumFactory,
+) -> _VAEEncoder:
+    vae_config = _runtime_vae_config(checkpoint_path)
+    norm_layer = norm_layer_enum(vae_config.norm_layer)
+    latent_log_var = log_variance_enum(vae_config.latent_log_var)
+    padding_mode = padding_mode_enum(vae_config.encoder_spatial_padding_mode)
+    encoder = video_encoder_class(
+        convolution_dimensions=3,
+        in_channels=vae_config.in_channels,
+        out_channels=vae_config.latent_channels,
+        encoder_blocks=list(vae_config.encoder_blocks),
+        patch_size=vae_config.patch_size,
+        norm_layer=norm_layer,
+        latent_log_var=latent_log_var,
+        encoder_spatial_padding_mode=padding_mode,
+    )
+
+    weights = _require_weight_mapping(
+        mx.load(str(checkpoint_path)),
+        context=f"LTX checkpoint '{checkpoint_path}' did not load into an encoder weight mapping",
+    )
+    encoder_weights: dict[str, MLXArray] = {}
+    for key, value in weights.items():
+        if key.startswith("vae.encoder."):
+            new_key = key[len("vae.encoder.") :]
+        elif key.startswith("vae_encoder."):
+            new_key = key[len("vae_encoder.") :]
+        elif key.startswith("encoder."):
+            new_key = key[len("encoder.") :]
+        else:
+            continue
+        if value.ndim == 5 and "conv" in new_key and "weight" in new_key:
+            value = mx.transpose(value, (0, 2, 3, 4, 1))
+        encoder_weights[new_key] = value
+
+    mean = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.mean-of-means",
+            "vae.per_channel_statistics.mean",
+            "per_channel_statistics.mean-of-means",
+            "per_channel_statistics.mean",
+        ),
+    )
+    std = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.std-of-means",
+            "vae.per_channel_statistics.std",
+            "per_channel_statistics.std-of-means",
+            "per_channel_statistics.std",
+        ),
+    )
+    if mean is None or std is None:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' is missing VAE encoder per-channel statistics"
+        )
+    mean_array = _require_array(
+        mean,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid VAE encoder mean statistics",
+    )
+    std_array = _require_array(
+        std,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid VAE encoder std statistics",
+    )
+    expected_shape = (vae_config.latent_channels,)
+    if tuple(int(size) for size in mean_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid VAE encoder mean statistics shape "
+            f"{tuple(int(size) for size in mean_array.shape)!r}; expected {expected_shape!r}"
+        )
+    if tuple(int(size) for size in std_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid VAE encoder std statistics shape "
+            f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
+        )
+    if encoder_weights:
+        encoder.load_weights(list(encoder_weights.items()), strict=False)
+    encoder.per_channel_statistics._mean_of_means = mean_array
+    encoder.per_channel_statistics._std_of_means = std_array
+    return encoder
 
 
 def _load_runtime_audio_decoder(

@@ -42,6 +42,27 @@ Those dependencies are not compatible with the long-term repo direction. The
 next engine work must reduce and then remove them instead of layering more
 capability claims on top.
 
+## Progress Snapshot
+
+The donor-removal program is underway, but still in progress.
+
+Already moved onto repo-owned code in the promoted distilled path:
+
+- latent upsampling helper
+- audio decoder loader path
+- VAE encoder loader path
+
+Still donor-backed in the promoted distilled path:
+
+- transformer construction and patched bridge
+- VAE decoder class and loader substrate
+- x2 upsampler class and loader substrate
+- remaining audio runtime classes and shared helper imports
+- donor checkout import indirection through the current helper stack
+
+This means the current promoted slice is healthier than before, but it is not
+yet donor-free.
+
 ## Migration Rules
 
 - Do not build new promoted capability rows on top of donor runtime code you
