@@ -13,6 +13,9 @@ from ltx.prompting import PromptShapingOptions, shape_text_first_prompt_bundle
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tmp" / "showcase-runs"
+DEFAULT_SCENARIO_PACK = (
+    REPO_ROOT / "tests" / "fixtures" / "ltx" / "prompt_scenarios.json"
+)
 DEFAULT_ARTIFACT_ROOT = (
     REPO_ROOT
     / "tmp"
@@ -56,9 +59,28 @@ class SmokeRunResult(TypedDict):
     manifest_path: str
 
 
+class ScenarioPayload(TypedDict):
+    scenario_id: str
+    purpose: str
+    prompt: str
+    audio_intent: str
+    music_allowed: bool
+    style_family: str
+    expected_subject: str
+    expected_scene: str
+    validation_notes: str
+    accepted_subject_terms: list[str]
+    accepted_scene_terms: list[str]
+
+
+class ScenarioPackPayload(TypedDict):
+    scenario_pack_id: str
+    scenarios: list[ScenarioPayload]
+
+
 class SceneSummary(TypedDict):
     scene_id: str
-    title: str
+    purpose: str
     prompt: str
     negative_prompt: str | None
     video_path: str
@@ -67,206 +89,81 @@ class SceneSummary(TypedDict):
     gemini_review: GeminiReview
     review_ok: bool
     expected_subject: str
-    expected_audio_types: list[ExpectedAudioType]
+    expected_scene: str
+    music_allowed: bool
     gemini_review_error: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class ShowcaseScene:
     scene_id: str
-    title: str
-    base_prompt: str
-    shaping: PromptShapingOptions
-    expected_subject_terms: tuple[str, ...]
-    expected_scene_terms: tuple[str, ...]
-    expected_audio_types: tuple[ExpectedAudioType, ...]
-    notes: str
+    purpose: str
+    prompt: str
+    audio_intent: str
+    music_allowed: bool
+    style_family: str
+    expected_subject: str
+    expected_scene: str
+    validation_notes: str
+    accepted_subject_terms: tuple[str, ...]
+    accepted_scene_terms: tuple[str, ...]
 
 
-SHOWCASE_SCENES: tuple[ShowcaseScene, ...] = (
-    ShowcaseScene(
-        scene_id="dog_park_natural",
-        title="Dog In Park",
-        base_prompt=(
-            "A golden retriever runs happily beside its owner through a sunlit park "
-            "path, looking up toward them as they move together past green grass and "
-            "trees, filmed in a smooth handheld tracking shot at waist height with warm "
-            "natural afternoon light."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "happy dog barks, light footsteps on the path, soft wind in the trees, "
-                "distant birds, and quiet park ambience"
-            ),
-            natural_audio=True,
-            no_music=True,
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("dog", "golden retriever"),
-        expected_scene_terms=("park", "path"),
-        expected_audio_types=("barking", "ambience"),
-        notes="Naturalistic dog clip with no music allowed.",
-    ),
-    ShowcaseScene(
-        scene_id="anime_neon_chase",
-        title="Anime Neon Chase",
-        base_prompt=(
-            "An anime-style courier sprints through a neon city at night while glowing "
-            "signs streak past, dodging traffic and leaping over puddles in a high-energy "
-            "side-tracking chase shot with bold color and exaggerated motion."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "fast urban footsteps, distant traffic, neon-city ambience, and energetic "
-                "anime-style action sound design"
-            ),
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("courier", "runner", "character", "girl"),
-        expected_scene_terms=("city", "street", "neon"),
-        expected_audio_types=("music", "other", "ambience"),
-        notes="Stylized anime motion with energetic audio allowed.",
-    ),
-    ShowcaseScene(
-        scene_id="vintage_old_school",
-        title="Vintage Street Scene",
-        base_prompt=(
-            "A vintage 1970s street scene unfolds outside a neighborhood shop as people "
-            "walk past parked cars and the late-afternoon sun creates warm flares, shot "
-            "like restored 16mm footage with slight film softness and period styling."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "street ambience, footsteps, distant conversation, and subtle vintage "
-                "environment texture with no modern soundtrack feel"
-            ),
-            natural_audio=True,
-            no_music=True,
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("person", "people", "pedestrian"),
-        expected_scene_terms=("street", "shop", "cars", "sidewalk"),
-        expected_audio_types=("ambience", "speech", "other"),
-        notes="Vintage realism; avoid obvious modern music.",
-    ),
-    ShowcaseScene(
-        scene_id="vintage_nostalgic_street",
-        title="Vintage Nostalgic Street",
-        base_prompt=(
-            "A nostalgic 1970s main street drifts by in a warm golden-hour pan, with "
-            "parked classic cars, hand-painted storefront signs, and pedestrians moving "
-            "slowly through sun flare and soft grain like restored home-movie footage."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "nostalgic electric guitar, mellow street atmosphere, distant voices, "
-                "and vintage neighborhood texture"
-            ),
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("people", "pedestrian", "cars", "street"),
-        expected_scene_terms=("street", "shop", "storefront", "cars", "sidewalk"),
-        expected_audio_types=("music", "ambience", "other"),
-        notes="Vintage scene with score-friendly nostalgic audio.",
-    ),
-    ShowcaseScene(
-        scene_id="nature_documentary",
-        title="Nature Documentary",
-        base_prompt=(
-            "A nature-documentary shot follows a red fox moving carefully through tall "
-            "grass at the edge of a forest meadow in soft morning light, captured with a "
-            "calm telephoto documentary feel and gentle camera tracking."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "natural meadow ambience, birds, wind through grass, and soft animal "
-                "movement only"
-            ),
-            natural_audio=True,
-            no_music=True,
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("fox",),
-        expected_scene_terms=("meadow", "forest", "grass"),
-        expected_audio_types=("ambience", "other"),
-        notes="Documentary scene; natural ambience only.",
-    ),
-    ShowcaseScene(
-        scene_id="cinematic_spacewalk",
-        title="Cinematic Spacewalk",
-        base_prompt=(
-            "An astronaut walks slowly across the moon near a landed spacecraft while "
-            "gray dust drifts under each step and the Earth hangs in the black sky, "
-            "shot with grand cinematic composition and gentle forward camera movement."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "deep cinematic atmosphere, subtle suit movement, radio crackle, and "
-                "wide sci-fi sound design"
-            ),
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("astronaut",),
-        expected_scene_terms=("moon", "spacecraft", "space", "lunar"),
-        expected_audio_types=("music", "other", "speech"),
-        notes="Score-friendly cinematic science-fiction scene.",
-    ),
-    ShowcaseScene(
-        scene_id="noir_rain_city",
-        title="Noir Rainy City",
-        base_prompt=(
-            "A trench-coated detective walks alone through a rain-soaked city street at "
-            "night as reflections shimmer on the pavement under street lamps, captured "
-            "in moody noir style with slow deliberate camera tracking and strong contrast."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "rainfall, footsteps on wet pavement, distant traffic, and moody noir "
-                "jazz club atmosphere"
-            ),
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("detective", "person", "man"),
-        expected_scene_terms=("street", "rain", "city", "pavement", "lamp"),
-        expected_audio_types=("music", "ambience", "other"),
-        notes="Noir scene where music or ambience are both acceptable.",
-    ),
-    ShowcaseScene(
-        scene_id="stop_motion_workshop",
-        title="Stop Motion Workshop",
-        base_prompt=(
-            "A handcrafted stop-motion fox made of felt and clay explores a tiny workshop "
-            "table filled with tools and paper props, moving in tactile little beats under "
-            "warm lamp light with a charming miniature-cinema look."
-        ),
-        shaping=PromptShapingOptions(
-            audio_prompt=(
-                "tiny handcrafted foley, soft tabletop movement, paper rustle, and warm "
-                "room ambience"
-            ),
-            duration_seconds=10.0,
-            orientation="landscape",
-        ),
-        expected_subject_terms=("fox",),
-        expected_scene_terms=(
-            "workshop",
-            "table",
-            "miniature",
-            "desk",
-            "workbench",
-            "lamp",
-        ),
-        expected_audio_types=("other", "ambience", "music"),
-        notes="Stylized handcrafted scene; foley-like audio preferred.",
-    ),
-)
+def _required_str(payload: object, key: str) -> str:
+    if not isinstance(payload, dict):
+        raise ValueError("Scenario entries must be JSON objects")
+    value = payload.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"Scenario field {key!r} must be a string")
+    return value
+
+
+def _required_bool(payload: object, key: str) -> bool:
+    if not isinstance(payload, dict):
+        raise ValueError("Scenario entries must be JSON objects")
+    value = payload.get(key)
+    if not isinstance(value, bool):
+        raise ValueError(f"Scenario field {key!r} must be a boolean")
+    return value
+
+
+def _optional_terms(payload: object, key: str) -> tuple[str, ...]:
+    if not isinstance(payload, dict):
+        raise ValueError("Scenario entries must be JSON objects")
+    value = payload.get(key)
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"Scenario field {key!r} must be a list of strings")
+    return tuple(value)
+
+
+def _load_scenarios(scenario_pack_path: Path) -> tuple[ShowcaseScene, ...]:
+    payload = json.loads(scenario_pack_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Scenario pack must be a JSON object")
+    raw_scenarios = payload.get("scenarios")
+    if not isinstance(raw_scenarios, list):
+        raise ValueError("Scenario pack must contain a 'scenarios' list")
+    return tuple(
+        ShowcaseScene(
+            scene_id=_required_str(scenario, "scenario_id"),
+            purpose=_required_str(scenario, "purpose"),
+            prompt=_required_str(scenario, "prompt"),
+            audio_intent=_required_str(scenario, "audio_intent"),
+            music_allowed=_required_bool(scenario, "music_allowed"),
+            style_family=_required_str(scenario, "style_family"),
+            expected_subject=_required_str(scenario, "expected_subject"),
+            expected_scene=_required_str(scenario, "expected_scene"),
+            validation_notes=_required_str(scenario, "validation_notes"),
+            accepted_subject_terms=_optional_terms(scenario, "accepted_subject_terms"),
+            accepted_scene_terms=_optional_terms(scenario, "accepted_scene_terms"),
+        )
+        for scenario in raw_scenarios
+    )
+
+
+SHOWCASE_SCENES = _load_scenarios(DEFAULT_SCENARIO_PACK)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -286,9 +183,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for showcase receipts and summary files.",
     )
     parser.add_argument(
+        "--scenario-pack",
+        type=Path,
+        default=DEFAULT_SCENARIO_PACK,
+        help="JSON scenario pack to use for showcase generation.",
+    )
+    parser.add_argument(
         "--scene",
         action="append",
-        choices=tuple(scene.scene_id for scene in SHOWCASE_SCENES),
         help="Optional scene id to run. Repeat to run a subset.",
     )
     parser.add_argument("--width", type=int, default=384)
@@ -306,14 +208,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    selected = _selected_scenes(args.scene)
+    scenes = _load_scenarios(args.scenario_pack.expanduser().resolve())
+    selected = _selected_scenes(scenes, args.scene)
     output_root = args.output_root.expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
     summary: list[SceneSummary] = []
     for scene in selected:
+        prompt_options = _prompt_options_for_run(
+            scene,
+            num_frames=int(args.num_frames),
+            fps=int(args.fps),
+        )
         resolved_prompts = shape_text_first_prompt_bundle(
-            scene.base_prompt, options=scene.shaping
+            scene.prompt, options=prompt_options
         )
         prompt = resolved_prompts.prompt
         run_name = f"showcase-{scene.scene_id}"
@@ -344,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         scene_summary: SceneSummary = {
             "scene_id": scene.scene_id,
-            "title": scene.title,
+            "purpose": scene.purpose,
             "prompt": prompt,
             "negative_prompt": resolved_prompts.negative_prompt,
             "video_path": run_result["video_path"],
@@ -352,8 +260,9 @@ def main(argv: list[str] | None = None) -> int:
             "ffprobe_path": str(ffprobe_path),
             "gemini_review": parsed_review or _unknown_review(),
             "review_ok": review_ok,
-            "expected_subject": ", ".join(scene.expected_subject_terms),
-            "expected_audio_types": list(scene.expected_audio_types),
+            "expected_subject": scene.expected_subject,
+            "expected_scene": scene.expected_scene,
+            "music_allowed": scene.music_allowed,
             "gemini_review_error": gemini_review_error,
         }
         summary.append(scene_summary)
@@ -369,11 +278,27 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _selected_scenes(scene_ids: list[str] | None) -> tuple[ShowcaseScene, ...]:
+def _prompt_options_for_run(
+    scene: ShowcaseScene, *, num_frames: int, fps: int
+) -> PromptShapingOptions:
+    return PromptShapingOptions(
+        natural_audio=not scene.music_allowed,
+        no_music=not scene.music_allowed,
+        duration_seconds=(num_frames - 1) / fps,
+        orientation="landscape",
+    )
+
+
+def _selected_scenes(
+    scenes: tuple[ShowcaseScene, ...], scene_ids: list[str] | None
+) -> tuple[ShowcaseScene, ...]:
     if not scene_ids:
-        return SHOWCASE_SCENES
+        return scenes
     allowed = set(scene_ids)
-    return tuple(scene for scene in SHOWCASE_SCENES if scene.scene_id in allowed)
+    unknown = sorted(allowed.difference(scene.scene_id for scene in scenes))
+    if unknown:
+        raise ValueError(f"Unknown scenario ids: {', '.join(unknown)}")
+    return tuple(scene for scene in scenes if scene.scene_id in allowed)
 
 
 def _run_smoke(
@@ -512,19 +437,54 @@ def _review_matches_scene(
         return False
     if verdict != "match":
         return False
-    if not _contains_any(subject, scene.expected_subject_terms) and not _contains_any(
-        visual_summary, scene.expected_subject_terms
+    subject_terms = scene.accepted_subject_terms or _keyword_terms(
+        scene.expected_subject
+    )
+    scene_terms = scene.accepted_scene_terms or _keyword_terms(scene.expected_scene)
+    if not _contains_any(subject, subject_terms) and not _contains_any(
+        visual_summary, subject_terms
     ):
         return False
-    if not _contains_any(scene_text, scene.expected_scene_terms) and not _contains_any(
-        visual_summary, scene.expected_scene_terms
+    if not _contains_any(scene_text, scene_terms) and not _contains_any(
+        visual_summary, scene_terms
     ):
         return False
-    return audio_type in scene.expected_audio_types
+    if parsed_review["audio_present"].lower() != "true":
+        return False
+    if not scene.music_allowed and audio_type == "music":
+        return False
+    return audio_type != "unknown"
 
 
 def _contains_any(text: str, expected_terms: tuple[str, ...]) -> bool:
     return any(term.lower() in text for term in expected_terms)
+
+
+def _keyword_terms(text: str) -> tuple[str, ...]:
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "at",
+        "for",
+        "in",
+        "of",
+        "on",
+        "over",
+        "the",
+        "to",
+        "with",
+    }
+    normalized = "".join(
+        character.lower() if character.isalnum() else " " for character in text
+    )
+    terms: list[str] = []
+    for part in normalized.split():
+        if len(part) < 3 or part in stopwords:
+            continue
+        if part not in terms:
+            terms.append(part)
+    return tuple(terms)
 
 
 def _unknown_review() -> GeminiReview:

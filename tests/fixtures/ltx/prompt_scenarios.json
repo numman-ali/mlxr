@@ -1,0 +1,140 @@
+{
+  "scenario_pack_id": "ltx_text_first_validation_v1",
+  "scenarios": [
+    {
+      "scenario_id": "cat_kitchen_natural",
+      "purpose": "Prove text-first natural ambience for an animal subject with no music.",
+      "prompt": "A tabby cat leaps from a wooden chair onto a sunlit kitchen counter, landing softly next to a row of glass jars, then pauses to sniff a potted herb plant on the windowsill. Morning light pours through the window and catches floating dust motes as the cat's tail flicks once, ears rotating toward a sound off-screen. The camera holds a static medium shot from across the kitchen at counter height, with warm natural color and shallow depth of field softening the tiled backsplash behind the cat. The only sounds are the soft thud of paws on the countertop, a faint creak from the chair, birdsong filtering through the open window, and the quiet hum of a refrigerator in the background.",
+      "audio_intent": "Paw impact on countertop, chair creak, birdsong through window, refrigerator hum.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "tabby cat",
+      "expected_scene": "sunlit kitchen with counter and window",
+      "validation_notes": "Confirm cat is visible and interacts with the counter. Audio must be diegetic household and nature sounds only. Flag any piano, guitar, or background score."
+    },
+    {
+      "scenario_id": "cafe_sidewalk_human",
+      "purpose": "Prove everyday human scene with real-world ambience and no soundtrack drift.",
+      "prompt": "A woman in her thirties wearing a linen jacket sits at a small round sidewalk cafe table, lifting a ceramic coffee cup to her lips as pedestrians pass on the pavement behind her. She sets the cup down, glances at a folded newspaper beside her plate, and tucks a strand of dark hair behind her ear. The camera frames her in a medium close-up from across the table, slightly low angle, with soft overcast daylight producing even skin tones and no harsh shadows. Behind her, a cafe awning flutters once in a light breeze. The soundscape is street-level city ambience: passing footsteps, a muffled conversation from the next table, the clink of the cup on the saucer, and distant traffic hum.",
+      "audio_intent": "Cup clink on saucer, nearby footsteps, muffled conversation, distant traffic, light breeze.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "woman at cafe table",
+      "expected_scene": "sidewalk cafe with pedestrians",
+      "validation_notes": "Confirm human subject is seated and interacts with coffee cup. Audio should be urban cafe ambience. No music or melodic elements."
+    },
+    {
+      "scenario_id": "heron_marsh_documentary",
+      "purpose": "Prove wildlife documentary realism without piano or orchestral score.",
+      "prompt": "A great blue heron stands perfectly still in ankle-deep marsh water, its long neck coiled and head angled downward as it watches for fish among the reeds. After a beat, the heron strikes, its beak plunges into the water and comes up with a small silver fish caught sideways. The camera captures the scene from a low telephoto angle at water level, giving the heron imposing scale against a soft-focus background of green cattails and pale morning sky. Light is cool and diffused with faint mist hanging just above the water surface. Audio is purely environmental: gentle water lapping, reed rustle in a light wind, a distant frog croak, and the sharp splash of the strike.",
+      "audio_intent": "Water lapping, reed rustle, distant frog, splash from the strike.",
+      "music_allowed": false,
+      "style_family": "documentary",
+      "expected_subject": "great blue heron",
+      "expected_scene": "marsh or wetland with reeds and water",
+      "validation_notes": "Confirm heron is visible in a wetland setting. The strike action is a bonus but not required. Audio must be natural wetland ambience. No narration, no score."
+    },
+    {
+      "scenario_id": "vintage_laundromat",
+      "purpose": "Prove vintage visual treatment without automatically generating nostalgic music.",
+      "prompt": "Inside a 1970s laundromat, a young man in a faded denim jacket leans against a rumbling washing machine, flipping through a paperback book while fluorescent tubes cast a flat greenish light across rows of avocado-green dryers. He turns a page, glances up at the round window of the machine beside him where clothes tumble in soapy water, then looks back down. The shot is framed as a medium from the end of the machine row, with period-accurate signage on the far wall and slight film grain suggesting restored Super 8 stock. Audio is mechanical and grounded: the rhythmic churn of the washer, a dryer buzzer going off in the distance, the hum of fluorescent lights, and the faint rustle of a turning page.",
+      "audio_intent": "Washer churn, dryer buzzer, fluorescent hum, page rustle.",
+      "music_allowed": false,
+      "style_family": "vintage",
+      "expected_subject": "young man in denim jacket",
+      "expected_scene": "1970s laundromat interior",
+      "validation_notes": "Confirm vintage interior styling and human subject. Film grain or period color grading expected. Audio must be mechanical and environmental. Flag any guitar, synth, or nostalgic soundtrack."
+    },
+    {
+      "scenario_id": "bookshop_dialogue_quiet",
+      "purpose": "Prove speech-led quiet scene with natural room tone and no background score.",
+      "prompt": "A grey-haired bookshop owner stands behind a cluttered wooden counter, adjusting his reading glasses as he slides a hardcover book across to a younger customer leaning on the counter opposite him. The owner taps the cover and says, \"This one will keep you up past midnight.\" The customer picks up the book, turns it over to read the back, and replies, \"That's exactly what I need.\" The camera holds a wide two-shot from beside a tall bookshelf, catching both figures in warm amber lamplight with rows of spines filling the background in soft bokeh. The only audio is their voices, the soft thud of the book on wood, the ambient creak of old floorboards, and the faint tick of a wall clock.",
+      "audio_intent": "Spoken dialogue, book placed on wood, floor creak, wall clock tick.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "bookshop owner and customer",
+      "expected_scene": "bookshop interior with shelves and counter",
+      "validation_notes": "Confirm two human figures and bookshop setting. Dialogue should be present in audio. No background music, no soundtrack. Room tone and foley only."
+      ,
+      "accepted_subject_terms": ["owner", "customer", "man", "men", "people", "person"],
+      "accepted_scene_terms": ["bookshop", "library", "study", "shelves", "counter", "desk"]
+    },
+    {
+      "scenario_id": "basketball_court_dusk",
+      "purpose": "Prove environmental action scene with realistic diegetic sound only.",
+      "prompt": "A teenage boy in a grey hoodie dribbles a basketball on a cracked outdoor court as the last orange light of dusk cuts across the faded free-throw line. He pulls up for a mid-range jump shot, the ball arcing high against a deep blue sky before dropping through a chain-net hoop with a metallic rattle. He catches the bounce, spins the ball on one finger for a second, then tucks it under his arm and walks toward the bench. The camera follows from a low tracking angle at knee height, pushing forward with him, catching long shadows on the asphalt. Audio is entirely diegetic: rhythmic dribble impacts on concrete, the squeak of sneakers, the chain-net rattle, his breathing, and crickets beginning to chirp at the edge of the court.",
+      "audio_intent": "Basketball dribble on concrete, sneaker squeak, chain-net rattle, breathing, crickets.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "teenage boy with basketball",
+      "expected_scene": "outdoor basketball court at dusk",
+      "validation_notes": "Confirm human figure on outdoor court with basketball. Dusk lighting expected. Audio must be diegetic sport and environment sounds. No hip-hop beat or motivational score."
+    },
+    {
+      "scenario_id": "anime_rooftop_duel",
+      "purpose": "Prove stylized anime motion with energetic scene direction and score-friendly audio.",
+      "prompt": "Two anime swordsmen face each other on the edge of a skyscraper rooftop at night, wind whipping their cloaks as neon city light glows far below. The taller fighter draws a long katana in a single fluid arc, the blade catching a streak of blue light, and lunges forward. The shorter fighter sidesteps, parries with a burst of sparks, and counters with a sweeping upward slash that sends a shockwave rippling across the rooftop surface. The camera circles them in a fast orbital track, pulling wide to show the city skyline, then snapping to a tight close-up of clashing blades. Cel-shaded lines, high-contrast color with deep blacks and vivid neon accents, exaggerated motion blur on the strikes. Audio is fast metallic blade impacts, whooshing wind, a crackling energy burst on the parry, and a driving percussive action score underneath.",
+      "audio_intent": "Blade clashes, wind, energy burst effects, and driving percussive action music.",
+      "music_allowed": true,
+      "style_family": "anime",
+      "expected_subject": "two anime swordsmen",
+      "expected_scene": "skyscraper rooftop at night with neon city below",
+      "validation_notes": "Confirm anime visual style with two characters in combat on a rooftop. Neon city background expected. Music or energetic sound design is acceptable and desired."
+    },
+    {
+      "scenario_id": "claymation_bakery",
+      "purpose": "Prove stylized non-photoreal handcrafted output with charming foley.",
+      "prompt": "A stop-motion baker made of smooth white clay stands on a flour-dusted wooden counter, kneading a tiny ball of dough with stubby fingerless hands in rhythmic rocking motions. Behind it, a miniature brick oven glows orange through a small arched opening, and a row of freshly shaped clay bread loaves sits cooling on a paper-lined tray. The baker pats the dough flat, rolls it into a small cylinder, and places it carefully on a baking sheet. The camera holds a static close-up at tabletop level, with warm overhead lamp light casting soft shadows on the flour-dusted surface and giving the clay a slight waxy sheen. Jittery stop-motion frame cadence with visible fingerprint texture on the figures. Audio is playful miniature foley: soft dough patting, flour puff, a tiny oven creak, and a gentle whimsical xylophone melody.",
+      "audio_intent": "Dough patting foley, flour sounds, oven creak, whimsical xylophone melody.",
+      "music_allowed": true,
+      "style_family": "handcrafted",
+      "expected_subject": "clay baker figurine",
+      "expected_scene": "miniature bakery counter with oven and bread",
+      "validation_notes": "Confirm stop-motion or claymation visual style with a baker figure and bakery props. Jittery frame cadence preferred. Whimsical music or charming foley are both acceptable."
+    },
+    {
+      "scenario_id": "orbital_station_approach",
+      "purpose": "Prove cinematic sci-fi scene where orchestral score is intentionally welcome.",
+      "prompt": "A small transport shuttle glides toward a massive rotating space station, its hull catching sunlight as it passes through the shadow of a solar array the size of a city block. The station's ring structure turns slowly, rows of illuminated windows tracing arcs against the star field, while docking lights pulse in sequence along a recessed bay near the central hub. The camera starts wide behind the shuttle, then pushes in smoothly past the cockpit canopy to frame the station filling the view ahead. Lighting is stark directional sunlight against deep black, with cool blue fill from Earth's reflection on the station's underside. Audio is a low rumbling engine hum, the ping of a docking guidance beacon, faint radio chatter, and a swelling orchestral score that builds as the station's scale becomes clear.",
+      "audio_intent": "Engine rumble, docking beacon ping, radio chatter, swelling orchestral score.",
+      "music_allowed": true,
+      "style_family": "sci_fi",
+      "expected_subject": "transport shuttle",
+      "expected_scene": "space station in orbit with solar arrays and star field",
+      "validation_notes": "Confirm spacecraft and station visible in a space setting. Cinematic composition with scale contrast expected. Orchestral or atmospheric score is desired. Verify no Earth-surface environment."
+    },
+    {
+      "scenario_id": "rain_alley_audio_conditioned",
+      "purpose": "Text prompt designed to pair with an external rain and urban audio reference track.",
+      "prompt": "A narrow brick alley at night, slick with rain, reflects a row of bare bulbs strung overhead between fire escapes. A lone figure in a dark raincoat walks slowly away from the camera, stepping around shallow puddles as water drips steadily from a rusted downspout on the left wall. Steam drifts from a basement vent halfway down the alley, catching the warm light from a single window above. The camera holds a static wide shot from the alley entrance, framing the figure small against the converging brick walls and the glow of a cross street at the far end. Color palette is muted teal and warm amber, with high contrast between wet surfaces and deep shadow. Audio is designed to be replaced by an external rain and city ambience track; the prompt focuses on visual pacing that syncs naturally with steady rainfall rhythm.",
+      "audio_intent": "Intended for external audio conditioning. Visual pacing matches steady rain and dripping water rhythm.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "lone figure in raincoat",
+      "expected_scene": "narrow brick alley at night in rain",
+      "validation_notes": "Confirm rainy alley setting with a walking figure. Visual pacing should feel compatible with a steady rain audio bed. Built-in audio is secondary; this scenario tests audio-conditioned workflow pairing."
+    },
+    {
+      "scenario_id": "warrior_portrait_image_conditioned",
+      "purpose": "Text prompt designed to pair with an input character reference image for consistent identity.",
+      "prompt": "A battle-worn warrior stands at the crest of a windswept hill, gripping a notched longsword planted point-down in the mud beside them. Their cloak snaps in the wind as they turn their head slowly to look back over one shoulder toward the valley below, where faint campfire smoke rises in the grey distance. The camera frames them in a medium shot from slightly below eye level, emphasizing their silhouette against a pale overcast sky. Lighting is flat and cold with diffused cloud cover, catching the dull metal of shoulder armor and the frayed edge of the cloak. No stylization, realistic skin texture, weathered leather, and mud-spattered boots. Audio is howling hilltop wind, the creak of leather armor, the distant murmur of an army camp, and a faint metallic ring as the sword shifts in the ground.",
+      "audio_intent": "Hilltop wind, leather creak, distant camp murmur, faint sword ring.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "warrior with sword and cloak",
+      "expected_scene": "windswept hilltop overlooking a valley",
+      "validation_notes": "Confirm single warrior figure on a hilltop with sword. This scenario is designed for image-conditioned workflows where a reference portrait drives the character face and armor. Validate that the pose and framing leave room for identity injection. Audio should be diegetic."
+    },
+    {
+      "scenario_id": "pier_sunset_combined_multimodal",
+      "purpose": "Text prompt designed for combined conditioning: image reference for setting plus audio reference for mood, or start/end frame pairing.",
+      "prompt": "An elderly man sits alone on a weathered wooden pier at sunset, his feet dangling above still water as he holds a fishing rod with the line slack. A small tackle box sits open beside him, and a wide-brimmed hat shades his face. He reels in the line slowly, peers at the empty hook, shakes his head once, then casts the line back out in a smooth overhead arc. The camera starts on a wide profile shot showing the full pier and the orange sun low on the horizon, then drifts into a medium shot as he casts, settling on his hands and the rod against the glowing water. Warm golden-hour light with long shadows on the planks, soft reflections on the water surface, and a faint haze on the far shore. Audio is gentle water lapping against pier pilings, the click and whir of the reel, a distant boat motor, and evening insects beginning to chirp.",
+      "audio_intent": "Water lapping, reel click and whir, distant boat motor, evening insects.",
+      "music_allowed": false,
+      "style_family": "naturalistic",
+      "expected_subject": "elderly man fishing",
+      "expected_scene": "wooden pier at sunset over still water",
+      "validation_notes": "Confirm elderly figure on a pier with fishing rod and sunset lighting. This scenario is designed for combined multimodal conditioning: an image reference sets the pier and lighting, an audio reference or start/end frame pair controls pacing. Validate that the prompt leaves compositional anchors a conditioning system can lock onto. Audio should be diegetic."
+    }
+  ]
+}
