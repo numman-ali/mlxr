@@ -511,7 +511,6 @@ class _ReferenceImports:
     create_audio_position_grid: _CreateAudioPositionGrid
     compute_audio_frames: _ComputeAudioFrames
     load_image: _ImageLoader
-    upsampler_module: ModuleType
     load_vae_encoder: _LoadVAEEncoder
     load_audio_decoder: _LoadAudioDecoder
     audio_encoder_class: _AudioEncoderFactory

@@ -37,6 +37,10 @@ if TYPE_CHECKING:
         def __init__(self, *args: object, **kwargs: object) -> None: ...
         def __call__(self, x: mx.array) -> mx.array: ...
 
+    class Conv2d(Module):
+        def __init__(self, *args: object, **kwargs: object) -> None: ...
+        def __call__(self, x: mx.array) -> mx.array: ...
+
     class ConvTranspose1d(Module):
         def __init__(self, *args: object, **kwargs: object) -> None: ...
         def __call__(self, x: mx.array) -> mx.array: ...
@@ -56,6 +60,7 @@ else:
     RMSNorm = _nn.RMSNorm
     Dropout = _nn.Dropout
     Conv1d = _nn.Conv1d
+    Conv2d = _nn.Conv2d
     ConvTranspose1d = _nn.ConvTranspose1d
     LeakyReLU = _nn.LeakyReLU
     SiLU = _nn.SiLU
@@ -65,6 +70,7 @@ else:
 
 __all__ = [
     "Conv1d",
+    "Conv2d",
     "ConvTranspose1d",
     "Dropout",
     "LeakyReLU",

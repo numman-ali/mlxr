@@ -186,7 +186,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
             "mlx_video.models.ltx.feed_forward"
         )
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
-        upsampler_module = importlib.import_module("mlx_video.models.ltx.upsampler")
         decoder_module = importlib.import_module(
             "mlx_video.models.ltx.video_vae.decoder"
         )
@@ -236,7 +235,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         create_audio_position_grid=_create_audio_position_grid_ref,
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
-        upsampler_module=upsampler_module,
         load_vae_encoder=lambda checkpoint_path: _load_runtime_vae_encoder(
             checkpoint_path,
             video_encoder_class=video_vae_module.VideoEncoder,
@@ -404,7 +402,6 @@ def _ensure_upsampler(
     if self._upsampler is None:
         upsampler = _load_configured_upsampler(
             self.spatial_upsampler_path,
-            upsampler_module=imports.upsampler_module,
         )
         mx.eval(upsampler.parameters())
         self._upsampler = upsampler

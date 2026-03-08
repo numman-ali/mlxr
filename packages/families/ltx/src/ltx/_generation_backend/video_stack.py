@@ -17,6 +17,7 @@ from .config import (
     _runtime_vocoder_config,
     _validate_upsampler_layout,
 )
+from .spatial_upsampler import LatentUpsampler
 from .types import (
     MLXArray,
     _AudioDecoderFactory,
@@ -479,8 +480,6 @@ def _load_configured_vae_decoder(
 
 def _load_configured_upsampler(
     weights_path: Path,
-    *,
-    upsampler_module: types.ModuleType,
 ) -> _UpsamplerLike:
     _validate_upsampler_layout(weights_path)
     raw_weights = _require_weight_mapping(
@@ -491,7 +490,7 @@ def _load_configured_upsampler(
     mid_channels = (
         int(raw_weights[sample_key].shape[0]) if sample_key in raw_weights else 1024
     )
-    upsampler: _UpsamplerLike = upsampler_module.LatentUpsampler(
+    upsampler: _UpsamplerLike = LatentUpsampler(
         in_channels=128,
         mid_channels=mid_channels,
         num_blocks_per_stage=4,

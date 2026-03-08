@@ -68,7 +68,7 @@ Use this with:
 ## D. Donor-runtime removal
 
 - [~] The promoted distilled path now owns latent upsampling, audio decoder
-  loading, and VAE encoder loading.
+  loading, VAE encoder loading, and the x2 spatial upsampler path.
 - [ ] No runtime `mlx_video.*` import remains in the promoted distilled path.
 - [ ] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.
