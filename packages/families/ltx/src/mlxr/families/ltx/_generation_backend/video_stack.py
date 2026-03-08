@@ -46,6 +46,7 @@ from .video_decoder_blocks import (
 from .video_encoder import LatentLogVarianceType, VideoEncoder
 from .video_ops import unpatchify_video
 from .video_tiling import TilingConfig, decode_with_tiling
+from .weight_loading import align_module_dtype_to_weights
 
 
 class _WrappedCausalConv3d(nn.Module):
@@ -573,6 +574,15 @@ def _load_configured_vae_decoder(
         )
     decoder_weights["latents_mean"] = mean_array
     decoder_weights["latents_std"] = std_array
+    align_module_dtype_to_weights(
+        decoder,
+        {
+            key: value
+            for key, value in decoder_weights.items()
+            if key not in {"latents_mean", "latents_std"}
+        },
+        context="Owned LTX video decoder weights",
+    )
     decoder.load_weights(list(decoder_weights.items()), strict=True)
     return decoder
 
@@ -608,6 +618,11 @@ def _load_configured_upsampler(
             new_key = key.replace("upsampler.0.", "upsampler.conv.")
         sanitized[new_key] = value
 
+    align_module_dtype_to_weights(
+        upsampler,
+        sanitized,
+        context="Owned LTX spatial upsampler weights",
+    )
     upsampler.load_weights(list(sanitized.items()), strict=False)
     return upsampler
 
@@ -690,6 +705,11 @@ def _load_runtime_vae_encoder(
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' is missing VAE encoder weights"
         )
+    align_module_dtype_to_weights(
+        encoder,
+        encoder_weights,
+        context="Owned LTX video encoder weights",
+    )
     encoder.load_weights(list(encoder_weights.items()), strict=False)
     encoder.per_channel_statistics._mean_of_means = mean_array
     encoder.per_channel_statistics._std_of_means = std_array
@@ -737,6 +757,11 @@ def _load_runtime_audio_decoder(
     required_decoder_weights = _require_weight_subset(
         decoder_weights,
         expected_keys=expected_keys,
+        context="Owned LTX audio decoder weights",
+    )
+    align_module_dtype_to_weights(
+        decoder,
+        required_decoder_weights,
         context="Owned LTX audio decoder weights",
     )
     decoder.load_weights(list(required_decoder_weights.items()), strict=True)

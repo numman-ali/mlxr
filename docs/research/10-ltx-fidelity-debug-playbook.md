@@ -13,6 +13,18 @@ This is not the general dev loop. It is the narrow workflow for:
 - safe iteration on a large Apple-Silicon workload
 - deciding whether the next suspect is prompt/stage 1, x2/stage 2, or decode/export
 
+This runner is transitional tooling, not the long-term product surface.
+
+The durable goal is for `mlxr` itself to absorb the important debug controls:
+
+- trace capture
+- safety guardrails
+- backend verification
+- debug artifact export
+
+Use `ltx_debug_smoke.py` only when you need engine-local diagnostics that the CLI does
+not expose yet.
+
 ## Canonical Method
 
 The method is:
@@ -70,6 +82,15 @@ uv run python scripts/ltx_debug_smoke.py \
 ```
 
 If a smoke is interrupted, check for orphaned long-running `uv run python` / smoke-script processes before launching another.
+
+The smoke runner now has built-in hard safety guardrails:
+
+- MLX memory limit via `mx.set_memory_limit()`
+- watchdog aborts for active-memory or peak-memory overruns
+- watchdog abort for wall-clock overruns
+- abort receipts written back into `run_manifest.json`
+
+Do not disable these casually on shared developer machines.
 
 ## Resolution Ladder
 

@@ -18,6 +18,7 @@ from .transformer_preprocessors import (
     TransformerArgsPreprocessor,
 )
 from .types import MLXArray, _PatchedModality, _PatchedTransformerArgs
+from .weight_loading import align_module_dtype_to_weights
 
 
 class LTXModel(nn.Module):
@@ -401,9 +402,19 @@ class LTXModel(nn.Module):
                     "Owned LTX transformer loader is missing required weights: "
                     + sample
                 )
+            align_module_dtype_to_weights(
+                model,
+                filtered_weights,
+                context="Owned LTX transformer weights",
+            )
             model.load_weights(list(filtered_weights.items()), strict=False)
             return model
 
+        align_module_dtype_to_weights(
+            model,
+            sanitized,
+            context="Owned LTX transformer weights",
+        )
         model.load_weights(list(sanitized.items()), strict=False)
         return model
 

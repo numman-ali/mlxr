@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
+import threading
+import time
 import types
 import unittest
 from argparse import Namespace
@@ -81,6 +84,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             self.assertFalse(config.trace_sync)
             self.assertTrue(config.clean_lifecycle)
             self.assertTrue(config.backend_progress)
+            self.assertEqual(config.max_active_gb, 24.0)
+            self.assertEqual(config.max_peak_gb, 32.0)
+            self.assertEqual(config.max_seconds, 180.0)
+            self.assertEqual(config.memory_poll_seconds, 0.5)
 
     def test_build_config_profile_can_be_overridden(self) -> None:
         module = _load_script_module()
@@ -163,6 +170,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     clean_lifecycle=True,
                     backend_progress=True,
                     heartbeat_seconds=0.01,
+                    max_active_gb=24.0,
+                    max_peak_gb=32.0,
+                    max_seconds=180.0,
+                    memory_poll_seconds=0.5,
                     print_tmux_command=False,
                     tmux_session_name="mlxr-ltx-debug",
                 )
@@ -290,6 +301,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                 video_generator_factory=fake_video_generator_factory,
                 mp4_encoder=fake_mp4_encoder,
                 cache_clearer=cache_clearer,
+                memory_limit_setter=lambda *_args: None,
+                peak_memory_resetter=lambda: None,
+                active_memory_getter=lambda: 0,
+                peak_memory_getter=lambda: 0,
             )
 
             self.assertEqual(manifest["status"], "success")
@@ -327,6 +342,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                 Path(manifest["outputs"]["trace_path"]), run_dir / "trace.json"
             )
             self.assertIn("ltx.ensure_transformer", manifest["trace_summary"])
+            self.assertIn("guardrails", manifest)
+            self.assertEqual(manifest["guardrails"]["max_active_gb"], 24.0)
 
     def test_build_tmux_command_points_to_repo_script(self) -> None:
         module = _load_script_module()
@@ -352,6 +369,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             clean_lifecycle=True,
             backend_progress=True,
             heartbeat_seconds=2.0,
+            max_active_gb=24.0,
+            max_peak_gb=32.0,
+            max_seconds=180.0,
+            memory_poll_seconds=0.5,
         )
 
         command = module.build_tmux_command(
@@ -365,6 +386,122 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
         self.assertIn("/tmp/manual-runs/dog-session.log", command)
         self.assertIn("--run-name", command)
         self.assertIn("--profile", command)
+
+    def test_run_smoke_aborts_when_memory_guardrail_is_exceeded(self) -> None:
+        module = _load_script_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            artifact_root = Path(tmp_dir) / "payload"
+            checkpoint = (
+                artifact_root / "checkpoint" / "ltx-2.3-22b-distilled.safetensors"
+            )
+            checkpoint.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint.write_text("ckpt", encoding="utf-8")
+            upsampler = (
+                artifact_root
+                / "spatial_upsampler"
+                / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+            )
+            upsampler.parent.mkdir(parents=True, exist_ok=True)
+            upsampler.write_text("upsampler", encoding="utf-8")
+            text_encoder = artifact_root / "text_encoder"
+            text_encoder.mkdir(parents=True, exist_ok=True)
+
+            config = module.build_config(
+                Namespace(
+                    artifact_root=artifact_root,
+                    checkpoint_path=None,
+                    spatial_upsampler_path=None,
+                    text_encoder_path=None,
+                    prompt="a dog in a park",
+                    profile="safe-smoke",
+                    width=256,
+                    height=160,
+                    num_frames=17,
+                    fps=24,
+                    seed=1234,
+                    output_root=Path(tmp_dir) / "runs",
+                    run_name="memory-guardrail",
+                    stage_debug=False,
+                    trace=False,
+                    trace_sync=False,
+                    clean_lifecycle=True,
+                    backend_progress=False,
+                    heartbeat_seconds=0.01,
+                    max_active_gb=0.001,
+                    max_peak_gb=0.002,
+                    max_seconds=180.0,
+                    memory_poll_seconds=0.01,
+                    print_tmux_command=False,
+                    tmux_session_name="mlxr-ltx-debug",
+                )
+            )
+
+            class FakeEncoder:
+                def encode(
+                    self, prompt: str, *, negative_prompt: str | None = None
+                ) -> object:
+                    del prompt, negative_prompt
+                    return object()
+
+                def close(self) -> None:
+                    return None
+
+            class FakeGenerator:
+                def generate(
+                    self,
+                    *,
+                    prompt_context: object,
+                    conditioning_inputs: tuple[object, ...],
+                    width: int,
+                    height: int,
+                    num_frames: int,
+                    fps: int,
+                    seed: int | None = None,
+                ) -> _FakeGeneratedVideo:
+                    del (
+                        prompt_context,
+                        conditioning_inputs,
+                        width,
+                        height,
+                        num_frames,
+                        fps,
+                        seed,
+                    )
+                    deadline = time.monotonic() + 0.25
+                    while time.monotonic() < deadline:
+                        if abort_requested.is_set():
+                            raise SystemExit("aborted")
+                        time.sleep(0.01)
+                    raise AssertionError("generator should have been aborted first")
+
+                def close(self) -> None:
+                    return None
+
+            abort_requested = threading.Event()
+
+            def fake_abort_process(_exit_code: int) -> None:
+                abort_requested.set()
+
+            with self.assertRaises(SystemExit):
+                module.run_smoke(
+                    config,
+                    prompt_encoder_factory=lambda **_: FakeEncoder(),
+                    video_generator_factory=lambda **_: FakeGenerator(),
+                    mp4_encoder=lambda *_args, **_kwargs: None,
+                    cache_clearer=lambda: None,
+                    memory_limit_setter=lambda *_args: None,
+                    peak_memory_resetter=lambda: None,
+                    active_memory_getter=lambda: int(2 * (1024**3)),
+                    peak_memory_getter=lambda: int(2 * (1024**3)),
+                    abort_process=fake_abort_process,
+                )
+
+            manifest_path = next((Path(tmp_dir) / "runs").rglob("run_manifest.json"))
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "aborted")
+            self.assertEqual(
+                manifest["abort"]["reason"], "active_memory_limit_exceeded"
+            )
 
     def test_run_smoke_fails_if_preview_backend_is_used(self) -> None:
         module = _load_script_module()
@@ -406,6 +543,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     clean_lifecycle=True,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
+                    max_active_gb=24.0,
+                    max_peak_gb=32.0,
+                    max_seconds=180.0,
+                    memory_poll_seconds=0.5,
                     print_tmux_command=False,
                     tmux_session_name="mlxr-ltx-debug",
                 )
@@ -462,6 +603,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     video_generator_factory=lambda **_: FakePreviewGenerator(),
                     mp4_encoder=lambda *_args, **_kwargs: None,
                     cache_clearer=lambda: None,
+                    memory_limit_setter=lambda *_args: None,
+                    peak_memory_resetter=lambda: None,
+                    active_memory_getter=lambda: 0,
+                    peak_memory_getter=lambda: 0,
                 )
 
     def test_run_smoke_fails_if_backend_is_unknown(self) -> None:
@@ -504,6 +649,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     clean_lifecycle=True,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
+                    max_active_gb=24.0,
+                    max_peak_gb=32.0,
+                    max_seconds=180.0,
+                    memory_poll_seconds=0.5,
                     print_tmux_command=False,
                     tmux_session_name="mlxr-ltx-debug",
                 )

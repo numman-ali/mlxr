@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import shlex
+import signal
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -24,6 +25,10 @@ DEFAULT_RUN_NAME = "ltx-fidelity-debug"
 DEFAULT_TMUX_SESSION = "mlxr-ltx-debug"
 DEFAULT_HEARTBEAT_SECONDS = 2.0
 DEFAULT_PROFILE_NAME = "safe-smoke"
+DEFAULT_MAX_ACTIVE_GB = 24.0
+DEFAULT_MAX_PEAK_GB = 32.0
+DEFAULT_MAX_SECONDS = 180.0
+DEFAULT_MEMORY_POLL_SECONDS = 0.5
 KNOWN_REAL_BACKENDS = frozenset({"mlxr_ltx_distilled_two_stage"})
 KNOWN_REAL_PIPELINE_KINDS = frozenset({"distilled_two_stage"})
 PROFILE_PRESETS: dict[str, tuple[int, int, int, int]] = {
@@ -163,6 +168,10 @@ class SmokeConfig:
     clean_lifecycle: bool
     backend_progress: bool
     heartbeat_seconds: float
+    max_active_gb: float
+    max_peak_gb: float
+    max_seconds: float
+    memory_poll_seconds: float
     negative_prompt: str | None = None
 
 
@@ -243,6 +252,30 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_HEARTBEAT_SECONDS,
     )
     parser.add_argument(
+        "--max-active-gb",
+        type=float,
+        default=DEFAULT_MAX_ACTIVE_GB,
+        help="Abort the smoke if MLX active memory exceeds this many GiB.",
+    )
+    parser.add_argument(
+        "--max-peak-gb",
+        type=float,
+        default=DEFAULT_MAX_PEAK_GB,
+        help="Abort the smoke if MLX peak memory exceeds this many GiB.",
+    )
+    parser.add_argument(
+        "--max-seconds",
+        type=float,
+        default=DEFAULT_MAX_SECONDS,
+        help="Abort the smoke if total runtime exceeds this many seconds.",
+    )
+    parser.add_argument(
+        "--memory-poll-seconds",
+        type=float,
+        default=DEFAULT_MEMORY_POLL_SECONDS,
+        help="How often the watchdog checks memory and wall-clock limits.",
+    )
+    parser.add_argument(
         "--print-tmux-command",
         action="store_true",
         help="Print a detached tmux command for this exact smoke run and exit.",
@@ -282,6 +315,10 @@ def build_config(args: argparse.Namespace) -> SmokeConfig:
         clean_lifecycle=bool(args.clean_lifecycle),
         backend_progress=bool(args.backend_progress),
         heartbeat_seconds=float(args.heartbeat_seconds),
+        max_active_gb=float(args.max_active_gb),
+        max_peak_gb=float(args.max_peak_gb),
+        max_seconds=float(args.max_seconds),
+        memory_poll_seconds=float(args.memory_poll_seconds),
     )
 
 
@@ -368,6 +405,12 @@ def run_smoke(
     ] = _default_video_generator_factory,
     mp4_encoder: Callable[[GeneratedVideoLike, Path], None] = _default_mp4_encoder,
     cache_clearer: Callable[[], None] = mx.clear_cache,
+    active_memory_getter: Callable[[], int] = mx.get_active_memory,
+    peak_memory_getter: Callable[[], int] = mx.get_peak_memory,
+    peak_memory_resetter: Callable[[], object] = mx.reset_peak_memory,
+    memory_limit_setter: Callable[[int], object] = mx.set_memory_limit,
+    monotonic: Callable[[], float] = time.perf_counter,
+    abort_process: Callable[[int], None] | None = None,
 ) -> dict[str, object]:
     started_at = now()
     bundle = build_run_bundle_paths(config, started_at=started_at)
@@ -414,6 +457,12 @@ def run_smoke(
             "detached_console_log_path": str(bundle.detached_console_log_path),
         },
         "timings_ms": timings_ms,
+        "guardrails": {
+            "max_active_gb": config.max_active_gb,
+            "max_peak_gb": config.max_peak_gb,
+            "max_seconds": config.max_seconds,
+            "memory_poll_seconds": config.memory_poll_seconds,
+        },
     }
     _write_json(bundle.manifest_path, manifest)
 
@@ -422,10 +471,66 @@ def run_smoke(
     prompt_context: object | None = None
     heartbeat_stop = threading.Event()
     heartbeat_thread: threading.Thread | None = None
+    watchdog_stop = threading.Event()
+    watchdog_thread: threading.Thread | None = None
+    abort_state: dict[str, object] = {}
+    started_at_perf = monotonic()
+    if abort_process is None:
+        abort_process = _default_abort_process
 
     def heartbeat() -> None:
         while not heartbeat_stop.wait(config.heartbeat_seconds):
             print("[heartbeat] still generating", flush=True)
+
+    def watchdog() -> None:
+        while not watchdog_stop.wait(config.memory_poll_seconds):
+            active_bytes = int(active_memory_getter())
+            peak_bytes = int(peak_memory_getter())
+            elapsed_seconds = monotonic() - started_at_perf
+            active_gb = _bytes_to_gb(active_bytes)
+            peak_gb = _bytes_to_gb(peak_bytes)
+            if active_gb > config.max_active_gb:
+                _record_abort(
+                    manifest=manifest,
+                    bundle=bundle,
+                    timings_ms=timings_ms,
+                    reason="active_memory_limit_exceeded",
+                    details={
+                        "active_gb": round(active_gb, 3),
+                        "peak_gb": round(peak_gb, 3),
+                        "elapsed_seconds": round(elapsed_seconds, 3),
+                    },
+                    abort_state=abort_state,
+                )
+                abort_process(137)
+            if peak_gb > config.max_peak_gb:
+                _record_abort(
+                    manifest=manifest,
+                    bundle=bundle,
+                    timings_ms=timings_ms,
+                    reason="peak_memory_limit_exceeded",
+                    details={
+                        "active_gb": round(active_gb, 3),
+                        "peak_gb": round(peak_gb, 3),
+                        "elapsed_seconds": round(elapsed_seconds, 3),
+                    },
+                    abort_state=abort_state,
+                )
+                abort_process(137)
+            if elapsed_seconds > config.max_seconds:
+                _record_abort(
+                    manifest=manifest,
+                    bundle=bundle,
+                    timings_ms=timings_ms,
+                    reason="wall_clock_limit_exceeded",
+                    details={
+                        "active_gb": round(active_gb, 3),
+                        "peak_gb": round(peak_gb, 3),
+                        "elapsed_seconds": round(elapsed_seconds, 3),
+                    },
+                    abort_state=abort_state,
+                )
+                abort_process(124)
 
     env_updates: dict[str, str | None] = {}
     if config.stage_debug:
@@ -439,6 +544,8 @@ def run_smoke(
 
     try:
         with temporary_env(env_updates):
+            peak_memory_resetter()
+            memory_limit_setter(_bytes_from_gb(config.max_active_gb))
             print("creating encoder", flush=True)
             encoder = prompt_encoder_factory(
                 checkpoint_path=config.artifact_paths.checkpoint_path,
@@ -468,6 +575,8 @@ def run_smoke(
             print("generating video", flush=True)
             heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
             heartbeat_thread.start()
+            watchdog_thread = threading.Thread(target=watchdog, daemon=True)
+            watchdog_thread.start()
             generate_started = time.perf_counter()
             generated_video = generator.generate(
                 prompt_context=prompt_context,
@@ -536,14 +645,21 @@ def run_smoke(
         raise
     finally:
         heartbeat_stop.set()
+        watchdog_stop.set()
         if heartbeat_thread is not None:
             heartbeat_thread.join(timeout=0.1)
+        if watchdog_thread is not None:
+            watchdog_thread.join(timeout=0.1)
         cleanup_errors: list[str] = []
         if generator is not None:
             _safe_close(generator, cleanup_errors)
         if encoder is not None:
             _safe_close(encoder, cleanup_errors)
         cache_clearer()
+        manifest["observed_memory_gb"] = {
+            "active": round(_bytes_to_gb(int(active_memory_getter())), 3),
+            "peak": round(_bytes_to_gb(int(peak_memory_getter())), 3),
+        }
         if cleanup_errors:
             manifest["cleanup_errors"] = cleanup_errors
         manifest["completed_at_utc"] = now().isoformat().replace("+00:00", "Z")
@@ -588,6 +704,16 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         parser.error("LTX debug smokes require fps >= 1.")
     if args.heartbeat_seconds <= 0:
         parser.error("Heartbeat seconds must be > 0.")
+    if args.max_active_gb <= 0:
+        parser.error("Max active GiB must be > 0.")
+    if args.max_peak_gb <= 0:
+        parser.error("Max peak GiB must be > 0.")
+    if args.max_peak_gb < args.max_active_gb:
+        parser.error("Max peak GiB must be >= max active GiB.")
+    if args.max_seconds <= 0:
+        parser.error("Max seconds must be > 0.")
+    if args.memory_poll_seconds <= 0:
+        parser.error("Memory poll seconds must be > 0.")
     if args.trace_sync and not args.trace:
         parser.error("--trace-sync requires --trace.")
 
@@ -657,6 +783,14 @@ def _cli_args_from_config(config: SmokeConfig) -> list[str]:
         "--backend-progress" if config.backend_progress else "--no-backend-progress",
         "--heartbeat-seconds",
         str(config.heartbeat_seconds),
+        "--max-active-gb",
+        str(config.max_active_gb),
+        "--max-peak-gb",
+        str(config.max_peak_gb),
+        "--max-seconds",
+        str(config.max_seconds),
+        "--memory-poll-seconds",
+        str(config.memory_poll_seconds),
     ]
     if config.negative_prompt is not None:
         command.extend(["--negative-prompt", config.negative_prompt])
@@ -699,6 +833,14 @@ def _elapsed_ms(started_at: float) -> float:
     return round((time.perf_counter() - started_at) * 1000.0, 3)
 
 
+def _bytes_from_gb(value: float) -> int:
+    return int(value * (1024**3))
+
+
+def _bytes_to_gb(value: int) -> float:
+    return value / float(1024**3)
+
+
 def _slugify(raw: str) -> str:
     pieces = [
         part
@@ -714,6 +856,33 @@ def _slugify(raw: str) -> str:
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _record_abort(
+    *,
+    manifest: dict[str, object],
+    bundle: RunBundlePaths,
+    timings_ms: dict[str, float],
+    reason: str,
+    details: dict[str, object],
+    abort_state: dict[str, object],
+) -> None:
+    if abort_state:
+        return
+    abort_state["reason"] = reason
+    manifest["status"] = "aborted"
+    manifest["backend_verified"] = False
+    manifest["abort"] = {
+        "reason": reason,
+        "details": details,
+    }
+    manifest["timings_ms"] = timings_ms
+    _write_json(bundle.manifest_path, manifest)
+
+
+def _default_abort_process(exit_code: int) -> None:
+    os.kill(os.getpid(), signal.SIGTERM)
+    os._exit(exit_code)
 
 
 @contextmanager
