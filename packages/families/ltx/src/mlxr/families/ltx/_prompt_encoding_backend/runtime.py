@@ -6,13 +6,15 @@ try:
     import mlx.nn as nn
     import numpy as np
     from mlxr.core.mlx_models import (
+        EncodedText,
         Gemma3Model,
         TextConfig,
+        TextTokenizer,
         create_attention_mask,
         create_causal_mask,
+        load_local_text_tokenizer,
     )
     from safetensors import safe_open
-    from transformers import AutoTokenizer
 except Exception as exc:  # pragma: no cover - exercised via error path tests
     _RUNTIME_IMPORT_ERROR = exc
 else:
@@ -20,11 +22,13 @@ else:
 
 __all__ = [
     "_RUNTIME_IMPORT_ERROR",
-    "AutoTokenizer",
+    "EncodedText",
     "Gemma3Model",
     "TextConfig",
+    "TextTokenizer",
     "create_attention_mask",
     "create_causal_mask",
+    "load_local_text_tokenizer",
     "mx",
     "nn",
     "np",

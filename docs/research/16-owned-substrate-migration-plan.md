@@ -73,9 +73,9 @@ runtime imports.
 
 Still incomplete in the broader LTX family runtime:
 
-- tokenizer and processor policy still needs an explicit canonical decision
-- the shared core MLX model substrate still only covers the minimal Gemma text
-  path
+- processor policy still needs an explicit canonical decision
+- the shared core MLX model substrate currently owns the tokenizer wrapper and
+  the minimal Gemma text path, but not broader multimodal processor logic yet
 - non-distilled standard/HQ still needs to be re-landed on the owned engine
 
 This means the current promoted slice is healthier than before, and the next

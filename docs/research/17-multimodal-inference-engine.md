@@ -383,15 +383,19 @@ The runtime goal is "no `mlx-lm` or `mlx-vlm` runtime dependency." That does not
 
 ### Tokenizer Ownership
 
+The first shared-core tokenizer slice should stay thin and explicit.
+
 The engine should own a repo-owned tokenizer wrapper abstraction that provides:
 
-- tokenization and detokenization
-- streaming detokenization
-- EOS token-set resolution
-- chat-template rendering
-- tool-style or structured-output token policies
+- loading a local tokenizer artifact
+- tokenization into typed `input_ids` and `attention_mask` arrays
+- basic detokenization
 
-This is one of the most reusable pieces of `mlx-lm` and should migrate into the repo-owned engine rather than staying family-local.
+That is now the implemented policy in `packages/core/runtime-mlx-models/` for
+the current Gemma/LTX path. It deliberately does not yet widen into a full
+`mlx-lm`-style tokenizer surface with streaming detokenization, chat-template
+rendering, EOS-set policy, or tool/structured-output token rules until another
+family proves those belong in shared core.
 
 ### Processor Ownership
 
@@ -407,7 +411,15 @@ For the first slice, the most pragmatic stance is:
 - allow `transformers` as an explicit runtime dependency for tokenizer and processor loading
 - keep that separate from the decision to avoid `mlx-lm` and `mlx-vlm`
 
-Longer-term, `MLXR` may internalize more processor logic. But the first design doc should be honest that repo-owned model execution does not automatically mean repo-owned processor implementations on day one.
+Current repo truth:
+
+- tokenizer loading is shared-core and repo-owned through a thin wrapper
+- processor loading and multimodal preprocessing are still an explicit separate
+  decision
+
+Longer-term, `MLXR` may internalize more processor logic. But the first design
+doc should be honest that repo-owned model execution does not automatically
+mean repo-owned processor implementations on day one.
 
 ### Prompt Formatting
 

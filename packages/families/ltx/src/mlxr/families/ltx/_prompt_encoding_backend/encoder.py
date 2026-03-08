@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 import numpy as np
 
@@ -22,22 +21,6 @@ from .components import (
     _to_binary_mask,
     _TransformerConfigResolution,
 )
-
-
-class _TokenizerLike(Protocol):
-    padding_side: str
-    pad_token: str | None
-    eos_token: str
-
-    def __call__(
-        self,
-        prompt: str,
-        *,
-        return_tensors: str,
-        max_length: int,
-        truncation: bool,
-        padding: str,
-    ) -> dict[str, object]: ...
 
 
 def _require_weight_mapping(weights: object, *, context: str) -> dict[str, mx.array]:
@@ -112,7 +95,6 @@ class _SinglePromptEncoding:
 
 if runtime._RUNTIME_IMPORT_ERROR is None:
     mx = runtime.mx
-    AutoTokenizer = runtime.AutoTokenizer
 
     class _MLXLTXPromptEncoder:
         def __init__(self, checkpoint_path: Path, text_encoder_path: Path):
@@ -129,7 +111,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             self._transformer_config_resolution: _TransformerConfigResolution | None = (
                 None
             )
-            self.tokenizer: _TokenizerLike | None = None
+            self.tokenizer: runtime.TextTokenizer | None = None
 
         def encode(
             self,
@@ -262,14 +244,10 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 else None
             )
             self._load_connector_weights()
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                str(self.text_encoder_path),
-                local_files_only=True,
+            self.tokenizer = runtime.load_local_text_tokenizer(
+                self.text_encoder_path,
                 model_max_length=self.max_length,
             )
-            self.tokenizer.padding_side = "left"
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
 
         def _encode_single_prompt(
             self,
@@ -287,22 +265,21 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                     "LTX prompt encoder video connector failed to initialize"
                 )
 
-            inputs = self.tokenizer(
+            encoded = self.tokenizer.encode_text(
                 prompt,
-                return_tensors="np",
                 max_length=max_length,
                 truncation=True,
                 padding="max_length",
             )
             input_ids = mx.array(
                 _require_array_input(
-                    inputs["input_ids"],
+                    encoded.input_ids,
                     context="Tokenizer did not return input_ids",
                 )
             )
             attention_mask = mx.array(
                 _require_array_input(
-                    inputs["attention_mask"],
+                    encoded.attention_mask,
                     context="Tokenizer did not return attention_mask",
                 )
             )

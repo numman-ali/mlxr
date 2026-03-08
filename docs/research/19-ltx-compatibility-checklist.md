@@ -199,13 +199,15 @@ Use this with:
 The next critical gates, in order, are:
 
 1. [x] finish `mlx-vlm` / `mlx-lm` removal for the Gemma prompt path
-2. [ ] decide tokenizer / processor policy explicitly for the shared core MLX
-   model substrate
-3. [ ] land standard two-stage on the dev checkpoint with required distilled
+2. [x] decide tokenizer policy explicitly for the shared core MLX model
+   substrate
+3. [ ] decide processor policy explicitly for the shared core MLX model
+   substrate
+4. [ ] land standard two-stage on the dev checkpoint with required distilled
    LoRA
-4. [ ] land HQ as explicit opt-in
-5. [ ] strengthen `video.condition.audio`
-6. [ ] implement `video.condition.video`
-7. [ ] implement interpolation and retake
-8. [ ] replace the current best-available showcase pack once the stronger rows
+5. [ ] land HQ as explicit opt-in
+6. [ ] strengthen `video.condition.audio`
+7. [ ] implement `video.condition.video`
+8. [ ] implement interpolation and retake
+9. [ ] replace the current best-available showcase pack once the stronger rows
    are real
