@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 import mlx.core as mx
+import numpy as np
 
 from .. import _nn_compat as nn
 from .._audio_bwe import AudioMelSTFT, AudioVocoderWithBWE
@@ -375,6 +376,92 @@ def _require_array(value: object, *, context: str) -> MLXArray:
     return value
 
 
+def _trainable_parameter_keys(module: object, *, context: str) -> set[str]:
+    trainable_parameters = getattr(module, "trainable_parameters", None)
+    if not callable(trainable_parameters):
+        raise RuntimeError(context)
+
+    def _collect_keys(tree: object, prefix: str = "") -> set[str]:
+        if isinstance(tree, dict):
+            collected: set[str] = set()
+            for key, value in tree.items():
+                if not isinstance(key, (str, int)):
+                    raise RuntimeError(context)
+                key_text = str(key)
+                child_prefix = f"{prefix}.{key_text}" if prefix else key_text
+                collected.update(_collect_keys(value, child_prefix))
+            return collected
+        if isinstance(tree, (list, tuple)):
+            collected = set()
+            for index, value in enumerate(tree):
+                child_prefix = f"{prefix}.{index}" if prefix else str(index)
+                collected.update(_collect_keys(value, child_prefix))
+            return collected
+        return {prefix} if prefix else set()
+
+    keys = _collect_keys(trainable_parameters())
+    if not keys:
+        raise RuntimeError(context)
+    return keys
+
+
+def _require_weight_subset(
+    weights: dict[str, MLXArray],
+    *,
+    expected_keys: set[str],
+    context: str,
+) -> dict[str, MLXArray]:
+    missing = sorted(expected_keys - weights.keys())
+    if missing:
+        raise RuntimeError(
+            f"{context} is missing required weights: {', '.join(missing[:5])}"
+        )
+    unexpected = sorted(weights.keys() - expected_keys)
+    if unexpected:
+        raise RuntimeError(
+            f"{context} contains unexpected weights: {', '.join(unexpected[:5])}"
+        )
+    return {key: weights[key] for key in sorted(expected_keys)}
+
+
+def _require_per_channel_statistics(
+    weights: dict[str, MLXArray],
+    *,
+    expected_width: int,
+    context: str,
+) -> tuple[MLXArray, MLXArray]:
+    mean = weights.get("per_channel_statistics._mean_of_means")
+    std = weights.get("per_channel_statistics._std_of_means")
+    if mean is None or std is None:
+        raise RuntimeError(f"{context} is missing per-channel statistics")
+    mean_array = _require_array(
+        mean,
+        context=f"{context} has invalid per-channel mean statistics",
+    )
+    std_array = _require_array(
+        std,
+        context=f"{context} has invalid per-channel std statistics",
+    )
+    expected_shape = (expected_width,)
+    if tuple(int(size) for size in mean_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"{context} has invalid per-channel mean statistics shape "
+            f"{tuple(int(size) for size in mean_array.shape)!r}; expected {expected_shape!r}"
+        )
+    if tuple(int(size) for size in std_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"{context} has invalid per-channel std statistics shape "
+            f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
+        )
+    std_values = np.asarray(std_array)
+    if not np.isfinite(std_values).all() or np.any(std_values <= 0):
+        raise RuntimeError(f"{context} has invalid per-channel std statistics values")
+    mean_values = np.asarray(mean_array)
+    if not np.isfinite(mean_values).all():
+        raise RuntimeError(f"{context} has invalid per-channel mean statistics values")
+    return mean_array, std_array
+
+
 def _validate_bwe_stft_buffers(
     *,
     checkpoint_path: Path,
@@ -643,16 +730,23 @@ def _load_runtime_audio_decoder(
         for key, value in sanitized.items()
         if key.startswith("decoder.")
     }
-    if decoder_weights:
-        decoder.load_weights(list(decoder_weights.items()), strict=False)
-    if "per_channel_statistics._mean_of_means" in sanitized:
-        decoder.per_channel_statistics._mean_of_means = sanitized[
-            "per_channel_statistics._mean_of_means"
-        ]
-    if "per_channel_statistics._std_of_means" in sanitized:
-        decoder.per_channel_statistics._std_of_means = sanitized[
-            "per_channel_statistics._std_of_means"
-        ]
+    expected_keys = _trainable_parameter_keys(
+        decoder,
+        context="Expected owned LTX audio decoder trainable parameter contract",
+    )
+    required_decoder_weights = _require_weight_subset(
+        decoder_weights,
+        expected_keys=expected_keys,
+        context="Owned LTX audio decoder weights",
+    )
+    decoder.load_weights(list(required_decoder_weights.items()), strict=True)
+    mean_array, std_array = _require_per_channel_statistics(
+        sanitized,
+        expected_width=int(decoder.per_channel_statistics._mean_of_means.shape[0]),
+        context="Owned LTX audio decoder per-channel statistics",
+    )
+    decoder.per_channel_statistics._mean_of_means = mean_array
+    decoder.per_channel_statistics._std_of_means = std_array
     return decoder
 
 

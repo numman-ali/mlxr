@@ -74,6 +74,9 @@ from .video_stack import (
     _load_runtime_audio_decoder,
     _load_runtime_vae_encoder,
     _load_runtime_vocoder,
+    _require_per_channel_statistics,
+    _require_weight_subset,
+    _trainable_parameter_keys,
     _upsample_latents,
 )
 from .video_tiling import TilingConfig
@@ -445,16 +448,23 @@ def _ensure_audio_encoder(
         for key, value in sanitized.items()
         if key.startswith("encoder.")
     }
-    if encoder_weights:
-        encoder.load_weights(list(encoder_weights.items()), strict=False)
-    if "per_channel_statistics._mean_of_means" in sanitized:
-        encoder.per_channel_statistics._mean_of_means = sanitized[
-            "per_channel_statistics._mean_of_means"
-        ]
-    if "per_channel_statistics._std_of_means" in sanitized:
-        encoder.per_channel_statistics._std_of_means = sanitized[
-            "per_channel_statistics._std_of_means"
-        ]
+    expected_keys = _trainable_parameter_keys(
+        encoder,
+        context="Expected owned LTX audio encoder trainable parameter contract",
+    )
+    required_encoder_weights = _require_weight_subset(
+        encoder_weights,
+        expected_keys=expected_keys,
+        context="Owned LTX audio encoder weights",
+    )
+    encoder.load_weights(list(required_encoder_weights.items()), strict=True)
+    mean_array, std_array = _require_per_channel_statistics(
+        sanitized,
+        expected_width=int(encoder.per_channel_statistics._mean_of_means.shape[0]),
+        context="Owned LTX audio encoder per-channel statistics",
+    )
+    encoder.per_channel_statistics._mean_of_means = mean_array
+    encoder.per_channel_statistics._std_of_means = std_array
     processor = imports.audio_processor_class(
         sample_rate=audio_config.sample_rate,
         mel_bins=audio_config.mel_bins,
