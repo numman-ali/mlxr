@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 PACKAGE_TARGETS = (
+    "mlxr.core.mlx_models",
     "mlxr.core.schemas",
     "mlxr.core.runtime",
     "mlxr.core.server",

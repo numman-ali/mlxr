@@ -5,6 +5,7 @@ default-groups = ["dev"]
 members = [
     "packages/families/ltx",
     "packages/clients/runtime-cli",
+    "packages/core/runtime-mlx-models",
     "packages/core/runtime-core",
     "packages/core/runtime-server",
     "packages/core/runtime-workflows",
@@ -14,6 +15,7 @@ members = [
 [tool.uv.sources]
 mlx-runtime-cli = { workspace = true }
 mlx-runtime-core = { workspace = true }
+mlx-runtime-mlx-models = { workspace = true }
 mlx-runtime-family-ltx = { workspace = true }
 mlx-runtime-schemas = { workspace = true }
 mlx-runtime-server = { workspace = true }
@@ -26,6 +28,7 @@ dev = [
     "fastapi>=0.115.0",
     "mlx-runtime-cli",
     "mlx-runtime-core",
+    "mlx-runtime-mlx-models",
     "mlx-runtime-family-ltx",
     "mlx-runtime-schemas",
     "mlx-runtime-server",

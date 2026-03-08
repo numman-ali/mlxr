@@ -5,15 +5,11 @@ try:
     import mlx.core as mx
     import mlx.nn as nn
     import numpy as np
-    from mlx_lm.models.base import (
-        create_causal_mask,
-    )
-    from mlx_vlm.models.gemma3.config import (  # type: ignore[import-untyped]
-        TextConfig,
-    )
-    from mlx_vlm.models.gemma3.language import (  # type: ignore[import-untyped]
+    from mlxr.core.mlx_models import (
         Gemma3Model,
+        TextConfig,
         create_attention_mask,
+        create_causal_mask,
     )
     from safetensors import safe_open
     from transformers import AutoTokenizer

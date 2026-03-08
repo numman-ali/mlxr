@@ -30,8 +30,8 @@ Use this with:
 - [x] The repo distinguishes standard two-stage from HQ instead of collapsing
   them into one vague “best quality” row.
 - [x] The repo documents the donor-removal program for `mlx-video`.
-- [x] The repo documents the prompt-substrate replacement program for
-  `mlx-vlm` / `mlx-lm`.
+- [x] The repo documents the prompt-substrate replacement program for the
+  shared core MLX model substrate.
 - [x] The repo has a dedicated LTX prompting guide.
 - [x] The repo has a dedicated owned-substrate migration plan.
 - [x] The repo has a dedicated multimodal-engine direction doc.
@@ -81,9 +81,9 @@ Use this with:
 - [x] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.
 - [x] Distilled backend receipts use only `MLXR`-owned identities.
-- [ ] No runtime dependency on `mlx-vlm` remains.
-- [ ] No runtime dependency on `mlx-lm` remains.
-- [ ] The Gemma prompt stack runs on a repo-owned substrate aligned with doc 17.
+- [x] No runtime dependency on `mlx-vlm` remains.
+- [x] No runtime dependency on `mlx-lm` remains.
+- [x] The Gemma prompt stack runs on a repo-owned substrate aligned with doc 17.
 
 ## E. Scheduler and sampler substrate
 
@@ -198,12 +198,14 @@ Use this with:
 
 The next critical gates, in order, are:
 
-1. [ ] finish `mlx-vlm` / `mlx-lm` removal for the Gemma prompt path
-2. [ ] land standard two-stage on the dev checkpoint with required distilled
+1. [x] finish `mlx-vlm` / `mlx-lm` removal for the Gemma prompt path
+2. [ ] decide tokenizer / processor policy explicitly for the shared core MLX
+   model substrate
+3. [ ] land standard two-stage on the dev checkpoint with required distilled
    LoRA
-3. [ ] land HQ as explicit opt-in
-4. [ ] strengthen `video.condition.audio`
-5. [ ] implement `video.condition.video`
-6. [ ] implement interpolation and retake
-7. [ ] replace the current best-available showcase pack once the stronger rows
+4. [ ] land HQ as explicit opt-in
+5. [ ] strengthen `video.condition.audio`
+6. [ ] implement `video.condition.video`
+7. [ ] implement interpolation and retake
+8. [ ] replace the current best-available showcase pack once the stronger rows
    are real

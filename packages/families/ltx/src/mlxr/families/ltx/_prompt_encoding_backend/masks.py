@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import functools
 
+from .compat import TextConfig
 from .runtime import (
     _RUNTIME_IMPORT_ERROR,
-    TextConfig,
     create_attention_mask,
     create_causal_mask,
     mx,
@@ -62,7 +62,7 @@ if _RUNTIME_IMPORT_ERROR is None:
         attention_mask: mx.array | None,
         cache: list[object | None],
         config: TextConfig,
-    ) -> tuple[mx.array | None, mx.array | None]:
+    ) -> tuple[mx.array | str | None, mx.array | str | None]:
         if attention_mask is None:
             global_mask = create_attention_mask(
                 hidden, cache[config.sliding_window_pattern - 1]

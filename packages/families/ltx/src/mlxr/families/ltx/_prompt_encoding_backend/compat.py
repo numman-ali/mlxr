@@ -12,10 +12,8 @@ if TYPE_CHECKING:
     class TextConfig(Protocol):
         hidden_size: int
         num_hidden_layers: int
+        sliding_window: int
         sliding_window_pattern: int
-
-        @classmethod
-        def from_dict(cls, raw: dict[str, object]) -> TextConfig: ...
 
     class _EmbedTokens(Protocol):
         def __call__(self, inputs: mx.array) -> mx.array: ...
@@ -25,7 +23,7 @@ if TYPE_CHECKING:
         def __call__(
             self,
             hidden: mx.array,
-            attention_mask: mx.array | None,
+            attention_mask: mx.array | str | None,
             cache: object | None,
         ) -> mx.array: ...
 
@@ -37,7 +35,7 @@ if TYPE_CHECKING:
         layers: list[_GemmaLayer]
         norm: _GemmaNorm
 
-        def __init__(self, config: TextConfig) -> None: ...
+        def __init__(self, config: object) -> None: ...
 
     class SafeOpenHandle(Protocol):
         def __enter__(self) -> SafeOpenHandle: ...

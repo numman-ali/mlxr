@@ -33,13 +33,16 @@ Today the only promoted real engine is the distilled proving slice:
 That promoted slice is real.
 
 The generation engine no longer imports `mlx_video.*` anywhere inside the LTX
-family package source tree. The remaining donor-runtime work is now isolated to
-the prompt-encode side, where the Gemma path still depends on `mlx-vlm` /
-`mlx-lm` for the current runtime surface.
+family package source tree.
 
-Those dependencies are not compatible with the long-term repo direction. The
-next engine work must reduce and then remove them instead of layering more
-capability claims on top.
+The Gemma prompt path also no longer depends on `mlx-vlm` or `mlx-lm` at
+runtime. That bridge now runs through the repo-owned shared core package
+`packages/core/runtime-mlx-models/`, which currently owns the minimal Gemma 3
+text runtime, KV-cache primitives, RoPE helpers, and mask helpers needed by the
+LTX prompt-encode path.
+
+That means the next engine work should build on the owned substrate rather than
+spending more time on donor-runtime removal for the promoted distilled slice.
 
 ## Progress Snapshot
 
@@ -68,9 +71,12 @@ Already moved onto repo-owned code in the promoted distilled path:
 The promoted distilled generation engine is now donor-free for `mlx_video`
 runtime imports.
 
-Still donor-backed in the broader LTX family runtime:
+Still incomplete in the broader LTX family runtime:
 
-- the Gemma prompt path through `mlx-vlm` / `mlx-lm`
+- tokenizer and processor policy still needs an explicit canonical decision
+- the shared core MLX model substrate still only covers the minimal Gemma text
+  path
+- non-distilled standard/HQ still needs to be re-landed on the owned engine
 
 This means the current promoted slice is healthier than before, and the next
 owned-substrate wave should focus on the prompt/runtime stack instead of the
@@ -148,13 +154,13 @@ It depends on:
 - correct noise-key evolution
 - explicit variant selection
 
-### 5. Remove `mlx-vlm` / `mlx-lm` from the Gemma prompt path
+### 5. Replace the prompt donor stack with the repo-owned shared MLX model substrate
 
-This is the second donor-removal wave.
+This donor-removal wave is now complete for the current LTX prompt path.
 
-Keep the current Gemma contract and LTX prompt V2 semantics, but replace the
-runtime helper dependency with a repo-owned minimal Gemma path that serves LTX
-only.
+Keep the current Gemma contract and LTX prompt V2 semantics, and continue
+expanding the repo-owned shared package instead of reintroducing family-local or
+third-party runtime dependencies.
 
 The architecture and layering for that replacement should follow
 [17-multimodal-inference-engine.md](17-multimodal-inference-engine.md):
@@ -193,9 +199,9 @@ model.
 
 ### Prompt-substrate tranche
 
-- no runtime dependency on `mlx-vlm` / `mlx-lm` remains
-- current prompt-encode outputs and negative-prompt behavior stay intact
-- current real distilled receipts still pass after the swap
+- [x] no runtime dependency on `mlx-vlm` / `mlx-lm` remains
+- [x] current prompt-encode outputs and negative-prompt behavior stay intact
+- [x] current real distilled receipts still pass after the swap
 
 ## Relationship To The Capability Matrix
 

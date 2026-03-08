@@ -12,7 +12,6 @@ from .compat import (
     Linear,
     Module,
     RMSNorm,
-    TextConfig,
     gelu_approx,
     mx,
     safe_open,
@@ -26,10 +25,38 @@ from .masks import (
 
 if runtime._RUNTIME_IMPORT_ERROR is None:
 
+    @dataclass
+    class _PromptTextConfig:
+        hidden_size: int
+        num_hidden_layers: int
+        sliding_window: int
+        sliding_window_pattern: int
+
+        @classmethod
+        def from_runtime(
+            cls,
+            config: runtime.TextConfig,
+        ) -> _PromptTextConfig:
+            hidden_size = config.hidden_size
+            if hidden_size is None:
+                raise ValueError("Gemma text config is missing hidden_size")
+            num_hidden_layers = config.num_hidden_layers
+            if num_hidden_layers is None:
+                raise ValueError("Gemma text config is missing num_hidden_layers")
+            sliding_window = config.sliding_window
+            if sliding_window is None:
+                raise ValueError("Gemma text config is missing sliding_window")
+            return cls(
+                hidden_size=int(hidden_size),
+                num_hidden_layers=int(num_hidden_layers),
+                sliding_window=int(sliding_window),
+                sliding_window_pattern=int(config.sliding_window_pattern),
+            )
+
     class LanguageModel(Module):
-        def __init__(self, config: TextConfig):
+        def __init__(self, config: runtime.TextConfig):
             super().__init__()
-            self.config = config
+            self.config = _PromptTextConfig.from_runtime(config)
             self.model = Gemma3Model(config)
 
         def __call__(
@@ -89,7 +116,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
 
             config_dict = json.loads(config_file.read_text(encoding="utf-8"))
             text_config = config_dict.get("text_config", config_dict)
-            language_model = cls(config=TextConfig.from_dict(text_config))
+            language_model = cls(config=runtime.TextConfig.from_dict(text_config))
 
             weight_files = _text_encoder_weight_files(model_path)
             quantization = config_dict.get("quantization")

@@ -8,6 +8,15 @@ This document is one part of the canonical LTX ownership set. Read it alongside:
 - [18-ltx-reference-map.md](18-ltx-reference-map.md)
 - [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
 
+Current progress note:
+
+- the first real shared package from this plan now exists at
+  `packages/core/runtime-mlx-models/`
+- the current LTX Gemma prompt path uses that repo-owned substrate instead of
+  `mlx-vlm` / `mlx-lm` at runtime
+- the remaining work here is to broaden that substrate carefully where the
+  ownership is genuinely shared across families
+
 ## Executive Recommendation
 
 `MLXR` should build one repo-owned MLX execution substrate for text, VLM, and broader multimodal understanding workloads instead of depending on `mlx-lm` or `mlx-vlm` at runtime.

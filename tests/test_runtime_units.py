@@ -6,6 +6,7 @@ import queue
 import subprocess
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -563,7 +564,20 @@ class RuntimeUnitTests(unittest.TestCase):
 
         hidden = mx.zeros((1, 8, 4), dtype=mx.bfloat16)
         attention_mask = mx.array([[0, 0, 0, 1, 1, 1, 1, 1]], dtype=mx.int32)
-        config = SimpleNamespace(sliding_window_pattern=6, sliding_window=4)
+
+        @dataclass
+        class _MaskConfig:
+            hidden_size: int
+            num_hidden_layers: int
+            sliding_window: int
+            sliding_window_pattern: int
+
+        config = _MaskConfig(
+            hidden_size=32,
+            num_hidden_layers=2,
+            sliding_window=4,
+            sliding_window_pattern=6,
+        )
 
         global_mask, local_mask = backend._gemma_attention_masks(
             hidden=hidden,
