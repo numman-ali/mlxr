@@ -179,17 +179,44 @@ Execution implications:
 - prompt context stays worker-local and is now an explicit post-connector contract into denoise/generate work
 - the current runtime path now emits real runtime-managed `mp4` and `wav` artifacts plus per-stage timing and memory telemetry, while keeping the generation backend explicitly narrow
 - the current runtime path now restores audible checkpoint-backed audio through a repo-owned MLX `AMP1` base-vocoder bridge instead of the older silent-ish fallback path
+- the current runtime path now also loads the checkpoint-backed BWE wrapper when
+  the full audio contract is present, so repo truth should not keep describing
+  the audio slice as base-vocoder-only
 - the first truthful `video.condition.audio` slice now preserves resolved reference audio through the artifact-backed bridge instead of silently ignoring audio references
 - the bridge now fails closed on prompt/generation config drift, missing VAE per-channel statistics, and unsupported x2 upsampler layouts instead of silently approximating them
 - the current fixed-seed dog validation ladder now passes a clear-dog `384x224 / 17f / 24fps` rung and a coherent `768x512 / 33f / 24fps` rung using the repo-owned smoke/debug workflow
-- negative-prompt support is still intentionally excluded for the fast path instead of being silently ignored
+- negative prompts now exist on the current fast path and are part of the
+  family-local natural-audio guidance recovery slice; they should no longer be
+  documented as excluded
 
 Still intentionally out of scope for this slice:
 
 - reference-video input, temporal upsamplers, x1.5 upsampler, LoRAs, and prompt enhancement
 - recommended-resolution and HQ profile validation
 - claiming that the LTX artifact shape has already validated the platform across families
-- full `LTX-2.3` BWE audio parity beyond the now-audible base-vocoder bridge
+
+The more important current framing is this:
+
+- the current `MLXR` slice is a truthful distilled proving path
+- the broader official upstream product surface is larger than that slice
+- the next quality target is the full `dev` checkpoint on the standard
+  two-stage path
+- the next top-end quality target after that is the alternate HQ two-stage
+  variant
+
+Official upstream currently treats:
+
+- `TI2VidTwoStagesPipeline` as the production-default recommendation
+- `TI2VidTwoStagesHQPipeline` as the top-end alternate high-quality variant
+- `DistilledPipeline` as the fastest path
+- `TI2VidOneStagePipeline` as educational
+- `ICLoraPipeline`, `KeyframeInterpolationPipeline`,
+  `A2VidPipelineTwoStage`, and `RetakePipeline` as current control/editing rows
+
+So the repo should not speak as if “distilled” already covers the whole LTX
+family, or as if recommended/HQ work is just profile scaling. It is a real
+pipeline-expansion phase that also needs new asset roles, sampler/scheduler
+work, and fuller guidance support.
 
 ## Workflow Ownership Split Exposed By LTX
 

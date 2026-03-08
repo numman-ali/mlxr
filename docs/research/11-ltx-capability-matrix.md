@@ -26,12 +26,48 @@ This matrix is capability-first. Resolution, clip length, and throughput promoti
 
 ## Current matrix
 
-| Capability | Upstream `LTX-2.3` surface | MLXR schema shape | Adapter advertised | Implementation | Validation | Current repo truth |
+Schema note:
+
+- rows in the `MLXR schema shape` column are a mix of current active request
+  shapes and proposed future mappings
+- when a row is not yet implemented, treat that cell as the intended mapping,
+  not as settled public contract truth
+- today the active LTX workflow surface is still narrower than the full matrix
+
+## Official upstream pipeline canon
+
+This is the current official `LTX-2` pipeline set from the upstream README and
+`ltx-pipelines` package, normalized into one canonical table.
+
+| Upstream pipeline | Primary use | Upstream status | Core asset shape | Notes for `MLXR` |
+| --- | --- | --- | --- | --- |
+| `TI2VidTwoStagesPipeline` | text/image-to-video | production default | full `dev` checkpoint, Gemma text encoder, x2 spatial upsampler, distilled LoRA | this is the upstream default quality target |
+| `TI2VidTwoStagesHQPipeline` | text/image-to-video | alternate high-quality variant | same as standard two-stage | same two-stage family with `res_2s`; upstream presents it as a higher-quality trade-off, not a universally dominant row |
+| `TI2VidOneStagePipeline` | text/image-to-video | educational / prototyping | full `dev` checkpoint, Gemma text encoder | useful for parity and quick iteration, not the main product target |
+| `DistilledPipeline` | fast text/image-to-video | fastest | distilled checkpoint, Gemma text encoder, x2 spatial upsampler | current `MLXR` proving path |
+| `ICLoraPipeline` | video-to-video / strong-control image-to-video | current | distilled checkpoint, Gemma text encoder, x2 spatial upsampler, IC-LoRA | only works with distilled upstream |
+| `KeyframeInterpolationPipeline` | image keyframe interpolation | current | full checkpoint, Gemma text encoder, x2 spatial upsampler, distilled LoRA, keyframes | broader control row, not yet in `MLXR` |
+| `A2VidPipelineTwoStage` | audio-to-video | current | full checkpoint, Gemma text encoder, x2 spatial upsampler, distilled LoRA, input audio | current `MLXR` `video.condition.audio` is a narrower preserved-reference slice |
+| `RetakePipeline` | regenerate a time region of an existing video | current | checkpoint, Gemma text encoder, source video; full or distilled behaviorally | editing-oriented row, not yet in `MLXR` |
+
+Important upstream interpretation:
+
+- the full `dev` checkpoint plus the two-stage family is the quality-first
+  upstream path
+- the HQ variant is the top-end upstream two-stage variant, but it is still a
+  trade-off row rather than a universally dominant replacement for standard
+  two-stage
+- the standard two-stage row is still the production-default recommendation
+- the distilled row is the speed-first path, not the quality ceiling
+- temporal upscaler-backed flows are still future-facing in the upstream docs,
+  not part of the current public pipeline set
+
+| Capability | Upstream `LTX-2.3` surface | MLXR schema shape / planned mapping | Adapter advertised | Implementation | Validation | Current repo truth |
 | --- | --- | --- | --- | --- | --- | --- |
 | Distilled two-stage text-to-video | yes | `video.generate` | yes | implemented | coherence validated | promoted |
 | Distilled two-stage image-to-video | yes | `video.condition.image` | yes | implemented | coherence validated | promoted |
 | Audio-bearing output on AV path | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` or `wav` | yes | implemented | safe-rung validated; visual-gate BWE-enabled `48 kHz` dog clip confirmed | promoted |
-| Silent video output | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` | yes | implemented | coherence validated | promoted |
+| Silent video output | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` | yes | encoder behavior exists | not separately validated as a promoted user mode | implemented encoder path only |
 | Audio-to-video conditioning | yes | `video.condition.audio` | yes | implemented | safe-rung validated; real bridge preserves resolved reference audio into muxed output; scene semantics still provisional | promoted with current passthrough-audio caveat |
 | Reference-video conditioning | yes | `video.condition.video` | no | planned | not started | not yet supported |
 | Keyframe interpolation | yes | `video.interpolate` | no | planned | not started | not yet supported |
@@ -60,6 +96,30 @@ Current non-truths:
 - `wav` does not mean `audio-only job` support exists yet
 - `audio` in `modalities_out` means the current AV bridge can now export audio, not that every LTX task is surfaced
 - the current `video.condition.audio` row preserves reference audio through the output path; it is a truthful preserved-reference capability, not yet a claim of broader reference-video control or strong conditioned-scene semantics
+
+## Current upstream-versus-MLXR gap
+
+The official upstream family surface is broader than the active `MLXR` surface.
+
+Today `MLXR` has truly implemented:
+
+- distilled two-stage text-to-video
+- distilled two-stage image-to-video
+- audio-bearing output on the AV path
+- a narrow `video.condition.audio` preserved-reference slice
+
+Today `MLXR` does not yet expose the broader current upstream rows:
+
+- standard two-stage on the full `dev` checkpoint
+- two-stage HQ
+- one-stage
+- reference-video conditioning
+- IC-LoRA
+- keyframe interpolation
+- retake
+
+So the repo should not talk as if the current distilled path covers the whole
+official `LTX-2.3` product surface. It does not.
 
 ## Validation ladder
 
@@ -95,15 +155,29 @@ Current showcase truth:
 
 ## Recommended next implementation order
 
-1. push the newer text-first natural-audio guidance path through the remaining failing scene classes, especially passive animal ambience and vintage-natural scenes
-2. improve `video.condition.audio` scene quality from “real bridge slice” to “quality-promoted capability”
-3. `video.condition.video`
-4. `video.interpolate`
-5. `video.retake`
-6. one-stage T2V and I2V
-7. full two-stage / HQ variants
-8. IC-LoRA and distilled LoRA support
-9. recommended, HQ, and longer-clip promotion for every green capability row
+If the repo priority is “highest quality achievable on Mac,” the next target
+should not be more distilled polishing. It should be the upstream
+full-checkpoint two-stage family.
+
+Recommended order:
+
+1. extend the artifact and adapter contract for the non-distilled two-stage
+   family: full `dev` checkpoint plus distilled LoRA on top of the existing
+   Gemma and x2 upsampler assets
+2. land the non-distilled scheduler/sampler/guidance substrate the upstream
+   two-stage family depends on
+3. land standard two-stage on the full `dev` checkpoint as the upstream
+   production-default quality path
+4. land `two_stage_hq` as the top-end alternate high-quality two-stage variant
+5. improve `video.condition.audio` scene quality from “real bridge slice” to
+   “quality-promoted capability”
+6. land `video.condition.video`
+7. land `ICLoraPipeline` semantics for strong-control image/video conditioning
+8. land `video.interpolate`
+9. land `video.retake`
+10. land one-stage as the educational / prototyping row
+11. land longer-form and profile promotion only after those pipeline rows are
+   truthful
 
 ## Notes
 
@@ -111,4 +185,11 @@ Current showcase truth:
 - The current audible MLX path now uses the checkpoint's full BWE wrapper on top of the `AMP1` base vocoder contract, and the first visual-gate receipt for that path is the dog clip under `tmp/manual-runs/20260308T014947Z-dog-bwe-visual-gate-check/`.
 - The first truthful `video.condition.audio` slice preserves the resolved reference audio through the output path while conditioning generation on that runtime-managed audio handle. It is a real bridge capability, but its scene semantics should still be treated as provisional until the conditioned path clears the same visual/audio review bar as the text-first dog ladder.
 - The current workflow and adapter path already carry image references through `video.condition.audio`, which matches the official upstream direction for combined text + image + audio inputs. That combined slice is now covered by runtime workflow tests, but it is not yet promoted as a quality-validated showcase capability.
+- The right canonical language is now: distilled is the current proving slice,
+  standard two-stage is the next production-quality target, and HQ is the
+  top-end alternate high-quality two-stage variant. Do not collapse those three
+  into one vague “best” row.
+- Landing the non-distilled two-stage family is not just a checkpoint swap. It
+  also requires the supporting scheduler, sampler, guidance, and LoRA contract
+  work that the current distilled path does not yet need.
 - Capability coverage and profile promotion are different gates. A capability may be implemented and still not be quality-promoted at recommended or HQ sizes.

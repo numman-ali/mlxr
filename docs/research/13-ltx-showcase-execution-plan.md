@@ -12,6 +12,13 @@ The goal is:
 - complete the most important missing capability rows
 - deliver the first truthful five-clip showcase pack
 
+The next quality target after the current distilled showcase tranche is not
+simply “bigger or longer.” It is the upstream full-checkpoint two-stage family:
+
+- `TI2VidTwoStagesPipeline` as the production-default quality path
+- `TI2VidTwoStagesHQPipeline` as the next top-end alternate high-quality
+  variant
+
 ## Current state
 
 Already true:
@@ -81,12 +88,18 @@ Current blocker for the original natural-audio showcase intent:
 
 ### D. Core capability completion
 
+- [ ] extend the artifact and adapter contract for non-distilled two-stage:
+  full `dev` checkpoint plus distilled LoRA on top of Gemma and x2 upsampler
+- [ ] implement the non-distilled scheduler/sampler/guidance substrate needed by upstream two-stage rows
+- [ ] land the upstream production-default `TI2VidTwoStagesPipeline` semantics on the full `dev` checkpoint
+- [ ] land the upstream `TI2VidTwoStagesHQPipeline` semantics as the next
+  top-end alternate high-quality variant
 - [ ] strengthen `video.condition.audio` from “real bridge slice” to “quality-promoted capability”
 - [ ] implement `video.condition.video`
+- [ ] implement `ICLoraPipeline` semantics for strong-control image/video conditioning
 - [ ] implement `video.interpolate`
 - [ ] implement `video.retake`
 - [ ] implement one-stage T2V/I2V
-- [ ] implement full two-stage / HQ variants
 - [ ] implement IC-LoRA / distilled LoRA paths
 
 ### E. Showcase pack
