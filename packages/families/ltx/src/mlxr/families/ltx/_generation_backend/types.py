@@ -412,7 +412,7 @@ class _ReferenceImports:
     model_class: _ModelFactory
     model_config_class: _ModelConfigFactory
     model_type_enum: _ModelTypeEnumLike
-    rope_type_enum: _ModelTypeEnumLike
+    rope_type_enum: object
     BasicAVTransformerBlock: _VariadicFactory
     attention_class: object
     preprocessor_class: _VariadicFactory

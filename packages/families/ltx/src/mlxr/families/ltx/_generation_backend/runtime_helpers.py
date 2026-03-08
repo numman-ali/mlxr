@@ -50,6 +50,7 @@ from .primitives import (
 )
 from .reference import _patch_reference_modules
 from .reference_imports import _reference_path_on_sys_path
+from .rope_ops import LTXRopeType, apply_rotary_emb, precompute_freqs_cis
 from .types import (
     MLXArray,
     _AudioDecoderLike,
@@ -204,6 +205,11 @@ def _audio_processor_factory(
     )
 
 
+class _OwnedRopeTypeEnum:
+    INTERLEAVED = LTXRopeType.INTERLEAVED
+    SPLIT = LTXRopeType.SPLIT
+
+
 def _parameters_for_eval(module: object) -> object:
     parameters = getattr(module, "parameters", None)
     if not callable(parameters):
@@ -220,7 +226,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
         attention_module = importlib.import_module("mlx_video.models.ltx.attention")
         adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
-        rope_module = importlib.import_module("mlx_video.models.ltx.rope")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
@@ -230,14 +235,14 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         model_class=ltx_module.LTXModel,
         model_config_class=config_module.LTXModelConfig,
         model_type_enum=config_module.LTXModelType,
-        rope_type_enum=config_module.LTXRopeType,
+        rope_type_enum=_OwnedRopeTypeEnum,
         BasicAVTransformerBlock=transformer_module.BasicAVTransformerBlock,
         attention_class=attention_module.Attention,
         preprocessor_class=ltx_module.TransformerArgsPreprocessor,
         multi_preprocessor_class=ltx_module.MultiModalTransformerArgsPreprocessor,
         adaln_class=adaln_module.AdaLayerNormSingle,
-        apply_rotary_emb=rope_module.apply_rotary_emb,
-        precompute_freqs_cis=rope_module.precompute_freqs_cis,
+        apply_rotary_emb=apply_rotary_emb,
+        precompute_freqs_cis=precompute_freqs_cis,
         rms_norm=rms_norm,
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
