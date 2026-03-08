@@ -81,19 +81,21 @@ Current promoted rows only clear the first two rungs for:
 - distilled two-stage T2V
 - distilled two-stage I2V
 
-Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio, and the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `384x224 / 241f / 24fps`. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality and capability completion.
+Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio, and the newer showcase-runner shaping slice now adds scenario-level `audio_intent` plus style-aware anti-music negatives. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality, passive-ambience natural scenes, and capability completion.
 
 Current showcase truth:
 
 - the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
 - it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
 - the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`
+- the newer showcase-runner shaping slice clearly rescues `heron_marsh_documentary` as a no-music Gemini match at the 10-second `384x224 / 241f / 24fps` rung
+- separate current repo receipts also show no-music Gemini matches for `basketball_court_dusk` and `cafe_sidewalk_human` at that same rung
 - the current best-available promoted pack that incorporates that dog recovery is `tmp/showcase-runs/showcase-pack-20260308-best-available.json`
-- it does not yet prove that text-first natural-audio realism is solved broadly; the rerun `nature_documentary` and `vintage_old_school` receipts on the newer guidance path still come back as visual matches with music-like audio
+- it still does not prove that text-first natural-audio realism is solved broadly; passive animal ambience and vintage-natural scenes can still drift back into music-like audio, as shown by the current `cat_kitchen_natural` and rerun `vintage_laundromat` receipts
 
 ## Recommended next implementation order
 
-1. broaden the newer text-first natural-audio guidance path beyond the dog scene and revalidate nature/vintage natural scenes
+1. push the newer text-first natural-audio guidance path through the remaining failing scene classes, especially passive animal ambience and vintage-natural scenes
 2. improve `video.condition.audio` scene quality from “real bridge slice” to “quality-promoted capability”
 3. `video.condition.video`
 4. `video.interpolate`
@@ -108,4 +110,5 @@ Current showcase truth:
 - The real `LTX-2.3` checkpoint currently used by `MLXR` already contains the audio VAE and vocoder weights, so audio export belongs to the core checkpoint-backed slice and does not require inventing extra artifact roles.
 - The current audible MLX path now uses the checkpoint's full BWE wrapper on top of the `AMP1` base vocoder contract, and the first visual-gate receipt for that path is the dog clip under `tmp/manual-runs/20260308T014947Z-dog-bwe-visual-gate-check/`.
 - The first truthful `video.condition.audio` slice preserves the resolved reference audio through the output path while conditioning generation on that runtime-managed audio handle. It is a real bridge capability, but its scene semantics should still be treated as provisional until the conditioned path clears the same visual/audio review bar as the text-first dog ladder.
+- The current workflow and adapter path already carry image references through `video.condition.audio`, which matches the official upstream direction for combined text + image + audio inputs. That combined slice is now covered by runtime workflow tests, but it is not yet promoted as a quality-validated showcase capability.
 - Capability coverage and profile promotion are different gates. A capability may be implemented and still not be quality-promoted at recommended or HQ sizes.

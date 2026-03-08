@@ -259,9 +259,13 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
         adjusted = module._prompt_options_for_run(scene, num_frames=145, fps=24)
 
         self.assertAlmostEqual(adjusted.duration_seconds, 6.0)
-        self.assertIsNone(adjusted.audio_prompt)
+        self.assertEqual(
+            adjusted.audio_prompt,
+            "Paw impact on countertop, chair creak, birdsong through window, refrigerator hum.",
+        )
         self.assertTrue(adjusted.natural_audio)
         self.assertTrue(adjusted.no_music)
+        self.assertEqual(adjusted.style_family, "naturalistic")
         self.assertEqual(adjusted.orientation, "landscape")
 
     def test_run_gemini_review_surfaces_nonzero_exit_as_runtime_error(self) -> None:

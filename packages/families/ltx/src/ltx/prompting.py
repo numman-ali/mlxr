@@ -12,6 +12,7 @@ class PromptShapingOptions:
     audio_prompt: str | None = None
     natural_audio: bool = False
     no_music: bool = False
+    style_family: str | None = None
     duration_seconds: float | None = None
     orientation: Orientation | None = None
 
@@ -114,6 +115,37 @@ def _negative_prompt(options: PromptShapingOptions) -> str | None:
             )
         )
 
+    if options.no_music or options.natural_audio:
+        style_family = (options.style_family or "").strip().lower()
+        if style_family == "documentary":
+            negative_terms.extend(
+                (
+                    "nature documentary score",
+                    "gentle piano underscore",
+                    "uplifting orchestral documentary music",
+                    "cinematic wildlife score",
+                )
+            )
+        elif style_family == "vintage":
+            negative_terms.extend(
+                (
+                    "nostalgic music",
+                    "retro soundtrack",
+                    "jazzy underscore",
+                    "vintage montage music",
+                )
+            )
+        elif style_family == "naturalistic":
+            negative_terms.extend(
+                (
+                    "sentimental underscore",
+                    "soft piano bed",
+                    "emotional score",
+                    "melodic ambience",
+                )
+            )
+
     if not negative_terms:
         return None
-    return ", ".join(negative_terms)
+    deduped_terms = tuple(dict.fromkeys(negative_terms))
+    return ", ".join(deduped_terms)

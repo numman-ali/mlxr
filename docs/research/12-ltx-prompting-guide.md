@@ -149,7 +149,10 @@ Current caveat:
 - `no_music` is still not a blanket guarantee for text-first natural-audio scenes
 - the first repo-owned scene-level recovery path that improved this was family-local negative guidance plus rescaled CFG on the distilled AV bridge
 - that path is now strong enough for the 10-second dog receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`, where Gemini reviews the clip as a golden retriever with barking and natural outdoor ambience
-- that does not yet generalize to every natural scene; the rerun `nature_documentary` and `vintage_old_school` receipts on the newer guidance path still come back as visual matches with music-like audio
+- the current showcase runner now feeds each scenario's `audio_intent` into the shared prompt shaper and adds style-aware anti-music negatives for `naturalistic`, `documentary`, and `vintage` scenes
+- that newer runner-only slice clearly rescues `heron_marsh_documentary` at the 10-second `384x224 / 241f` no-music review bar
+- separate current repo receipts also show no-music wins for `basketball_court_dusk` and `cafe_sidewalk_human`, but those are not clean proof that this specific shaping change caused the improvement
+- it still does not generalize to every natural scene; `cat_kitchen_natural` and the rerun `vintage_laundromat` still come back with music-like audio
 - score-friendly text-first scenes remain the safest promoted showcase set until more natural scenes clear the same bar
 
 ## Sources

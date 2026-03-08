@@ -282,8 +282,10 @@ def _prompt_options_for_run(
     scene: ShowcaseScene, *, num_frames: int, fps: int
 ) -> PromptShapingOptions:
     return PromptShapingOptions(
+        audio_prompt=scene.audio_intent,
         natural_audio=not scene.music_allowed,
         no_music=not scene.music_allowed,
+        style_family=scene.style_family,
         duration_seconds=(num_frames - 1) / fps,
         orientation="landscape",
     )
