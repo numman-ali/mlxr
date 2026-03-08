@@ -186,9 +186,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
         rope_module = importlib.import_module("mlx_video.models.ltx.rope")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
-        decoder_module = importlib.import_module(
-            "mlx_video.models.ltx.video_vae.decoder"
-        )
         video_vae_module = importlib.import_module(
             "mlx_video.models.ltx.video_vae.video_vae"
         )
@@ -217,7 +214,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
         latent_state_class=LatentState,
-        video_decoder_module=decoder_module,
         video_encoder_class=video_vae_module.VideoEncoder,
         video_norm_layer_enum=video_vae_module.NormLayerType,
         video_log_variance_enum=video_vae_module.LogVarianceType,
@@ -372,10 +368,7 @@ def _ensure_vae_decoder(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _VideoDecoderLike:
     if self._vae_decoder is None:
-        vae_decoder = _load_configured_vae_decoder(
-            self.checkpoint_path,
-            decoder_module=imports.video_decoder_module,
-        )
+        vae_decoder = _load_configured_vae_decoder(self.checkpoint_path)
         mx.eval(vae_decoder.parameters())
         self._vae_decoder = vae_decoder
     return self._vae_decoder

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import types
 from pathlib import Path
 from typing import Callable
 
@@ -35,6 +34,13 @@ from .types import (
     _VideoDecoderLike,
     _VocoderLike,
 )
+from .video_decoder_blocks import (
+    CausalConv3d,
+    DepthToSpaceUpsample,
+    PaddingModeType,
+    PixArtAlphaTimestepEmbedder,
+    ResBlockGroup,
+)
 from .video_ops import unpatchify_video
 from .video_tiling import TilingConfig, decode_with_tiling
 
@@ -43,13 +49,12 @@ class _WrappedCausalConv3d(nn.Module):
     def __init__(
         self,
         *,
-        decoder_module: types.ModuleType,
         in_channels: int,
         out_channels: int,
-        spatial_padding_mode: object,
+        spatial_padding_mode: PaddingModeType,
     ) -> None:
         super().__init__()
-        self.conv = decoder_module.CausalConv3d(
+        self.conv = CausalConv3d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=3,
@@ -80,18 +85,16 @@ class _ConfiguredVideoDecoder(nn.Module):
     def __init__(
         self,
         *,
-        decoder_module: types.ModuleType,
         in_channels: int,
         out_channels: int,
         patch_size: int,
         decoder_blocks: tuple[tuple[str, object], ...],
         base_channels: int,
-        spatial_padding_mode: object,
+        spatial_padding_mode: PaddingModeType,
         timestep_conditioning: bool,
         causal_decoder: bool,
     ) -> None:
         super().__init__()
-        self._decoder_module = decoder_module
         self.patch_size = patch_size
         self.in_channels = in_channels
         self.timestep_conditioning = timestep_conditioning
@@ -106,7 +109,6 @@ class _ConfiguredVideoDecoder(nn.Module):
             decoder_blocks=decoder_blocks,
         )
         self.conv_in = _WrappedCausalConv3d(
-            decoder_module=decoder_module,
             in_channels=in_channels,
             out_channels=feature_channels,
             spatial_padding_mode=spatial_padding_mode,
@@ -129,7 +131,6 @@ class _ConfiguredVideoDecoder(nn.Module):
 
         final_out_channels = out_channels * patch_size * patch_size
         self.conv_out = _WrappedCausalConv3d(
-            decoder_module=decoder_module,
             in_channels=feature_channels,
             out_channels=final_out_channels,
             spatial_padding_mode=spatial_padding_mode,
@@ -139,7 +140,7 @@ class _ConfiguredVideoDecoder(nn.Module):
 
         if timestep_conditioning:
             self.timestep_scale_multiplier = mx.array(1000.0)
-            self.last_time_embedder = decoder_module.PixArtAlphaTimestepEmbedder(
+            self.last_time_embedder = PixArtAlphaTimestepEmbedder(
                 embedding_dim=feature_channels * 2
             )
             self.last_scale_shift_table = mx.zeros((2, feature_channels))
@@ -150,16 +151,15 @@ class _ConfiguredVideoDecoder(nn.Module):
         block_name: str,
         block_config: dict[str, object],
         in_channels: int,
-        spatial_padding_mode: object,
+        spatial_padding_mode: PaddingModeType,
     ) -> tuple[object, int]:
-        decoder_module = self._decoder_module
         if block_name == "res_x":
             num_layers = _int_value(
                 block_config.get("num_layers", 1),
                 context="Expected integer LTX decoder num_layers metadata",
             )
             return (
-                decoder_module.ResBlockGroup(
+                ResBlockGroup(
                     in_channels,
                     num_layers,
                     spatial_padding_mode,
@@ -186,7 +186,7 @@ class _ConfiguredVideoDecoder(nn.Module):
         else:
             raise ValueError(f"Unsupported LTX decoder block '{block_name}'")
         return (
-            decoder_module.DepthToSpaceUpsample(
+            DepthToSpaceUpsample(
                 dims=3,
                 in_channels=in_channels,
                 stride=stride,
@@ -232,9 +232,9 @@ class _ConfiguredVideoDecoder(nn.Module):
 
         x = self.conv_in(sample, causal=effective_causal)
         for block in self.up_blocks.values():
-            if isinstance(block, self._decoder_module.ResBlockGroup):
+            if isinstance(block, ResBlockGroup):
                 x = block(x, causal=effective_causal, timestep=scaled_timestep)
-            elif isinstance(block, self._decoder_module.DepthToSpaceUpsample):
+            elif isinstance(block, DepthToSpaceUpsample):
                 x = block(x, causal=effective_causal, chunked_conv=chunked_conv)
             else:
                 if not callable(block):
@@ -397,16 +397,11 @@ def _validate_bwe_stft_buffers(
 
 def _load_configured_vae_decoder(
     checkpoint_path: Path,
-    *,
-    decoder_module: types.ModuleType,
 ) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
 
-    spatial_padding_mode = decoder_module.PaddingModeType(
-        vae_config.spatial_padding_mode
-    )
+    spatial_padding_mode = PaddingModeType(vae_config.spatial_padding_mode)
     decoder = _ConfiguredVideoDecoder(
-        decoder_module=decoder_module,
         in_channels=vae_config.latent_channels,
         out_channels=vae_config.out_channels,
         patch_size=vae_config.patch_size,

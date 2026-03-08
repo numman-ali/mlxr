@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
 from typing import Callable, Mapping, Protocol, TypeAlias
 
 import mlx.core as mx
@@ -499,7 +498,6 @@ class _ReferenceImports:
     to_denoised: _ToDenoised
     scaled_dot_product_attention: _ScaledDotProductAttentionFn
     latent_state_class: _LatentStateFactory
-    video_decoder_module: ModuleType
     video_encoder_class: _VAEEncoderFactory
     video_norm_layer_enum: _ValueEnumFactory
     video_log_variance_enum: _ValueEnumFactory

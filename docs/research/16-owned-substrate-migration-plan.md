@@ -54,13 +54,15 @@ Already moved onto repo-owned code in the promoted distilled path:
 - x2 spatial upsampler class and loader path
 - video unpatchify helper
 - decoder-side temporal/spatial tiling config and tile blending logic
+- decoder-side convolution, timestep embedding, residual block-group, and
+  depth-to-space upsampling blocks
 - audio-VAE and vocoder weight sanitizers
 - RMS norm helper used by the patched transformer bridge
 
 Still donor-backed in the promoted distilled path:
 
 - transformer construction and patched bridge
-- VAE decoder class and loader substrate
+- VAE encoder class and remaining video-VAE loader substrate
 - remaining audio runtime classes and shared helper imports
 - donor checkout import indirection through the current helper stack
 
