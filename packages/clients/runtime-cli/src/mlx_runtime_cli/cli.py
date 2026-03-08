@@ -4,14 +4,18 @@ import argparse
 import base64
 import json
 import os
+import time
 from pathlib import Path
 from typing import Literal
 
 import httpx
 from mlx_runtime_core import RuntimeHome
 from mlx_runtime_schemas import (
+    ArtifactExportResult,
     InputHandleRecord,
     JobOutputPolicy,
+    JobRecord,
+    JobState,
     WorkflowIntent,
     WorkflowPlanResult,
     WorkflowPreferences,
@@ -63,6 +67,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--plan-only",
         action="store_true",
         help="Print the planned workflow instead of submitting it.",
+    )
+    generate_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for the submitted job to reach a terminal state.",
+    )
+    generate_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=600.0,
+        help="Maximum seconds to wait for a terminal job state when --wait is used.",
+    )
+    generate_parser.add_argument(
+        "--poll-interval-seconds",
+        type=float,
+        default=1.0,
+        help="Polling interval in seconds when --wait is used.",
+    )
+    generate_parser.add_argument(
+        "--export-path",
+        type=Path,
+        help="Optional trusted local export path for the first output artifact when --wait is used.",
+    )
+    generate_parser.add_argument(
+        "--overwrite-export",
+        action="store_true",
+        help="Allow overwriting an existing export path.",
     )
     return parser
 
@@ -139,6 +170,24 @@ class RuntimeClient:
         response.raise_for_status()
         return WorkflowRunResult.model_validate(response.json())
 
+    def get_job(self, job_id: str) -> JobRecord:
+        response = self._client.get(f"/v1/jobs/{job_id}")
+        response.raise_for_status()
+        return JobRecord.model_validate(response.json())
+
+    def export_output(
+        self, artifact_id: str, *, destination_path: Path, overwrite: bool
+    ) -> ArtifactExportResult:
+        response = self._client.post(
+            f"/v1/outputs/{artifact_id}/export",
+            json={
+                "destination_path": str(destination_path),
+                "overwrite": overwrite,
+            },
+        )
+        response.raise_for_status()
+        return ArtifactExportResult.model_validate(response.json())
+
 
 def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> int:
     try:
@@ -169,8 +218,28 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
             "family": result.plan.family,
             "warnings": result.plan.warnings,
         }
+        if args.wait:
+            terminal = _wait_for_terminal_job(
+                client,
+                result.submit.job_id,
+                timeout_seconds=float(args.timeout_seconds),
+                poll_interval_seconds=float(args.poll_interval_seconds),
+            )
+            payload["state"] = terminal.state.value
+            payload["artifact_ids"] = [
+                artifact.artifact_id for artifact in terminal.artifacts
+            ]
+            if args.export_path is not None and terminal.artifacts:
+                export_result = client.export_output(
+                    terminal.artifacts[0].artifact_id,
+                    destination_path=Path(args.export_path).expanduser().resolve(),
+                    overwrite=bool(args.overwrite_export),
+                )
+                payload["export_path"] = export_result.destination_path
         print(json.dumps(payload, indent=2))
-        return 0
+        if not args.wait:
+            return 0
+        return 0 if terminal.state == JobState.COMPLETED else 1
     finally:
         client.close()
 
@@ -288,3 +357,27 @@ def _default_uds_path() -> Path:
         return Path(raw)
     runtime_home = RuntimeHome.from_env()
     return runtime_home.temp_dir / "control-plane.sock"
+
+
+def _wait_for_terminal_job(
+    client: RuntimeClient,
+    job_id: str,
+    *,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+) -> JobRecord:
+    deadline = time.monotonic() + timeout_seconds
+    terminal_states = {
+        JobState.COMPLETED,
+        JobState.FAILED,
+        JobState.CANCELLED,
+    }
+    while True:
+        record = client.get_job(job_id)
+        if record.state in terminal_states:
+            return record
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"Timed out waiting for job '{job_id}' to reach a terminal state"
+            )
+        time.sleep(poll_interval_seconds)
