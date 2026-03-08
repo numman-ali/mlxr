@@ -214,15 +214,22 @@ def _is_multi_preprocessor(
 def _patch_reference_modules(imports: _ReferenceImports) -> None:
     if getattr(imports.model_class, "_mlxr_22b_patch", False):
         return
+    patch_config = not getattr(imports.model_config_class, "__module__", "").startswith(
+        "mlxr."
+    )
     patch_preprocessors = not getattr(
         imports.preprocessor_class, "__module__", ""
     ).startswith("mlxr.")
 
-    original_get_video_config: Callable[[object], object | None] = getattr(
-        imports.model_config_class, "get_video_config"
+    original_get_video_config: Callable[[object], object | None] | None = (
+        getattr(imports.model_config_class, "get_video_config")
+        if patch_config
+        else None
     )
-    original_get_audio_config: Callable[[object], object | None] = getattr(
-        imports.model_config_class, "get_audio_config"
+    original_get_audio_config: Callable[[object], object | None] | None = (
+        getattr(imports.model_config_class, "get_audio_config")
+        if patch_config
+        else None
     )
     original_attention_init: Callable[..., None] = getattr(
         imports.attention_class, "__init__"
@@ -257,6 +264,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
     )
 
     def patched_get_video_config(config_self: _TransformerConfigLike) -> object | None:
+        if original_get_video_config is None:
+            raise RuntimeError(
+                "Expected donor video config getter when patching config"
+            )
         video_config = original_get_video_config(config_self)
         if video_config is None:
             return None
@@ -273,6 +284,10 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         return video_config
 
     def patched_get_audio_config(config_self: _TransformerConfigLike) -> object | None:
+        if original_get_audio_config is None:
+            raise RuntimeError(
+                "Expected donor audio config getter when patching config"
+            )
         audio_config = original_get_audio_config(config_self)
         if audio_config is None:
             return None
@@ -1041,8 +1056,13 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
         return vx, ax
 
-    setattr(imports.model_config_class, "get_video_config", patched_get_video_config)
-    setattr(imports.model_config_class, "get_audio_config", patched_get_audio_config)
+    if patch_config:
+        setattr(
+            imports.model_config_class, "get_video_config", patched_get_video_config
+        )
+        setattr(
+            imports.model_config_class, "get_audio_config", patched_get_audio_config
+        )
     setattr(imports.attention_class, "__init__", patched_attention_init)
     setattr(imports.attention_class, "__call__", patched_attention_call)
     if patch_preprocessors:

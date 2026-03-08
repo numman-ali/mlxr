@@ -31,6 +31,7 @@ from .config import (
     _runtime_model_config,
 )
 from .debug import _looks_like_metal_oom
+from .model_config import LTXModelConfig, LTXModelType
 from .outputs import _audio_waveform_to_numpy
 from .primitives import (
     STAGE_1_SIGMAS,
@@ -227,7 +228,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         return self._reference_imports
 
     with _reference_path_on_sys_path():
-        config_module = importlib.import_module("mlx_video.models.ltx.config")
         attention_module = importlib.import_module("mlx_video.models.ltx.attention")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
         ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
@@ -237,8 +237,8 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
 
     self._reference_imports = _ReferenceImports(
         model_class=ltx_module.LTXModel,
-        model_config_class=config_module.LTXModelConfig,
-        model_type_enum=config_module.LTXModelType,
+        model_config_class=LTXModelConfig,
+        model_type_enum=LTXModelType,
         rope_type_enum=_OwnedRopeTypeEnum,
         BasicAVTransformerBlock=transformer_module.BasicAVTransformerBlock,
         attention_class=attention_module.Attention,
@@ -291,9 +291,9 @@ def _ensure_transformer(
     if self._transformer is not None:
         return self._transformer
 
-    config = imports.model_config_class.from_dict(
+    config = LTXModelConfig.from_dict(
         {
-            "model_type": imports.model_type_enum.AudioVideo,
+            "model_type": LTXModelType.AudioVideo,
             "num_attention_heads": runtime_config.num_attention_heads,
             "attention_head_dim": runtime_config.attention_head_dim,
             "in_channels": runtime_config.in_channels,

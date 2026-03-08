@@ -197,14 +197,13 @@ class _PerChannelStatistics(Protocol):
 
 class _ModelTypeEnumLike(Protocol):
     AudioVideo: object
-    INTERLEAVED: object
 
 
 class _TransformerConfigLike(Protocol):
     apply_gated_attention: bool
     cross_attention_adaln: bool
     caption_proj_before_connector: bool
-    rope_type: object
+    rope_type: str
     norm_eps: float
     num_layers: int
 
@@ -214,7 +213,8 @@ class _TransformerConfigLike(Protocol):
 
 
 class _ModelConfigFactory(Protocol):
-    def from_dict(self, raw_config: Mapping[str, object]) -> _TransformerConfigLike: ...
+    @classmethod
+    def from_dict(cls, raw_config: Mapping[str, object]) -> _TransformerConfigLike: ...
 
 
 class _ModelFactory(Protocol):
@@ -455,8 +455,8 @@ class _PaddedShape:
 @dataclass(frozen=True, slots=True)
 class _ReferenceImports:
     model_class: _ModelFactory
-    model_config_class: _ModelConfigFactory
-    model_type_enum: _ModelTypeEnumLike
+    model_config_class: object
+    model_type_enum: object
     rope_type_enum: object
     BasicAVTransformerBlock: _VariadicFactory
     attention_class: object
