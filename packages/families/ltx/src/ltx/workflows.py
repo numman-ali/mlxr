@@ -5,6 +5,7 @@ from mlx_runtime_schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPreferences,
     WorkflowReference,
     WorkflowStageSpec,
 )
@@ -221,7 +222,31 @@ def _resolved_prompt(intent: WorkflowIntent) -> str:
         parts.append(f"Video details: {video_prompt}")
     if audio_prompt:
         parts.append(f"Audio details: {audio_prompt}")
+    parts.extend(_preference_prompt_lines(intent.preferences))
     return "\n".join(part for part in parts if part)
+
+
+def _preference_prompt_lines(
+    preferences: WorkflowPreferences,
+) -> tuple[str, ...]:
+    lines: list[str] = []
+    if preferences.natural_audio:
+        lines.append(
+            "Audio direction: natural diegetic scene sound only, grounded in the environment."
+        )
+    if preferences.no_music:
+        lines.append(
+            "Audio direction: no soundtrack, no score, and no background music."
+        )
+    if preferences.duration_seconds is not None:
+        lines.append(
+            f"Target duration: about {preferences.duration_seconds:.1f} seconds."
+        )
+    if preferences.orientation is not None:
+        normalized_orientation = preferences.orientation.strip().lower()
+        if normalized_orientation in {"portrait", "landscape", "square"}:
+            lines.append(f"Framing preference: {normalized_orientation} composition.")
+    return tuple(lines)
 
 
 def _selected_profile(capability: CapabilityDescriptor, task: str) -> str | None:

@@ -47,6 +47,54 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(result.plan.family, "ltx")
                 self.assertEqual(result.plan.pipeline_variant, "distilled_two_stage")
 
+    def test_workflow_plan_resolved_prompt_applies_text_first_audio_preferences(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            state = make_state(root)
+            source_dir = make_local_bundle(root)
+            with TestClient(create_app(state)) as client:
+                register_local_ltx_model(client, source_dir)
+
+                response = client.post(
+                    "/v1/workflows/plan",
+                    json={
+                        "model_id": "ltx-2.3-fast-local",
+                        "prompt": "golden retriever with its owner in a park",
+                        "audio_prompt": "happy barking and light footsteps",
+                        "preferences": {
+                            "natural_audio": True,
+                            "no_music": True,
+                            "duration_seconds": 10.0,
+                            "orientation": "landscape",
+                        },
+                        "params": {"width": 96, "height": 64, "num_frames": 9},
+                        "output": {"artifact_format": "mp4"},
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response_model(response, WorkflowPlanResult)
+                self.assertIn(
+                    "Audio details: happy barking and light footsteps",
+                    result.plan.resolved_prompt,
+                )
+                self.assertIn(
+                    "Audio direction: natural diegetic scene sound only",
+                    result.plan.resolved_prompt,
+                )
+                self.assertIn(
+                    "Audio direction: no soundtrack, no score, and no background music.",
+                    result.plan.resolved_prompt,
+                )
+                self.assertIn(
+                    "Target duration: about 10.0 seconds.", result.plan.resolved_prompt
+                )
+                self.assertIn(
+                    "Framing preference: landscape composition.",
+                    result.plan.resolved_prompt,
+                )
+
     def test_workflow_plan_selects_image_conditioning_when_image_reference_exists(
         self,
     ) -> None:

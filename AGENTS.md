@@ -245,6 +245,8 @@ If the task is LTX-fidelity-specific:
 If the task is LTX-capability-specific:
 
 - read [11-ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/research/11-ltx-capability-matrix.md)
+- read [12-ltx-prompting-guide.md](/Users/numman/Repos/mlxr/docs/research/12-ltx-prompting-guide.md) when text-first prompt quality or showcase work is in scope
+- read [13-ltx-showcase-execution-plan.md](/Users/numman/Repos/mlxr/docs/research/13-ltx-showcase-execution-plan.md) when continuing the current capability-to-showcase tranche
 
 ## Source Of Truth Order
 

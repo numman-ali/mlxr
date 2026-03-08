@@ -1,0 +1,135 @@
+# LTX-2.3 Prompting Guide
+
+## Purpose
+
+This note captures the current prompting best practices for `LTX-2.3` in `MLXR`.
+
+It has two jobs:
+
+- record the official upstream guidance we should follow for text-first prompting
+- define how `MLXR` should shape one simple user prompt into a stronger text-first generation request without inventing a more complex default UX
+
+This guide is specifically for the current first-party `LTX-2.3` proving path. It does not claim to be a universal prompting guide for all families.
+
+## Upstream guidance
+
+The official `LTX-2` guidance is consistent on a few important points:
+
+- prompts should be one flowing paragraph
+- prompts should start with the action
+- descriptions should be literal, specific, and chronological
+- prompts should cover:
+  - subject appearance
+  - motion and gesture
+  - environment and background
+  - camera framing and movement
+  - lighting and color
+  - important scene changes
+- prompts should stay under roughly 200 words
+
+For text-first generation, the best mental model is:
+
+describe the shot the way a cinematographer would describe the shot list, not the way a user would write a vague vibe request.
+
+## Audio guidance
+
+Official LTX supports both text-first AV generation and a stronger audio-driven path.
+
+That means:
+
+- text-first AV is a valid simple UX path
+- but precise sound behavior is better controlled through audio-conditioned generation
+
+So for `MLXR`, the product posture should be:
+
+- default UX stays text-first
+- audio-specific intent is still worth writing explicitly into the prompt
+- when exact sound matters, `video.condition.audio` is the stronger control path
+
+Do not pretend prompt wording alone is always enough to force exact natural sound behavior.
+
+## MLXR text-first prompt policy
+
+The simple user-facing contract remains:
+
+- one main prompt
+- optional references
+- simple preferences such as `natural_audio`, `no_music`, `enhance_prompt`, duration, and orientation
+
+Internally, `MLXR` may split that into:
+
+- base visual prompt
+- explicit audio details
+- advisory framing and duration cues
+
+The planner should not require users to think in terms of separate audio and video prompts by default, but it may derive those internally.
+
+## Prompt shaping rules in MLXR
+
+For the current LTX workflow strategy:
+
+- the base `prompt` remains the main source of truth
+- `video_prompt` and `audio_prompt` are optional advanced details
+- `natural_audio` becomes an explicit “natural diegetic sound only” instruction
+- `no_music` becomes an explicit “no soundtrack / no background music” instruction
+- `duration_seconds` becomes an advisory duration line
+- `orientation` becomes an advisory framing line when the value is one of:
+  - `portrait`
+  - `landscape`
+  - `square`
+
+These are text-shaping improvements, not hard guarantees.
+
+## Good prompt pattern
+
+Preferred shape:
+
+1. main action
+2. subject details
+3. environment
+4. camera
+5. lighting and color
+6. audio details when relevant
+
+Example:
+
+`A golden retriever runs happily beside its owner through a sunlit park path, looking up toward them as they move together past green grass and trees, filmed in a smooth handheld tracking shot at waist height with warm natural afternoon light. Natural park ambience, light footsteps, and happy barking only, with no music.`
+
+## Bad prompt pattern
+
+Avoid prompts like:
+
+- “beautiful cinematic dog video”
+- “epic anime vibes”
+- “make this cool and dramatic”
+
+Those are not concrete enough to drive the current model well.
+
+## Prompt enhancement
+
+Prompt enhancement is a valid future workflow stage and is already part of the official product story.
+
+When `MLXR` eventually enables it on the real runtime path, it should:
+
+- add visual detail
+- add motion cues
+- add sound cues
+
+But until that is implemented, the planner and docs should treat it as unavailable rather than pretending it is active.
+
+## Validation rule
+
+Do not promote a prompt pattern as “working” from one lucky clip.
+
+A prompt/process improvement should count only after:
+
+- the runtime receipts are real and non-preview
+- Gemini review and stills agree on the scene
+- the clip clears the intended semantic bar at the current rung
+
+## Sources
+
+- `references/official/LTX-2/README.md`
+- `references/official/LTX-2/packages/ltx-pipelines/README.md`
+- `references/official/ltx-desktop/frontend/components/SettingsModal.tsx`
+- `references/official/ltx-desktop/frontend/views/GenSpace.tsx`
