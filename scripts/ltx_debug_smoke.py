@@ -158,6 +158,8 @@ class SmokeConfig:
     output_root: Path
     run_name: str
     stage_debug: bool
+    trace: bool
+    trace_sync: bool
     clean_lifecycle: bool
     backend_progress: bool
     heartbeat_seconds: float
@@ -173,6 +175,7 @@ class RunBundlePaths:
     frame_mid_path: Path
     frame_last_path: Path
     manifest_path: Path
+    trace_path: Path
     detached_console_log_path: Path
 
 
@@ -206,6 +209,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Emit stage1/post_x2/final debug frames via backend env flags.",
+    )
+    parser.add_argument(
+        "--trace",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Record structured generation trace data during the debug smoke.",
+    )
+    parser.add_argument(
+        "--trace-sync",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Force MLX synchronization around traced forward spans for more precise "
+            "timings at extra runtime cost."
+        ),
     )
     parser.add_argument(
         "--clean-lifecycle",
@@ -259,6 +277,8 @@ def build_config(args: argparse.Namespace) -> SmokeConfig:
         output_root=Path(args.output_root),
         run_name=str(args.run_name),
         stage_debug=bool(args.stage_debug),
+        trace=bool(args.trace),
+        trace_sync=bool(args.trace_sync),
         clean_lifecycle=bool(args.clean_lifecycle),
         backend_progress=bool(args.backend_progress),
         heartbeat_seconds=float(args.heartbeat_seconds),
@@ -313,6 +333,7 @@ def build_run_bundle_paths(
         frame_mid_path=run_dir / "frame_mid.png",
         frame_last_path=run_dir / "frame_last.png",
         manifest_path=run_dir / "run_manifest.json",
+        trace_path=run_dir / "trace.json",
         detached_console_log_path=run_dir / "run.log",
     )
 
@@ -369,6 +390,8 @@ def run_smoke(
         "fps": config.fps,
         "clean_lifecycle": config.clean_lifecycle,
         "stage_debug": config.stage_debug,
+        "trace": config.trace,
+        "trace_sync": config.trace_sync,
         "backend_progress": config.backend_progress,
         "artifact_source": {
             "artifact_root": (
@@ -387,6 +410,7 @@ def run_smoke(
             "frame_path": str(bundle.frame_path),
             "frame_mid_path": str(bundle.frame_mid_path),
             "frame_last_path": str(bundle.frame_last_path),
+            "trace_path": str(bundle.trace_path),
             "detached_console_log_path": str(bundle.detached_console_log_path),
         },
         "timings_ms": timings_ms,
@@ -406,6 +430,10 @@ def run_smoke(
     env_updates: dict[str, str | None] = {}
     if config.stage_debug:
         env_updates["MLXR_LTX_DEBUG_STAGE_DUMPS_DIR"] = str(bundle.debug_dir)
+    if config.trace:
+        env_updates["MLXR_LTX_DEBUG_TRACE"] = "1"
+    if config.trace_sync:
+        env_updates["MLXR_LTX_DEBUG_TRACE_SYNC"] = "1"
     if config.backend_progress:
         env_updates["MLXR_LTX_DEBUG_PROGRESS"] = "1"
 
@@ -469,6 +497,10 @@ def run_smoke(
             manifest["prompt_signature"] = generated_video.prompt_signature
             manifest["conditioning_count"] = generated_video.conditioning_count
             manifest["video_metadata"] = generated_video.metadata
+            trace_metadata = generated_video.metadata.get("trace")
+            if isinstance(trace_metadata, dict):
+                _write_json(bundle.trace_path, trace_metadata)
+                manifest["trace_summary"] = trace_metadata.get("summary")
             manifest["video_fps"] = generated_video.fps
             manifest["video_seed"] = generated_video.seed
             manifest["review_frame_paths"] = {
@@ -484,6 +516,11 @@ def run_smoke(
                         "frame_mid_path": str(bundle.frame_mid_path),
                         "frame_last_path": str(bundle.frame_last_path),
                         "manifest_path": str(bundle.manifest_path),
+                        "trace_path": (
+                            str(bundle.trace_path)
+                            if bundle.trace_path.exists()
+                            else None
+                        ),
                     },
                     indent=2,
                 ),
@@ -551,6 +588,8 @@ def _validate_args(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         parser.error("LTX debug smokes require fps >= 1.")
     if args.heartbeat_seconds <= 0:
         parser.error("Heartbeat seconds must be > 0.")
+    if args.trace_sync and not args.trace:
+        parser.error("--trace-sync requires --trace.")
 
 
 def _resolved_profile_shape(args: argparse.Namespace) -> tuple[int, int, int, int]:
@@ -612,6 +651,8 @@ def _cli_args_from_config(config: SmokeConfig) -> list[str]:
         "--run-name",
         config.run_name,
         "--stage-debug" if config.stage_debug else "--no-stage-debug",
+        "--trace" if config.trace else "--no-trace",
+        "--trace-sync" if config.trace_sync else "--no-trace-sync",
         "--clean-lifecycle" if config.clean_lifecycle else "--no-clean-lifecycle",
         "--backend-progress" if config.backend_progress else "--no-backend-progress",
         "--heartbeat-seconds",

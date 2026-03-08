@@ -77,6 +77,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             self.assertEqual(config.num_frames, 17)
             self.assertEqual(config.fps, 24)
             self.assertTrue(config.stage_debug)
+            self.assertTrue(config.trace)
+            self.assertFalse(config.trace_sync)
             self.assertTrue(config.clean_lifecycle)
             self.assertTrue(config.backend_progress)
 
@@ -156,6 +158,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     output_root=Path(tmp_dir) / "runs",
                     run_name="dog-test",
                     stage_debug=True,
+                    trace=True,
+                    trace_sync=False,
                     clean_lifecycle=True,
                     backend_progress=True,
                     heartbeat_seconds=0.01,
@@ -219,6 +223,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     test_case.assertTrue(
                         os.environ["MLXR_LTX_DEBUG_STAGE_DUMPS_DIR"].endswith("/debug")
                     )
+                    test_case.assertEqual(os.environ["MLXR_LTX_DEBUG_TRACE"], "1")
+                    test_case.assertNotIn("MLXR_LTX_DEBUG_TRACE_SYNC", os.environ)
                     frames = np.zeros((num_frames, height, width, 3), dtype=np.uint8)
                     frames[..., 1] = 180
                     return _FakeGeneratedVideo(
@@ -232,6 +238,20 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                             "pipeline_kind": "distilled_two_stage",
                             "output_width": width,
                             "output_height": height,
+                            "trace": {
+                                "enabled": True,
+                                "elapsed_ms": 1.0,
+                                "event_count": 1,
+                                "events": [],
+                                "summary": {
+                                    "ltx.ensure_transformer": {
+                                        "count": 1,
+                                        "total_duration_ms": 1.0,
+                                        "max_duration_ms": 1.0,
+                                        "mean_duration_ms": 1.0,
+                                    }
+                                },
+                            },
                         },
                     )
 
@@ -293,6 +313,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             self.assertTrue((run_dir / "frame_mid.png").exists())
             self.assertTrue((run_dir / "frame_last.png").exists())
             self.assertTrue((run_dir / "run_manifest.json").exists())
+            self.assertTrue((run_dir / "trace.json").exists())
             self.assertTrue((run_dir / "dog-test_256x160_17f.mp4").exists())
             self.assertEqual(
                 Path(manifest["review_frame_paths"]["frame_mid"]),
@@ -302,6 +323,10 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                 Path(manifest["review_frame_paths"]["frame_last"]),
                 run_dir / "frame_last.png",
             )
+            self.assertEqual(
+                Path(manifest["outputs"]["trace_path"]), run_dir / "trace.json"
+            )
+            self.assertIn("ltx.ensure_transformer", manifest["trace_summary"])
 
     def test_build_tmux_command_points_to_repo_script(self) -> None:
         module = _load_script_module()
@@ -322,6 +347,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             output_root=Path("/tmp/manual-runs"),
             run_name="dog-test",
             stage_debug=True,
+            trace=True,
+            trace_sync=False,
             clean_lifecycle=True,
             backend_progress=True,
             heartbeat_seconds=2.0,
@@ -374,6 +401,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     output_root=Path(tmp_dir) / "runs",
                     run_name="preview-should-fail",
                     stage_debug=False,
+                    trace=True,
+                    trace_sync=False,
                     clean_lifecycle=True,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
@@ -470,6 +499,8 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     output_root=Path(tmp_dir) / "runs",
                     run_name="unknown-backend-should-fail",
                     stage_debug=False,
+                    trace=True,
+                    trace_sync=False,
                     clean_lifecycle=True,
                     backend_progress=False,
                     heartbeat_seconds=0.01,

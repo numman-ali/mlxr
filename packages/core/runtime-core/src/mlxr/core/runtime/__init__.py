@@ -25,6 +25,7 @@ from .manifests import source_id_for_ref
 from .providers import HuggingFaceProviderAdapter, LocalFileProviderAdapter
 from .registry import RuntimeRegistry
 from .runtime_home import RuntimeHome
+from .tracing import TraceEvent, TraceRecorder, mlx_memory_snapshot
 
 __all__ = [
     "CatalogConflictError",
@@ -51,4 +52,7 @@ __all__ = [
     "SourceProviderAdapter",
     "source_id_for_ref",
     "StageResult",
+    "TraceEvent",
+    "TraceRecorder",
+    "mlx_memory_snapshot",
 ]

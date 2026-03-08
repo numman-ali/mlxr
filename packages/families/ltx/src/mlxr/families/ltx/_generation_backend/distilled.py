@@ -7,6 +7,7 @@ from pathlib import Path
 import mlx.core as mx
 import numpy as np
 import numpy.typing as npt
+from mlxr.core.runtime import TraceRecorder, mlx_memory_snapshot
 
 from ..generation import (
     AudioConditioningInput,
@@ -30,6 +31,8 @@ from .config import _runtime_model_config
 from .debug import (
     _debug_progress,
     _debug_stage_dump_dir,
+    _debug_trace_enabled,
+    _debug_trace_sync_enabled,
     _elapsed_ms,
     _emit_debug_frame_snapshot,
     _latent_stats,
@@ -137,36 +140,54 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         audio_frames = int(imports.compute_audio_frames(num_frames, float(fps)))
         conditioned_audio_waveform: npt.NDArray[np.float32] | None = None
         conditioned_audio_sample_rate: int | None = None
+        trace_recorder = TraceRecorder(enabled=_debug_trace_enabled())
+        trace_sync = _debug_trace_sync_enabled()
 
         _debug_progress("ensure_transformer start")
-        transformer = self._ensure_transformer(imports, runtime_config, prompt_context)
+        with trace_recorder.span(
+            "ltx.ensure_transformer", snapshot=mlx_memory_snapshot
+        ):
+            transformer = self._ensure_transformer(
+                imports, runtime_config, prompt_context
+            )
         _debug_progress("ensure_transformer done")
         _debug_progress("ensure_vae_decoder start")
-        vae_decoder = self._ensure_vae_decoder(imports)
+        with trace_recorder.span(
+            "ltx.ensure_vae_decoder", snapshot=mlx_memory_snapshot
+        ):
+            vae_decoder = self._ensure_vae_decoder(imports)
         _debug_progress("ensure_vae_decoder done")
         _debug_progress("ensure_upsampler start")
-        upsampler = self._ensure_upsampler(imports)
+        with trace_recorder.span("ltx.ensure_upsampler", snapshot=mlx_memory_snapshot):
+            upsampler = self._ensure_upsampler(imports)
         _debug_progress("ensure_upsampler done")
-        conditioning_plan = self._prepare_conditionings(
-            imports=imports,
-            conditioning_inputs=conditioning_inputs,
-            num_frames=num_frames,
-            latent_frames=latent_frames,
-            padded_shape=padded_shape,
-            model_dtype=model_dtype,
-        )
-        conditioned_audio_latents: MLXArray | None = None
-        if audio_conditioning is not None:
-            (
-                conditioned_audio_latents,
-                conditioned_audio_waveform,
-                conditioned_audio_sample_rate,
-            ) = self._encode_audio_conditioning(
+        with trace_recorder.span(
+            "ltx.prepare_conditionings", snapshot=mlx_memory_snapshot
+        ):
+            conditioning_plan = self._prepare_conditionings(
                 imports=imports,
-                audio_conditioning=audio_conditioning,
-                audio_frames=audio_frames,
+                conditioning_inputs=conditioning_inputs,
+                num_frames=num_frames,
+                latent_frames=latent_frames,
+                padded_shape=padded_shape,
                 model_dtype=model_dtype,
             )
+        conditioned_audio_latents: MLXArray | None = None
+        if audio_conditioning is not None:
+            with trace_recorder.span(
+                "ltx.encode_audio_conditioning",
+                snapshot=mlx_memory_snapshot,
+            ):
+                (
+                    conditioned_audio_latents,
+                    conditioned_audio_waveform,
+                    conditioned_audio_sample_rate,
+                ) = self._encode_audio_conditioning(
+                    imports=imports,
+                    audio_conditioning=audio_conditioning,
+                    audio_frames=audio_frames,
+                    model_dtype=model_dtype,
+                )
 
         mx.random.seed(effective_seed)
         timings_ms: dict[str, float] = {}
@@ -220,6 +241,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             state=stage1_state,
             runtime_config=runtime_config,
             freeze_audio=audio_conditioning is not None,
+            trace_recorder=trace_recorder,
+            trace_sync=trace_sync,
         )
         mx.eval(latents, audio_latents)
         debug_dir = _debug_stage_dump_dir()
@@ -344,6 +367,8 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             state=stage2_state,
             runtime_config=runtime_config,
             freeze_audio=audio_conditioning is not None,
+            trace_recorder=trace_recorder,
+            trace_sync=trace_sync,
         )
         mx.eval(latents, audio_latents)
         timings_ms["stage2_duration_ms"] = _elapsed_ms(stage2_started)
@@ -386,6 +411,41 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             )
         mx.clear_cache()
 
+        metadata: dict[str, object] = {
+            "pipeline_kind": "distilled_two_stage",
+            "stage1_duration_ms": timings_ms["stage1_duration_ms"],
+            "upsample_duration_ms": timings_ms["upsample_duration_ms"],
+            "stage2_duration_ms": timings_ms["stage2_duration_ms"],
+            "decode_duration_ms": timings_ms["decode_duration_ms"],
+            "audio_decode_duration_ms": timings_ms["audio_decode_duration_ms"],
+            "tiling_mode": tiling_mode,
+            "output_width": width,
+            "output_height": height,
+            "output_frames": num_frames,
+            "internal_width": padded_shape.internal_width,
+            "internal_height": padded_shape.internal_height,
+            "audio_present": audio_waveform is not None,
+            "audio_sample_rate": audio_sample_rate,
+            "audio_channels": (
+                int(audio_waveform.shape[1])
+                if audio_waveform is not None and audio_waveform.ndim == 2
+                else 1
+                if audio_waveform is not None
+                else 0
+            ),
+            "audio_backend": audio_backend,
+            "audio_bwe_applied": audio_backend == "mlxr_vocoder_with_bwe",
+            "audio_conditioned": audio_conditioning is not None,
+            "guidance_mode": (
+                "cfg"
+                if prompt_context.negative_prompt_text is not None
+                else "positive_only"
+            ),
+            "negative_prompt_present": prompt_context.negative_prompt_text is not None,
+        }
+        if trace_recorder.enabled:
+            metadata["trace"] = trace_recorder.to_metadata()
+
         return GeneratedVideo(
             frames=frames_uint8,
             fps=fps,
@@ -395,39 +455,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             prompt_signature=_prompt_signature(prompt_context.prompt_text),
             audio_waveform=audio_waveform,
             audio_sample_rate=audio_sample_rate,
-            metadata={
-                "pipeline_kind": "distilled_two_stage",
-                "stage1_duration_ms": timings_ms["stage1_duration_ms"],
-                "upsample_duration_ms": timings_ms["upsample_duration_ms"],
-                "stage2_duration_ms": timings_ms["stage2_duration_ms"],
-                "decode_duration_ms": timings_ms["decode_duration_ms"],
-                "audio_decode_duration_ms": timings_ms["audio_decode_duration_ms"],
-                "tiling_mode": tiling_mode,
-                "output_width": width,
-                "output_height": height,
-                "output_frames": num_frames,
-                "internal_width": padded_shape.internal_width,
-                "internal_height": padded_shape.internal_height,
-                "audio_present": audio_waveform is not None,
-                "audio_sample_rate": audio_sample_rate,
-                "audio_channels": (
-                    int(audio_waveform.shape[1])
-                    if audio_waveform is not None and audio_waveform.ndim == 2
-                    else 1
-                    if audio_waveform is not None
-                    else 0
-                ),
-                "audio_backend": audio_backend,
-                "audio_bwe_applied": audio_backend == "mlxr_vocoder_with_bwe",
-                "audio_conditioned": audio_conditioning is not None,
-                "guidance_mode": (
-                    "cfg"
-                    if prompt_context.negative_prompt_text is not None
-                    else "positive_only"
-                ),
-                "negative_prompt_present": prompt_context.negative_prompt_text
-                is not None,
-            },
+            metadata=metadata,
         )
 
     def close(self) -> None:

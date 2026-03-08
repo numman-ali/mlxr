@@ -113,6 +113,14 @@ def _debug_progress(message: str) -> None:
         print(f"[ltx] {message}", flush=True)
 
 
+def _debug_trace_enabled() -> bool:
+    return os.environ.get("MLXR_LTX_DEBUG_TRACE") == "1"
+
+
+def _debug_trace_sync_enabled() -> bool:
+    return os.environ.get("MLXR_LTX_DEBUG_TRACE_SYNC") == "1"
+
+
 def _latent_stats(latents: MLXArray) -> dict[str, object]:
     latents_f32 = latents.astype(mx.float32)
     return {

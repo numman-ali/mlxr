@@ -346,8 +346,6 @@ class LTXModel(nn.Module):
             (".ff.net.2.", ".ff.proj_out."),
             (".audio_ff.net.0.proj.", ".audio_ff.proj_in."),
             (".audio_ff.net.2.", ".audio_ff.proj_out."),
-            (".linear_1.", ".linear1."),
-            (".linear_2.", ".linear2."),
         )
         for old, new in replacements:
             sanitized = sanitized.replace(old, new)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import mlx.core as mx
+from mlxr.core.runtime import TraceRecorder, mlx_memory_snapshot
 
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import _attention_mask, _context_width
@@ -17,6 +20,12 @@ from .types import (
 _VIDEO_CFG_SCALE = 3.0
 _AUDIO_CFG_SCALE = 7.0
 _GUIDANCE_RESCALE_SCALE = 0.7
+
+
+def _sync_optional_arrays(*arrays: MLXArray | None) -> None:
+    realized = tuple(array for array in arrays if array is not None)
+    if realized:
+        mx.eval(*realized)
 
 
 def _optional_context_width(value: object) -> int | None:
@@ -170,6 +179,8 @@ def _denoise_distilled_audio_video(
     state: _LatentStateLike | None,
     runtime_config: _RuntimeModelConfig,
     freeze_audio: bool = False,
+    trace_recorder: TraceRecorder | None = None,
+    trace_sync: bool = False,
 ) -> tuple[MLXArray, MLXArray]:
     latents_dtype = latents.dtype
     cfg_enabled = (
@@ -218,152 +229,211 @@ def _denoise_distilled_audio_video(
         zip(sigmas[:-1], sigmas[1:]),
         start=1,
     ):
-        if _debug_progress_enabled():
-            print(
-                "[ltx] denoise "
-                f"step={step_index}/{total_steps} "
-                f"sigma={float(sigma_value):.6f} "
-                f"audio_frames={audio_frames}",
-                flush=True,
+        step_context = (
+            trace_recorder.span(
+                "ltx.denoise.step",
+                attributes={
+                    "step_index": step_index,
+                    "total_steps": total_steps,
+                    "sigma": round(float(sigma_value), 6),
+                    "sigma_next": round(float(sigma_next_value), 6),
+                    "audio_frames": audio_frames,
+                    "cfg_enabled": cfg_enabled,
+                    "freeze_audio": freeze_audio,
+                },
+                snapshot=mlx_memory_snapshot,
             )
-        sigma = mx.array(float(sigma_value), dtype=latents_dtype)
-        sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
-        flat_latents = mx.transpose(
-            mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
+            if trace_recorder is not None
+            else nullcontext()
         )
-        modality = _PatchedModality(
-            latent=flat_latents,
-            sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
-            timesteps=sigma * video_timesteps_mask,
-            positions=positions,
-            context=text_embeddings,
-            context_mask=None,
-            enabled=True,
-            positional_embeddings=precomputed_rope,
-        )
-        audio_flat = mx.transpose(audio_latents, (0, 2, 1, 3))
-        audio_flat = mx.reshape(
-            audio_flat, (audio_batch, audio_frames, audio_channels * audio_bins)
-        )
-        audio_modality = _PatchedModality(
-            latent=audio_flat,
-            sigma=mx.full((audio_batch,), float(sigma_value), dtype=latents_dtype),
-            timesteps=sigma * audio_timesteps_mask,
-            positions=audio_positions,
-            context=audio_embeddings,
-            context_mask=None,
-            enabled=True,
-            positional_embeddings=precomputed_audio_rope,
-        )
-        velocity, audio_velocity = transformer(video=modality, audio=audio_modality)
-        if velocity is None or audio_velocity is None:
-            raise RuntimeError(
-                "LTX transformer returned empty video/audio velocities for an enabled AV step"
+        with step_context:
+            velocity: MLXArray | None = None
+            audio_velocity: MLXArray | None = None
+            negative_velocity: MLXArray | None = None
+            negative_audio_velocity: MLXArray | None = None
+            if _debug_progress_enabled():
+                print(
+                    "[ltx] denoise "
+                    f"step={step_index}/{total_steps} "
+                    f"sigma={float(sigma_value):.6f} "
+                    f"audio_frames={audio_frames}",
+                    flush=True,
+                )
+            sigma = mx.array(float(sigma_value), dtype=latents_dtype)
+            sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
+            flat_latents = mx.transpose(
+                mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
             )
-        velocity = mx.reshape(
-            mx.transpose(velocity, (0, 2, 1)),
-            (batch_size, channels, frames, latent_h, latent_w),
-        )
-        denoised = imports.to_denoised(latents, velocity, sigma)
-        audio_velocity = mx.reshape(
-            audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
-        )
-        audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
-        audio_denoised = (
-            audio_latents
-            if freeze_audio
-            else imports.to_denoised(audio_latents, audio_velocity, sigma)
-        )
-        negative_denoised: MLXArray | None = None
-        negative_audio_denoised: MLXArray | None = None
-        if (
-            negative_text_embeddings is not None
-            and negative_audio_embeddings is not None
-        ):
-            negative_modality = _PatchedModality(
+            modality = _PatchedModality(
                 latent=flat_latents,
                 sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
                 timesteps=sigma * video_timesteps_mask,
                 positions=positions,
-                context=negative_text_embeddings,
+                context=text_embeddings,
                 context_mask=None,
                 enabled=True,
                 positional_embeddings=precomputed_rope,
             )
-            negative_audio_modality = _PatchedModality(
+            audio_flat = mx.transpose(audio_latents, (0, 2, 1, 3))
+            audio_flat = mx.reshape(
+                audio_flat, (audio_batch, audio_frames, audio_channels * audio_bins)
+            )
+            audio_modality = _PatchedModality(
                 latent=audio_flat,
                 sigma=mx.full((audio_batch,), float(sigma_value), dtype=latents_dtype),
                 timesteps=sigma * audio_timesteps_mask,
                 positions=audio_positions,
-                context=negative_audio_embeddings,
+                context=audio_embeddings,
                 context_mask=None,
                 enabled=True,
                 positional_embeddings=precomputed_audio_rope,
             )
-            negative_velocity, negative_audio_velocity = transformer(
-                video=negative_modality,
-                audio=negative_audio_modality,
-            )
-            if negative_velocity is None or negative_audio_velocity is None:
-                raise RuntimeError(
-                    "LTX transformer returned empty negative video/audio velocities for an enabled AV step"
+            conditioned_context = (
+                trace_recorder.span(
+                    "ltx.denoise.forward.conditioned",
+                    attributes={"step_index": step_index},
+                    sync=(lambda: _sync_optional_arrays(velocity, audio_velocity))
+                    if trace_sync
+                    else None,
                 )
-            negative_velocity = mx.reshape(
-                mx.transpose(negative_velocity, (0, 2, 1)),
+                if trace_recorder is not None
+                else nullcontext()
+            )
+            with conditioned_context:
+                velocity, audio_velocity = transformer(
+                    video=modality, audio=audio_modality
+                )
+            if velocity is None or audio_velocity is None:
+                raise RuntimeError(
+                    "LTX transformer returned empty video/audio velocities for an enabled AV step"
+                )
+            velocity = mx.reshape(
+                mx.transpose(velocity, (0, 2, 1)),
                 (batch_size, channels, frames, latent_h, latent_w),
             )
-            negative_denoised = imports.to_denoised(latents, negative_velocity, sigma)
-            if not freeze_audio:
-                negative_audio_velocity = mx.reshape(
-                    negative_audio_velocity,
-                    (audio_batch, audio_frames, audio_channels, audio_bins),
+            denoised = imports.to_denoised(latents, velocity, sigma)
+            audio_velocity = mx.reshape(
+                audio_velocity, (audio_batch, audio_frames, audio_channels, audio_bins)
+            )
+            audio_velocity = mx.transpose(audio_velocity, (0, 2, 1, 3))
+            audio_denoised = (
+                audio_latents
+                if freeze_audio
+                else imports.to_denoised(audio_latents, audio_velocity, sigma)
+            )
+            negative_denoised: MLXArray | None = None
+            negative_audio_denoised: MLXArray | None = None
+            if (
+                negative_text_embeddings is not None
+                and negative_audio_embeddings is not None
+            ):
+                negative_modality = _PatchedModality(
+                    latent=flat_latents,
+                    sigma=mx.full(
+                        (batch_size,), float(sigma_value), dtype=latents_dtype
+                    ),
+                    timesteps=sigma * video_timesteps_mask,
+                    positions=positions,
+                    context=negative_text_embeddings,
+                    context_mask=None,
+                    enabled=True,
+                    positional_embeddings=precomputed_rope,
                 )
-                negative_audio_velocity = mx.transpose(
-                    negative_audio_velocity, (0, 2, 1, 3)
+                negative_audio_modality = _PatchedModality(
+                    latent=audio_flat,
+                    sigma=mx.full(
+                        (audio_batch,), float(sigma_value), dtype=latents_dtype
+                    ),
+                    timesteps=sigma * audio_timesteps_mask,
+                    positions=audio_positions,
+                    context=negative_audio_embeddings,
+                    context_mask=None,
+                    enabled=True,
+                    positional_embeddings=precomputed_audio_rope,
                 )
-                negative_audio_denoised = imports.to_denoised(
-                    audio_latents,
-                    negative_audio_velocity,
-                    sigma,
+                negative_context = (
+                    trace_recorder.span(
+                        "ltx.denoise.forward.negative",
+                        attributes={"step_index": step_index},
+                        sync=(
+                            lambda: _sync_optional_arrays(
+                                negative_velocity,
+                                negative_audio_velocity,
+                            )
+                        )
+                        if trace_sync
+                        else None,
+                    )
+                    if trace_recorder is not None
+                    else nullcontext()
                 )
-        denoised = _guided_prediction(
-            denoised,
-            negative_denoised,
-            scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
-            rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
-        )
-        if not freeze_audio:
-            audio_denoised = _guided_prediction(
-                audio_denoised,
-                negative_audio_denoised,
-                scale=_AUDIO_CFG_SCALE if cfg_enabled else 1.0,
+                with negative_context:
+                    negative_velocity, negative_audio_velocity = transformer(
+                        video=negative_modality,
+                        audio=negative_audio_modality,
+                    )
+                if negative_velocity is None or negative_audio_velocity is None:
+                    raise RuntimeError(
+                        "LTX transformer returned empty negative video/audio velocities for an enabled AV step"
+                    )
+                negative_velocity = mx.reshape(
+                    mx.transpose(negative_velocity, (0, 2, 1)),
+                    (batch_size, channels, frames, latent_h, latent_w),
+                )
+                negative_denoised = imports.to_denoised(
+                    latents, negative_velocity, sigma
+                )
+                if not freeze_audio:
+                    negative_audio_velocity = mx.reshape(
+                        negative_audio_velocity,
+                        (audio_batch, audio_frames, audio_channels, audio_bins),
+                    )
+                    negative_audio_velocity = mx.transpose(
+                        negative_audio_velocity, (0, 2, 1, 3)
+                    )
+                    negative_audio_denoised = imports.to_denoised(
+                        audio_latents,
+                        negative_audio_velocity,
+                        sigma,
+                    )
+            denoised = _guided_prediction(
+                denoised,
+                negative_denoised,
+                scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
                 rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
             )
-        if state is not None:
-            denoised = imports.apply_denoise_mask(
-                denoised, state.clean_latent, state.denoise_mask
-            )
-        if float(sigma_next_value) == 0.0:
-            latents = denoised.astype(latents_dtype)
-            audio_latents = audio_denoised.astype(latents_dtype)
-        else:
-            latents = (
-                denoised.astype(mx.float32)
-                + sigma_next.astype(mx.float32)
-                * (latents.astype(mx.float32) - denoised.astype(mx.float32))
-                / sigma.astype(mx.float32)
-            ).astype(latents_dtype)
-            if freeze_audio:
+            if not freeze_audio:
+                audio_denoised = _guided_prediction(
+                    audio_denoised,
+                    negative_audio_denoised,
+                    scale=_AUDIO_CFG_SCALE if cfg_enabled else 1.0,
+                    rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+                )
+            if state is not None:
+                denoised = imports.apply_denoise_mask(
+                    denoised, state.clean_latent, state.denoise_mask
+                )
+            if float(sigma_next_value) == 0.0:
+                latents = denoised.astype(latents_dtype)
                 audio_latents = audio_denoised.astype(latents_dtype)
             else:
-                audio_latents = (
-                    audio_denoised.astype(mx.float32)
+                latents = (
+                    denoised.astype(mx.float32)
                     + sigma_next.astype(mx.float32)
-                    * (
-                        audio_latents.astype(mx.float32)
-                        - audio_denoised.astype(mx.float32)
-                    )
+                    * (latents.astype(mx.float32) - denoised.astype(mx.float32))
                     / sigma.astype(mx.float32)
                 ).astype(latents_dtype)
-        mx.eval(latents, audio_latents)
+                if freeze_audio:
+                    audio_latents = audio_denoised.astype(latents_dtype)
+                else:
+                    audio_latents = (
+                        audio_denoised.astype(mx.float32)
+                        + sigma_next.astype(mx.float32)
+                        * (
+                            audio_latents.astype(mx.float32)
+                            - audio_denoised.astype(mx.float32)
+                        )
+                        / sigma.astype(mx.float32)
+                    ).astype(latents_dtype)
+            mx.eval(latents, audio_latents)
     return latents, audio_latents
