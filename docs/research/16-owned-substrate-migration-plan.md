@@ -50,6 +50,8 @@ Already moved onto repo-owned code in the promoted distilled path:
 
 - latent upsampling helper
 - audio decoder loader path
+- audio encoder and decoder model stack
+- audio latent patchify / unpatchify and per-channel statistics contract
 - VAE encoder loader path
 - encoder-side video-VAE substrate
 - x2 spatial upsampler class and loader path
@@ -63,7 +65,7 @@ Already moved onto repo-owned code in the promoted distilled path:
 Still donor-backed in the promoted distilled path:
 
 - transformer construction and patched bridge
-- remaining audio runtime classes and shared helper imports
+- remaining audio runtime helper imports
 - donor checkout import indirection through the current helper stack
 
 This means the current promoted slice is healthier than before, but it is not

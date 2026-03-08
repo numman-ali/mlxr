@@ -9,6 +9,11 @@ import numpy.typing as npt
 
 from ..generation import AudioConditioningInput, ConditioningInput
 from ..prompt_encoding import PromptEncodingResult
+from .audio_autoencoder import (
+    AudioCausalityAxis,
+    AudioEncoderModel,
+    AudioNormKind,
+)
 from .audio_processor import AudioProcessor
 from .audio_render import decode_audio
 from .conditioning import (
@@ -214,12 +219,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         adaln_module = importlib.import_module("mlx_video.models.ltx.adaln")
         rope_module = importlib.import_module("mlx_video.models.ltx.rope")
         transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
-        audio_vae_module = importlib.import_module(
-            "mlx_video.models.ltx.audio_vae.audio_vae"
-        )
-        audio_vae_init_module = importlib.import_module(
-            "mlx_video.models.ltx.audio_vae"
-        )
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
     runtime_model_config = _runtime_model_config(self.checkpoint_path)
@@ -255,18 +254,11 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
             _load_runtime_audio_decoder(
                 checkpoint_root=checkpoint_root,
-                audio_decoder_class=audio_vae_init_module.AudioDecoder,
-                audio_norm_type_enum=audio_vae_init_module.NormType,
-                audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
                 sanitize_audio_vae_weights=sanitize_audio_vae_weights,
                 unified_weights=unified_weights,
             )
         ),
-        audio_encoder_class=audio_vae_module.AudioEncoder,
-        audio_decoder_class=audio_vae_init_module.AudioDecoder,
         audio_processor_class=_audio_processor_factory,
-        audio_norm_type_enum=audio_vae_init_module.NormType,
-        audio_causality_axis_enum=audio_vae_init_module.CausalityAxis,
         decode_audio=decode_audio,
         prepare_image_for_encoding=_prepare_image_for_encoding_ref,
         upsample_latents=_upsample_latents,
@@ -426,21 +418,20 @@ def _ensure_audio_encoder(
     sanitized = sanitize_audio_vae_weights(checkpoint_audio_weights)
     checkpoint_root = self.checkpoint_path.parent
     audio_config = _runtime_audio_encoder_config(checkpoint_root)
-    norm_type = imports.audio_norm_type_enum(audio_config.norm_type)
-    causality_axis = imports.audio_causality_axis_enum(audio_config.causality_axis)
+    norm_kind = AudioNormKind.from_config_value(audio_config.norm_type)
+    causality_axis = AudioCausalityAxis.from_config_value(audio_config.causality_axis)
 
-    encoder = imports.audio_encoder_class(
-        ch=audio_config.base_channels,
-        ch_mult=audio_config.ch_mult,
+    encoder = AudioEncoderModel(
+        base_channels=audio_config.base_channels,
+        channel_multipliers=audio_config.ch_mult,
         num_res_blocks=audio_config.num_res_blocks,
         attn_resolutions=audio_config.attn_resolutions,
         dropout=audio_config.dropout,
-        resamp_with_conv=True,
         in_channels=audio_config.in_channels,
         resolution=audio_config.resolution,
-        z_channels=audio_config.latent_channels,
+        latent_channels=audio_config.latent_channels,
         double_z=audio_config.double_z,
-        norm_type=norm_type,
+        norm_kind=norm_kind,
         causality_axis=causality_axis,
         mid_block_add_attention=audio_config.mid_block_add_attention,
         sample_rate=audio_config.sample_rate,

@@ -8,6 +8,8 @@ import mlx.core as mx
 import numpy as np
 import numpy.typing as npt
 
+from .audio_autoencoder import AudioDecoderModel, AudioEncoderModel
+
 MLXArray: TypeAlias = mx.array
 
 
@@ -169,25 +171,8 @@ class _UpsamplerLike(_GeneratorModule, Protocol):
     def __call__(self, latent: MLXArray, debug: bool = False) -> MLXArray: ...
 
 
-class _AudioEncoderLike(_GeneratorModule, Protocol):
-    @property
-    def per_channel_statistics(self) -> "_PerChannelStatistics": ...
-
-    @property
-    def in_channels(self) -> int: ...
-
-    def __call__(self, mel: MLXArray) -> MLXArray: ...
-
-    def load_weights(
-        self, weights: list[tuple[str, MLXArray]], *, strict: bool = ...
-    ) -> None: ...
-
-
-class _AudioDecoderLike(_GeneratorModule, Protocol):
-    @property
-    def per_channel_statistics(self) -> "_PerChannelStatistics": ...
-
-    def __call__(self, audio_latents: MLXArray) -> MLXArray: ...
+_AudioEncoderLike: TypeAlias = AudioEncoderModel
+_AudioDecoderLike: TypeAlias = AudioDecoderModel
 
 
 class _AudioProcessorLike(Protocol):
@@ -274,52 +259,6 @@ class _LoadAudioDecoder(Protocol):
     ) -> _AudioDecoderLike: ...
 
 
-class _AudioEncoderFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        ch: int,
-        ch_mult: tuple[int, ...],
-        num_res_blocks: int,
-        attn_resolutions: set[int],
-        dropout: float,
-        resamp_with_conv: bool,
-        in_channels: int,
-        resolution: int,
-        z_channels: int,
-        double_z: bool,
-        norm_type: object,
-        causality_axis: object,
-        mid_block_add_attention: bool,
-        sample_rate: int,
-        mel_hop_length: int,
-        n_fft: int,
-        mel_bins: int,
-        is_causal: bool,
-    ) -> _AudioEncoderLike: ...
-
-
-class _AudioDecoderFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        ch: int,
-        out_ch: int,
-        ch_mult: tuple[int, ...],
-        num_res_blocks: int,
-        attn_resolutions: set[int],
-        resolution: int,
-        z_channels: int,
-        norm_type: object,
-        causality_axis: object,
-        mel_bins: int,
-        mid_block_add_attention: bool,
-        sample_rate: int,
-        mel_hop_length: int,
-        is_causal: bool,
-    ) -> _AudioDecoderLike: ...
-
-
 class _AudioProcessorFactory(Protocol):
     def __call__(
         self,
@@ -329,10 +268,6 @@ class _AudioProcessorFactory(Protocol):
         mel_hop_length: int,
         n_fft: int,
     ) -> _AudioProcessorLike: ...
-
-
-class _AudioEnumFactory(Protocol):
-    def __call__(self, value: str) -> object: ...
 
 
 class _SanitizeAudioVAEWeights(Protocol):
@@ -500,11 +435,7 @@ class _ReferenceImports:
     load_image: _ImageLoader
     load_vae_encoder: _LoadVAEEncoder
     load_audio_decoder: _LoadAudioDecoder
-    audio_encoder_class: _AudioEncoderFactory
-    audio_decoder_class: _AudioDecoderFactory
     audio_processor_class: _AudioProcessorFactory
-    audio_norm_type_enum: _AudioEnumFactory
-    audio_causality_axis_enum: _AudioEnumFactory
     decode_audio: _DecodeAudio
     prepare_image_for_encoding: _PreparedImageEncoder
     upsample_latents: _UpsampleLatents

@@ -8,6 +8,11 @@ import mlx.core as mx
 from .. import _nn_compat as nn
 from .._audio_bwe import AudioMelSTFT, AudioVocoderWithBWE
 from .._audio_vocoder import AudioVocoder
+from .audio_autoencoder import (
+    AudioCausalityAxis,
+    AudioDecoderModel,
+    AudioNormKind,
+)
 from .config import (
     _decoder_initial_feature_channels,
     _first_present,
@@ -20,9 +25,7 @@ from .config import (
 from .spatial_upsampler import LatentUpsampler
 from .types import (
     MLXArray,
-    _AudioDecoderFactory,
     _AudioDecoderLike,
-    _AudioEnumFactory,
     _RuntimeVocoderArchitectureConfig,
     _SanitizeAudioVAEWeights,
     _SanitizeVocoderWeights,
@@ -609,30 +612,28 @@ def _load_runtime_vae_encoder(
 def _load_runtime_audio_decoder(
     *,
     checkpoint_root: Path,
-    audio_decoder_class: _AudioDecoderFactory,
-    audio_norm_type_enum: _AudioEnumFactory,
-    audio_causality_axis_enum: _AudioEnumFactory,
     sanitize_audio_vae_weights: _SanitizeAudioVAEWeights,
     unified_weights: dict[str, MLXArray],
 ) -> _AudioDecoderLike:
     audio_config = _runtime_audio_encoder_config(checkpoint_root)
-    norm_type = audio_norm_type_enum(audio_config.norm_type)
-    causality_axis = audio_causality_axis_enum(audio_config.causality_axis)
+    norm_kind = AudioNormKind.from_config_value(audio_config.norm_type)
+    causality_axis = AudioCausalityAxis.from_config_value(audio_config.causality_axis)
 
-    decoder = audio_decoder_class(
-        ch=audio_config.base_channels,
-        out_ch=audio_config.in_channels,
-        ch_mult=audio_config.ch_mult,
+    decoder = AudioDecoderModel(
+        base_channels=audio_config.base_channels,
+        out_channels=audio_config.in_channels,
+        channel_multipliers=audio_config.ch_mult,
         num_res_blocks=audio_config.num_res_blocks,
         attn_resolutions=audio_config.attn_resolutions,
         resolution=audio_config.resolution,
-        z_channels=audio_config.latent_channels,
-        norm_type=norm_type,
+        latent_channels=audio_config.latent_channels,
+        norm_kind=norm_kind,
         causality_axis=causality_axis,
         mel_bins=audio_config.mel_bins,
-        mid_block_add_attention=audio_config.mid_block_add_attention,
+        dropout=audio_config.dropout,
         sample_rate=audio_config.sample_rate,
         mel_hop_length=audio_config.mel_hop_length,
+        mid_block_add_attention=audio_config.mid_block_add_attention,
         is_causal=audio_config.is_causal,
     )
 
