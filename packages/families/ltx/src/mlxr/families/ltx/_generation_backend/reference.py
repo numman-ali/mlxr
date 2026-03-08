@@ -214,6 +214,12 @@ def _is_multi_preprocessor(
 def _patch_reference_modules(imports: _ReferenceImports) -> None:
     if getattr(imports.model_class, "_mlxr_22b_patch", False):
         return
+    patch_attention = not getattr(imports.attention_class, "__module__", "").startswith(
+        "mlxr."
+    )
+    patch_blocks = not getattr(
+        imports.BasicAVTransformerBlock, "__module__", ""
+    ).startswith("mlxr.")
     patch_config = not getattr(imports.model_config_class, "__module__", "").startswith(
         "mlxr."
     )
@@ -231,8 +237,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         if patch_config
         else None
     )
-    original_attention_init: Callable[..., None] = getattr(
-        imports.attention_class, "__init__"
+    original_attention_init: Callable[..., None] | None = (
+        getattr(imports.attention_class, "__init__") if patch_attention else None
     )
     original_preprocessor_init: Callable[..., None] | None = (
         getattr(imports.preprocessor_class, "__init__") if patch_preprocessors else None
@@ -256,8 +262,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
     original_model_init_transformer_blocks: Callable[..., None] = getattr(
         imports.model_class, "_init_transformer_blocks"
     )
-    original_block_init: Callable[..., None] = getattr(
-        imports.BasicAVTransformerBlock, "__init__"
+    original_block_init: Callable[..., None] | None = (
+        getattr(imports.BasicAVTransformerBlock, "__init__") if patch_blocks else None
     )
     original_model_call: Callable[..., tuple[MLXArray | None, MLXArray | None]] = (
         getattr(imports.model_class, "__call__")
@@ -313,6 +319,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         rope_type: object = None,
         apply_gated_attention: bool = False,
     ) -> None:
+        if original_attention_init is None:
+            raise RuntimeError("Expected donor attention init when patching attention")
         if rope_type is None:
             rope_type = getattr(imports.rope_type_enum, "INTERLEAVED")
         original_attention_init(
@@ -714,6 +722,8 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         rope_type: object = None,
         norm_eps: float = 1e-6,
     ) -> None:
+        if original_block_init is None:
+            raise RuntimeError("Expected donor block init when patching block")
         if rope_type is None:
             rope_type = getattr(imports.rope_type_enum, "INTERLEAVED")
         original_block_init(
@@ -1063,8 +1073,9 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         setattr(
             imports.model_config_class, "get_audio_config", patched_get_audio_config
         )
-    setattr(imports.attention_class, "__init__", patched_attention_init)
-    setattr(imports.attention_class, "__call__", patched_attention_call)
+    if patch_attention:
+        setattr(imports.attention_class, "__init__", patched_attention_init)
+        setattr(imports.attention_class, "__call__", patched_attention_call)
     if patch_preprocessors:
         setattr(imports.preprocessor_class, "__init__", patched_preprocessor_init)
         setattr(
@@ -1092,6 +1103,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         patched_model_init_transformer_blocks,
     )
     setattr(imports.model_class, "__call__", patched_model_call)
-    setattr(imports.BasicAVTransformerBlock, "__init__", patched_block_init)
-    setattr(imports.BasicAVTransformerBlock, "__call__", patched_block_call)
+    if patch_blocks:
+        setattr(imports.BasicAVTransformerBlock, "__init__", patched_block_init)
+        setattr(imports.BasicAVTransformerBlock, "__call__", patched_block_call)
     setattr(imports.model_class, "_mlxr_22b_patch", True)

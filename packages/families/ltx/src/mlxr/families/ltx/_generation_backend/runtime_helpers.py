@@ -10,6 +10,7 @@ import numpy.typing as npt
 from ..generation import AudioConditioningInput, ConditioningInput
 from ..prompt_encoding import PromptEncodingResult
 from .adaln_ops import AdaLayerNormSingle
+from .attention_ops import Attention, scaled_dot_product_attention
 from .audio_autoencoder import (
     AudioCausalityAxis,
     AudioEncoderModel,
@@ -53,6 +54,7 @@ from .primitives import (
 from .reference import _patch_reference_modules
 from .reference_imports import _reference_path_on_sys_path
 from .rope_ops import LTXRopeType, apply_rotary_emb, precompute_freqs_cis
+from .transformer_blocks import BasicAVTransformerBlock
 from .transformer_preprocessors import (
     MultiModalTransformerArgsPreprocessor,
     TransformerArgsPreprocessor,
@@ -228,8 +230,6 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         return self._reference_imports
 
     with _reference_path_on_sys_path():
-        attention_module = importlib.import_module("mlx_video.models.ltx.attention")
-        transformer_module = importlib.import_module("mlx_video.models.ltx.transformer")
         ltx_module = importlib.import_module("mlx_video.models.ltx.ltx")
 
     audio_runtime_config = _runtime_audio_encoder_config(self.checkpoint_path.parent)
@@ -240,8 +240,10 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         model_config_class=LTXModelConfig,
         model_type_enum=LTXModelType,
         rope_type_enum=_OwnedRopeTypeEnum,
-        BasicAVTransformerBlock=transformer_module.BasicAVTransformerBlock,
-        attention_class=attention_module.Attention,
+        BasicAVTransformerBlock=lambda *args, **kwargs: BasicAVTransformerBlock(
+            *args, **kwargs
+        ),
+        attention_class=Attention,
         preprocessor_class=TransformerArgsPreprocessor,
         multi_preprocessor_class=MultiModalTransformerArgsPreprocessor,
         adaln_class=AdaLayerNormSingle,
@@ -249,7 +251,7 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         precompute_freqs_cis=precompute_freqs_cis,
         rms_norm=rms_norm,
         to_denoised=_to_denoised_ref,
-        scaled_dot_product_attention=attention_module.scaled_dot_product_attention,
+        scaled_dot_product_attention=scaled_dot_product_attention,
         latent_state_class=LatentState,
         condition_class=_condition_ref,
         stage_1_sigmas=STAGE_1_SIGMAS,

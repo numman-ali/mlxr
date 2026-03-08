@@ -67,10 +67,9 @@ Already moved onto repo-owned code in the promoted distilled path:
 
 Still donor-backed in the promoted distilled path:
 
-- transformer construction and patched bridge beyond the owned rotary / AdaLN /
-  preprocessor seam
-- remaining audio runtime helper imports
-- donor checkout import indirection through the current helper stack
+- the top-level `LTXModel` constructor / loader bridge
+- donor checkout import indirection through the current helper stack for that
+  final model seam
 
 This means the current promoted slice is healthier than before, but it is not
 yet donor-free.

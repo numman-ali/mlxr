@@ -74,8 +74,9 @@ Use this with:
   decoder-side tiling and tile blending, the decoder-side convolution /
   timestep / residual / upsampling blocks, the transformer-side rotary
   embeddings, the transformer-side timestep embedding / AdaLN / transformer
-  preprocessors, and the donor utility sanitizers and RMS norm helper it
-  previously imported.
+  preprocessors, the attention module, the basic AV transformer block, and the
+  donor utility sanitizers and RMS norm helper it previously imported. The
+  remaining donor execution seam is now the top-level `LTXModel` bridge.
 - [ ] No runtime `mlx_video.*` import remains in the promoted distilled path.
 - [ ] No execution-path `sys.path` injection into the repo-local `mlx-video`
   checkout remains.
