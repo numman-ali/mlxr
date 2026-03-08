@@ -88,6 +88,7 @@ Current showcase truth:
 - the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
 - it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
 - the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`
+- the current best-available promoted pack that incorporates that dog recovery is `tmp/showcase-runs/showcase-pack-20260308-best-available.json`
 - it does not yet prove that text-first natural-audio realism is solved broadly; nature and natural-vintage scenes still need to clear the same video-plus-audio Gemini review bar on the newer path
 
 ## Recommended next implementation order

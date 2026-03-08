@@ -121,6 +121,12 @@ Current score-friendly showcase truth:
 - the consolidated receipt is `tmp/showcase-runs/showcase-pack-20260308.json`
 - this pack is truthful for stylized and score-friendly scenes; it is not evidence that natural-audio realism is solved
 
+Current best-available promoted pack:
+
+- the current strongest five-clip pack is `tmp/showcase-runs/showcase-pack-20260308-best-available.json`
+- it keeps four previously promoted stylized scenes and replaces the earlier blocked dog row with the newer natural-audio dog success under `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`
+- this is the best truthful pack today, but it still does not promote the broader natural-scene story beyond that dog scene
+
 Suggested initial scene set:
 
 - [ ] cinematic natural dog with owner in a park
