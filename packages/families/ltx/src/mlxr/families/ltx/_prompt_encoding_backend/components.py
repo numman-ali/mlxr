@@ -25,6 +25,7 @@ from .masks import (
 )
 
 if runtime._RUNTIME_IMPORT_ERROR is None:
+    from mlx.utils import tree_flatten
 
     @dataclass
     class _PromptTextConfig:
@@ -53,6 +54,37 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 sliding_window=int(sliding_window),
                 sliding_window_pattern=int(config.sliding_window_pattern),
             )
+
+    def _sample_parameter_keys(keys: set[str], *, limit: int = 5) -> str:
+        sampled = sorted(keys)[:limit]
+        if len(keys) <= limit:
+            return ", ".join(sampled)
+        return ", ".join(sampled) + ", ..."
+
+    def _assert_loaded_parameter_coverage(
+        module: Module,
+        *,
+        loaded_keys: set[str],
+        context: str,
+    ) -> None:
+        expected_parameters = tree_flatten(module.parameters(), destination={})
+        expected_keys = {str(key) for key in expected_parameters}
+        missing_keys = expected_keys - loaded_keys
+        unexpected_keys = loaded_keys - expected_keys
+        if not missing_keys and not unexpected_keys:
+            return
+        details: list[str] = []
+        if missing_keys:
+            details.append(
+                f"missing {len(missing_keys)} keys"
+                f" ({_sample_parameter_keys(missing_keys)})"
+            )
+        if unexpected_keys:
+            details.append(
+                f"unexpected {len(unexpected_keys)} keys"
+                f" ({_sample_parameter_keys(unexpected_keys)})"
+            )
+        raise RuntimeError(f"{context} weight coverage mismatch: {'; '.join(details)}")
 
     class LanguageModel(Module):
         def __init__(self, config: runtime.TextConfig):
@@ -90,10 +122,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             )
 
             for index, layer in enumerate(self.model.layers):
-                is_global = (
-                    index % self.config.sliding_window_pattern
-                    == self.config.sliding_window_pattern - 1
-                )
+                is_global = self.model.args.is_global_layer(index)
                 local_mask = global_mask if is_global else sliding_window_mask
                 hidden = layer(hidden, local_mask, cache[index])
                 if output_hidden_states and index < len(self.model.layers) - 1:
@@ -134,6 +163,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 _apply_quantization(language_model, scale_keys, quantization)
 
             prefix = "language_model."
+            loaded_parameter_keys: set[str] = set()
             for weight_file in weight_files:
                 shard = mx.load(str(weight_file))
                 if not isinstance(shard, dict):
@@ -148,11 +178,17 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                     if hasattr(value, "dtype") and value.dtype == mx.float32:
                         value = value.astype(mx.bfloat16)
                     items.append((stripped, value))
+                    loaded_parameter_keys.add(stripped)
                 if items:
                     language_model.load_weights(items, strict=False)
                 del shard
                 mx.clear_cache()
 
+            _assert_loaded_parameter_coverage(
+                language_model,
+                loaded_keys=loaded_parameter_keys,
+                context="Gemma text encoder",
+            )
             return language_model
 
     class ConnectorAttention(Module):

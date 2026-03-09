@@ -30,7 +30,11 @@ if TYPE_CHECKING:
     class _GemmaNorm(Protocol):
         def __call__(self, hidden: mx.array) -> mx.array: ...
 
+    class _GemmaArgs(Protocol):
+        def is_global_layer(self, layer_index: int) -> bool: ...
+
     class Gemma3Model(Module):
+        args: _GemmaArgs
         embed_tokens: _EmbedTokens
         layers: list[_GemmaLayer]
         norm: _GemmaNorm

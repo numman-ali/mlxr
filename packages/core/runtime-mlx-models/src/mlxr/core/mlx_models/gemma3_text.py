@@ -7,7 +7,6 @@ from transformers import Gemma3TextConfig
 
 from ._nn_compat import (
     ModuleBase,
-    build_embedding,
     build_linear,
     gelu_approx,
 )
@@ -40,11 +39,12 @@ class ModelArgs(BaseModelArgs):
 
     @property
     def sliding_window_pattern(self) -> int:
-        if self.layer_types is not None:
-            return max(
-                1, sum(1 for layer in self.layer_types if layer == "sliding_attention")
-            )
         return self._sliding_window_pattern
+
+    def is_global_layer(self, layer_index: int) -> bool:
+        if self.layer_types is not None:
+            return self.layer_types[layer_index] != "sliding_attention"
+        return (layer_index + 1) % self._sliding_window_pattern == 0
 
     @classmethod
     def from_text_config(cls, config: TextConfig) -> ModelArgs:
@@ -106,7 +106,7 @@ class Attention(ModuleBase):
         self.o_proj = build_linear(self.num_heads * self.head_dim, dim, bias=False)
         self.q_norm = RMSNorm(self.head_dim, eps=args.rms_norm_eps)
         self.k_norm = RMSNorm(self.head_dim, eps=args.rms_norm_eps)
-        self.is_sliding = (layer_index + 1) % args.sliding_window_pattern != 0
+        self.is_sliding = not args.is_global_layer(layer_index)
         rope_base = 10_000.0 if self.is_sliding else args.rope_theta
         self.rope = initialize_rope(
             dims=self.head_dim,
@@ -199,14 +199,10 @@ class TransformerBlock(ModuleBase):
 class TokenEmbedding(ModuleBase):
     def __init__(self, num_embeddings: int, dims: int) -> None:
         super().__init__()
-        self._embedding = build_embedding(num_embeddings, dims)
-
-    @property
-    def weight(self) -> mx.array:
-        return self._embedding.weight
+        self.weight = mx.zeros((num_embeddings, dims))
 
     def __call__(self, inputs: mx.array) -> mx.array:
-        return self._embedding(inputs)
+        return self.weight[inputs]
 
     def as_linear(self, hidden: mx.array) -> mx.array:
         return hidden @ self.weight.T
@@ -242,21 +238,32 @@ class Gemma3Model(ModuleBase):
         hidden *= mx.array(self.args.hidden_size**0.5, mx.bfloat16).astype(hidden.dtype)
         if cache is None:
             cache = [None] * len(self.layers)
-        global_mask = create_attention_mask(
-            hidden, cache[self.sliding_window_pattern - 1]
+        first_global_index = next(
+            (i for i in range(len(self.layers)) if self.args.is_global_layer(i)),
+            self.sliding_window_pattern - 1,
         )
-        if self.sliding_window_pattern > 1:
+        global_mask = create_attention_mask(hidden, cache[first_global_index])
+        has_sliding = any(
+            not self.args.is_global_layer(i) for i in range(len(self.layers))
+        )
+        if has_sliding:
+            first_sliding_index = next(
+                (
+                    i
+                    for i in range(len(self.layers))
+                    if not self.args.is_global_layer(i)
+                ),
+                0,
+            )
             sliding_window_mask = create_attention_mask(
                 hidden,
-                cache[0],
+                cache[first_sliding_index],
                 window_size=self.window_size,
             )
         else:
             sliding_window_mask = None
         for index, (layer, layer_cache) in enumerate(zip(self.layers, cache)):
-            is_global = (
-                index % self.sliding_window_pattern == self.sliding_window_pattern - 1
-            )
+            is_global = self.args.is_global_layer(index)
             mask = global_mask if is_global else sliding_window_mask
             hidden = layer(hidden, mask, layer_cache)
         return self.norm(hidden)
@@ -264,10 +271,7 @@ class Gemma3Model(ModuleBase):
     def make_cache(self) -> list[KVCache | RotatingKVCache]:
         caches: list[KVCache | RotatingKVCache] = []
         for index in range(self.args.num_hidden_layers):
-            if (
-                index % self.args.sliding_window_pattern
-                == self.args.sliding_window_pattern - 1
-            ):
+            if self.args.is_global_layer(index):
                 caches.append(KVCache())
             else:
                 caches.append(RotatingKVCache(max_size=self.args.sliding_window))
