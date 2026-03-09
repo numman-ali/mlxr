@@ -19,6 +19,7 @@ class _FakeHFTokenizer:
         self.padding_side = "right"
         self.pad_token: str | None = None
         self.eos_token: str | None = "</s>"
+        self.last_prompt: str | None = None
 
     def __call__(
         self,
@@ -29,7 +30,8 @@ class _FakeHFTokenizer:
         truncation: bool,
         padding: str,
     ) -> dict[str, object]:
-        del prompt, return_tensors, truncation, padding
+        self.last_prompt = prompt
+        del return_tensors, truncation, padding
         return {
             "input_ids": np.zeros((1, max_length), dtype=np.int32),
             "attention_mask": np.ones((1, max_length), dtype=np.int32),
@@ -47,12 +49,14 @@ class _FakeHFTokenizer:
 
 class TokenizationTests(unittest.TestCase):
     def test_transformers_wrapper_encodes_and_decodes(self) -> None:
-        tokenizer = TransformersTextTokenizer(_FakeHFTokenizer())
-        encoded = tokenizer.encode_text("hello", max_length=4)
+        fake = _FakeHFTokenizer()
+        tokenizer = TransformersTextTokenizer(fake)
+        encoded = tokenizer.encode_text("  hello  ", max_length=4)
         self.assertIsInstance(encoded, EncodedText)
         self.assertEqual(encoded.input_ids.shape, (1, 4))
         self.assertEqual(encoded.attention_mask.shape, (1, 4))
         self.assertEqual(tokenizer.decode_tokens([1, 2, 3]), "1,2,3")
+        self.assertEqual(fake.last_prompt, "hello")
 
     def test_load_local_text_tokenizer_sets_left_padding_and_pad_token(self) -> None:
         fake_tokenizer = _FakeHFTokenizer()

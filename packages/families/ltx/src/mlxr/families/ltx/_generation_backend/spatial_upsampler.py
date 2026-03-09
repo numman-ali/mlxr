@@ -170,15 +170,13 @@ class LatentUpsampler(nn_compat.Module):
             num_groups=32,
             num_channels=mid_channels,
         )
-        self.res_blocks = {
-            index: _Residual3DBlock(channels=mid_channels)
-            for index in range(num_blocks_per_stage)
-        }
+        self.res_blocks = [
+            _Residual3DBlock(channels=mid_channels) for _ in range(num_blocks_per_stage)
+        ]
         self.upsampler = _FramewiseSpatialUpsampler(mid_channels=mid_channels)
-        self.post_upsample_res_blocks = {
-            index: _Residual3DBlock(channels=mid_channels)
-            for index in range(num_blocks_per_stage)
-        }
+        self.post_upsample_res_blocks = [
+            _Residual3DBlock(channels=mid_channels) for _ in range(num_blocks_per_stage)
+        ]
         self.final_conv = _Conv3DChannelsLast(
             in_channels=mid_channels,
             out_channels=in_channels,
@@ -192,10 +190,10 @@ class LatentUpsampler(nn_compat.Module):
         hidden = self.initial_conv(hidden)
         hidden = self.initial_norm(hidden)
         hidden = nn_compat.SiLU()(hidden)
-        for index in sorted(self.res_blocks):
-            hidden = self.res_blocks[index](hidden)
+        for block in self.res_blocks:
+            hidden = block(hidden)
         hidden = self.upsampler(hidden)
-        for index in sorted(self.post_upsample_res_blocks):
-            hidden = self.post_upsample_res_blocks[index](hidden)
+        for block in self.post_upsample_res_blocks:
+            hidden = block(hidden)
         hidden = self.final_conv(hidden)
         return mx.transpose(hidden, (0, 4, 1, 2, 3))

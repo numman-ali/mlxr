@@ -7,6 +7,7 @@ from typing import Mapping, Protocol
 import mlx.core as mx
 from safetensors import safe_open
 
+from .._checkpoint_contract import resolve_transformer_semantic_contract
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import _attention_mask, _context_width
 from .reference_imports import _REFERENCE_MLX_VIDEO_ROOT
@@ -187,6 +188,31 @@ def _load_optional_json_config(config_path: Path) -> dict[str, object]:
     if not isinstance(raw, dict):
         raise RuntimeError(f"LTX config '{config_path}' must decode to an object")
     return raw
+
+
+def _checkpoint_file_for_root(checkpoint_root: Path) -> Path | None:
+    if checkpoint_root.is_file():
+        return checkpoint_root
+    candidates = sorted(checkpoint_root.glob("*.safetensors"))
+    if len(candidates) == 1:
+        return candidates[0]
+    preferred = checkpoint_root / "model.safetensors"
+    if preferred.is_file():
+        return preferred
+    return None
+
+
+def _nested_mapping(
+    mapping: Mapping[str, object], path: tuple[str, ...]
+) -> dict[str, object] | None:
+    current: object = mapping
+    for segment in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(segment)
+    if not isinstance(current, dict):
+        return None
+    return current
 
 
 def _first_present(
@@ -534,6 +560,17 @@ def _runtime_audio_encoder_config(checkpoint_root: Path) -> _RuntimeAudioEncoder
     raw_config = _load_optional_json_config(
         checkpoint_root / "audio_vae" / "config.json"
     )
+    if not raw_config:
+        checkpoint_path = _checkpoint_file_for_root(checkpoint_root)
+        if checkpoint_path is not None:
+            metadata = _checkpoint_metadata(checkpoint_path)
+            raw_config = (
+                _nested_mapping(
+                    metadata,
+                    ("audio_vae", "model", "params", "ddconfig"),
+                )
+                or {}
+            )
 
     raw_ch_mult = raw_config.get("ch_mult", (1, 2, 4))
     if not isinstance(raw_ch_mult, (list, tuple)):
@@ -698,6 +735,14 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
             for key in checkpoint_keys
         ),
     )
+    contract = resolve_transformer_semantic_contract(
+        transformer_config=raw_transformer_config,
+        source=str(checkpoint_path),
+        checkpoint_path=checkpoint_path,
+        fallback_apply_gated_attention=apply_gated_attention,
+        fallback_cross_attention_adaln=cross_attention_adaln,
+        enforce_prompt_v2_layout=False,
+    )
     audio_in_channels = _int_or_default(
         raw_transformer_config.get("audio_in_channels"),
         default_audio_channels,
@@ -797,36 +842,14 @@ def _runtime_model_config(checkpoint_path: Path) -> _RuntimeModelConfig:
                 f"LTX checkpoint '{checkpoint_path}' has invalid use_middle_indices_grid metadata"
             ),
         ),
-        rope_type=_required_transformer_string(
-            raw_transformer_config, checkpoint_path, "rope_type"
-        ),
-        double_precision_rope=(
-            _required_transformer_string(
-                raw_transformer_config, checkpoint_path, "frequencies_precision"
-            ).lower()
-            == "float64"
-        ),
-        timestep_scale_multiplier=_int_value(
-            raw_transformer_config.get("timestep_scale_multiplier", 1000),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid timestep_scale_multiplier metadata"
-            ),
-        ),
-        av_ca_timestep_scale_multiplier=_int_value(
-            raw_transformer_config.get(
-                "av_ca_timestep_scale_multiplier",
-                raw_transformer_config.get("timestep_scale_multiplier", 1000),
-            ),
-            context=(
-                f"LTX checkpoint '{checkpoint_path}' has invalid av_ca_timestep_scale_multiplier metadata"
-            ),
-        ),
+        rope_type=contract.rope_type,
+        double_precision_rope=contract.double_precision_rope,
+        timestep_scale_multiplier=contract.timestep_scale_multiplier,
+        av_ca_timestep_scale_multiplier=contract.av_ca_timestep_scale_multiplier,
         norm_eps=_float_or_default(raw_transformer_config.get("norm_eps"), 1e-6),
-        apply_gated_attention=apply_gated_attention,
-        cross_attention_adaln=cross_attention_adaln,
-        caption_proj_before_connector=_required_transformer_bool(
-            raw_transformer_config, checkpoint_path, "caption_proj_before_connector"
-        ),
+        apply_gated_attention=contract.apply_gated_attention,
+        cross_attention_adaln=contract.cross_attention_adaln,
+        caption_proj_before_connector=contract.caption_proj_before_connector,
     )
 
 

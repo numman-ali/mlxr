@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Callable
 
 import mlx.core as mx
-import numpy as np
 
 from .. import _nn_compat as nn
 from .._audio_bwe import AudioMelSTFT, AudioVocoderWithBWE
@@ -84,6 +83,18 @@ class _RuntimeVocoderWrapper:
         return self._impl(decoded_audio)
 
 
+def _rewrite_owned_video_vae_conv_key(key: str) -> str:
+    # Official LTX checkpoints store CausalConv-backed weights one level flatter
+    # than MLXR's owned wrappers. The owned modules intentionally wrap the conv
+    # seam for clearer boundaries, so we normalize checkpoint keys here rather
+    # than weakening strict loading.
+    if key.endswith(".conv.weight"):
+        return key[: -len(".conv.weight")] + ".conv.conv.weight"
+    if key.endswith(".conv.bias"):
+        return key[: -len(".conv.bias")] + ".conv.conv.bias"
+    return key
+
+
 def _upsample_latents(
     latent: MLXArray,
     upsampler: _UpsamplerLike,
@@ -130,8 +141,8 @@ class _ConfiguredVideoDecoder(nn.Module):
             spatial_padding_mode=spatial_padding_mode,
         )
 
-        self.up_blocks: dict[int, object] = {}
-        for index, (block_name, raw_params) in enumerate(reversed(decoder_blocks)):
+        self.up_blocks: list[object] = []
+        for block_name, raw_params in reversed(decoder_blocks):
             params = (
                 raw_params
                 if isinstance(raw_params, dict)
@@ -143,7 +154,7 @@ class _ConfiguredVideoDecoder(nn.Module):
                 in_channels=feature_channels,
                 spatial_padding_mode=spatial_padding_mode,
             )
-            self.up_blocks[index] = block
+            self.up_blocks.append(block)
 
         final_out_channels = out_channels * patch_size * patch_size
         self.conv_out = _WrappedCausalConv3d(
@@ -247,7 +258,7 @@ class _ConfiguredVideoDecoder(nn.Module):
             scaled_timestep = timestep * self.timestep_scale_multiplier
 
         x = self.conv_in(sample, causal=effective_causal)
-        for block in self.up_blocks.values():
+        for block in self.up_blocks:
             if isinstance(block, ResBlockGroup):
                 x = block(x, causal=effective_causal, timestep=scaled_timestep)
             elif isinstance(block, DepthToSpaceUpsample):
@@ -455,11 +466,13 @@ def _require_per_channel_statistics(
             f"{context} has invalid per-channel std statistics shape "
             f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
         )
-    std_values = np.asarray(std_array)
-    if not np.isfinite(std_values).all() or np.any(std_values <= 0):
+    std_values = std_array.astype(mx.float32)
+    if (not bool(mx.all(mx.isfinite(std_values)).item())) or (
+        not bool(mx.all(std_values > 0).item())
+    ):
         raise RuntimeError(f"{context} has invalid per-channel std statistics values")
-    mean_values = np.asarray(mean_array)
-    if not np.isfinite(mean_values).all():
+    mean_values = mean_array.astype(mx.float32)
+    if not bool(mx.all(mx.isfinite(mean_values)).item()):
         raise RuntimeError(f"{context} has invalid per-channel mean statistics values")
     return mean_array, std_array
 
@@ -725,7 +738,7 @@ def _load_runtime_vae_encoder(
             continue
         if value.ndim == 5 and "conv" in new_key and "weight" in new_key:
             value = mx.transpose(value, (0, 2, 3, 4, 1))
-        encoder_weights[new_key] = value
+        encoder_weights[_rewrite_owned_video_vae_conv_key(new_key)] = value
 
     mean = _first_present(
         weights,
@@ -772,12 +785,21 @@ def _load_runtime_vae_encoder(
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' is missing VAE encoder weights"
         )
-    align_module_dtype_to_weights(
+    expected_keys = _trainable_parameter_keys(
         encoder,
+        context="Expected owned LTX video encoder trainable parameter contract",
+    )
+    required_encoder_weights = _require_weight_subset(
         encoder_weights,
+        expected_keys=expected_keys,
         context="Owned LTX video encoder weights",
     )
-    encoder.load_weights(list(encoder_weights.items()), strict=False)
+    align_module_dtype_to_weights(
+        encoder,
+        required_encoder_weights,
+        context="Owned LTX video encoder weights",
+    )
+    encoder.load_weights(list(required_encoder_weights.items()), strict=True)
     encoder.per_channel_statistics._mean_of_means = mean_array
     encoder.per_channel_statistics._std_of_means = std_array
     return encoder

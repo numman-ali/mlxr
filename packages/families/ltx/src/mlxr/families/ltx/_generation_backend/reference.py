@@ -469,10 +469,21 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         if cross_modality is None:
             return transformer_args
 
-        if cross_modality.timesteps.shape[0] != modality.timesteps.shape[0]:
-            raise ValueError(
-                "Cross modality timesteps must have the same batch size as the modality"
-            )
+        if cross_modality.sigma.size > 1:
+            if cross_modality.sigma.shape[0] != modality.timesteps.shape[0]:
+                raise ValueError(
+                    "Cross modality sigma must have the same batch size as the modality"
+                )
+            if cross_modality.sigma.ndim != 1:
+                raise ValueError("Cross modality sigma must be a 1D tensor")
+        cross_timestep = mx.reshape(
+            cross_modality.sigma,
+            (
+                modality.timesteps.shape[0],
+                1,
+                *([1] * len(modality.timesteps.shape[2:])),
+            ),
+        )
 
         cross_pe = simple_preprocessor._prepare_positional_embeddings(
             positions=modality.positions[:, 0:1, :],
@@ -483,7 +494,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
         )
         cross_scale_shift_timestep, cross_gate_timestep = (
             preprocessor_self._prepare_cross_attention_timestep(
-                timestep=modality.timesteps,
+                timestep=cross_timestep,
                 timestep_scale_multiplier=simple_preprocessor.timestep_scale_multiplier,
                 batch_size=transformer_args.x.shape[0],
                 hidden_dtype=transformer_args.x.dtype,
@@ -494,6 +505,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             x=transformer_args.x,
             context=transformer_args.context,
             context_mask=transformer_args.context_mask,
+            self_attention_mask=transformer_args.self_attention_mask,
             timesteps=transformer_args.timesteps,
             embedded_timestep=transformer_args.embedded_timestep,
             positional_embeddings=transformer_args.positional_embeddings,
@@ -574,6 +586,7 @@ def _patch_reference_modules(imports: _ReferenceImports) -> None:
             x=x,
             context=context,
             context_mask=attention_mask,
+            self_attention_mask=None,
             timesteps=timesteps,
             embedded_timestep=embedded_timestep,
             positional_embeddings=positional_embeddings,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import mlx.core as mx
@@ -13,6 +14,7 @@ from mlxr.families.ltx._generation_backend.audio_autoencoder import (
     AudioEncoderModel,
     AudioNormKind,
 )
+from mlxr.families.ltx._generation_backend.config import _runtime_audio_encoder_config
 from mlxr.families.ltx._generation_backend.primitives import (
     sanitize_audio_vae_weights,
 )
@@ -98,6 +100,49 @@ class _FakeRuntimeHelperHost:
 
 
 class AudioLoaderContractTests(unittest.TestCase):
+    def test_audio_runtime_config_falls_back_to_checkpoint_metadata(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            checkpoint_root = Path(tmpdir)
+            checkpoint_path = checkpoint_root / "checkpoint.safetensors"
+            checkpoint_path.write_bytes(b"placeholder")
+
+            metadata = {
+                "audio_vae": {
+                    "model": {
+                        "params": {
+                            "ddconfig": {
+                                "ch_mult": [1, 2, 4],
+                                "num_res_blocks": 2,
+                                "attn_resolutions": [],
+                                "resolution": 256,
+                                "z_channels": 8,
+                                "dropout": 0.0,
+                                "in_channels": 2,
+                                "norm_type": "pixel",
+                                "causality_axis": "height",
+                                "mid_block_add_attention": False,
+                                "mel_bins": 64,
+                                "double_z": True,
+                            }
+                        }
+                    }
+                }
+            }
+
+            with (
+                patch(
+                    "mlxr.families.ltx._generation_backend.config._checkpoint_file_for_root",
+                    return_value=checkpoint_path,
+                ),
+                patch(
+                    "mlxr.families.ltx._generation_backend.config._checkpoint_metadata",
+                    return_value=metadata,
+                ),
+            ):
+                config = _runtime_audio_encoder_config(checkpoint_root)
+
+        self.assertFalse(config.mid_block_add_attention)
+
     def test_audio_encoder_loader_accepts_complete_checkpoint_contract(self) -> None:
         config = _audio_runtime_config()
         reference_encoder = AudioEncoderModel(

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import functools
+from functools import lru_cache
 
+from .._generation_backend.rope_ops import precompute_freqs_cis
 from .compat import TextConfig
 from .runtime import (
     _RUNTIME_IMPORT_ERROR,
@@ -97,7 +98,7 @@ if _RUNTIME_IMPORT_ERROR is None:
             sliding_window_mask = None
         return global_mask, sliding_window_mask
 
-    @functools.lru_cache(maxsize=16)
+    @lru_cache(maxsize=32)
     def _connector_precomputed_freqs(
         seq_len: int,
         dim: int,
@@ -107,49 +108,21 @@ if _RUNTIME_IMPORT_ERROR is None:
         rope_type: str,
         double_precision: bool,
     ) -> tuple[np.ndarray, np.ndarray]:
-        np_dtype = np.float64 if double_precision else np.float32
-        n_elem = 2 * len(max_pos)
-        indices = np.power(
-            theta,
-            np.linspace(
-                np.log(1.0) / np.log(theta),
-                np.log(theta) / np.log(theta),
-                dim // n_elem,
-                dtype=np_dtype,
-            ),
+        position_axis = np.arange(seq_len, dtype=np.float32)[None, None, :]
+        if len(max_pos) > 1:
+            position_axis = np.broadcast_to(position_axis, (1, len(max_pos), seq_len))
+        cos_freqs, sin_freqs = precompute_freqs_cis(
+            mx.array(position_axis),
+            dim=dim,
+            out_dtype=mx.float32,
+            theta=theta,
+            max_pos=[int(position) for position in max_pos],
+            use_middle_indices_grid=False,
+            num_attention_heads=num_heads,
+            rope_type=rope_type,
+            double_precision=double_precision,
         )
-        indices = indices * (np.pi / 2)
-
-        fractional_positions = np.stack(
-            [
-                np.arange(seq_len, dtype=np_dtype)
-                / np.asarray(position_max, dtype=np_dtype)
-                for position_max in max_pos
-            ],
-            axis=-1,
+        return (
+            np.asarray(cos_freqs, dtype=np.float32),
+            np.asarray(sin_freqs, dtype=np.float32),
         )
-        freqs = ((fractional_positions[:, :, None] * 2) - 1) * indices[None, None, :]
-        freqs = freqs.reshape(1, seq_len, -1)
-
-        if rope_type == "split":
-            expected_freqs = dim // 2
-            pad_size = expected_freqs - freqs.shape[-1]
-            cos_freq = np.cos(freqs)
-            sin_freq = np.sin(freqs)
-            if pad_size > 0:
-                cos_padding = np.ones_like(cos_freq[:, :, :pad_size])
-                sin_padding = np.zeros_like(sin_freq[:, :, :pad_size])
-                cos_freq = np.concatenate([cos_padding, cos_freq], axis=-1)
-                sin_freq = np.concatenate([sin_padding, sin_freq], axis=-1)
-            cos_freq = np.swapaxes(cos_freq.reshape(1, seq_len, num_heads, -1), 1, 2)
-            sin_freq = np.swapaxes(sin_freq.reshape(1, seq_len, num_heads, -1), 1, 2)
-        else:
-            pad_size = dim % n_elem
-            cos_freq = np.repeat(np.cos(freqs), 2, axis=-1)
-            sin_freq = np.repeat(np.sin(freqs), 2, axis=-1)
-            if pad_size > 0:
-                cos_padding = np.ones_like(cos_freq[:, :, :pad_size])
-                sin_padding = np.zeros_like(sin_freq[:, :, :pad_size])
-                cos_freq = np.concatenate([cos_padding, cos_freq], axis=-1)
-                sin_freq = np.concatenate([sin_padding, sin_freq], axis=-1)
-        return cos_freq, sin_freq

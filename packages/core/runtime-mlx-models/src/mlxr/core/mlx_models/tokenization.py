@@ -92,8 +92,9 @@ class TransformersTextTokenizer:
         truncation: bool = True,
         padding: str = "max_length",
     ) -> EncodedText:
+        normalized_prompt = prompt.strip()
         encoded = self._tokenizer(
-            prompt,
+            normalized_prompt,
             return_tensors="np",
             max_length=max_length,
             truncation=truncation,

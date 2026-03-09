@@ -44,6 +44,7 @@ class TransformerBlockTests(unittest.TestCase):
             x=mx.ones((1, 2, 8), dtype=mx.float32),
             context=mx.ones((1, 2, 8), dtype=mx.float32),
             context_mask=None,
+            self_attention_mask=None,
             timesteps=mx.ones((1, 1, 72), dtype=mx.float32),
             embedded_timestep=mx.ones((1, 1, 8), dtype=mx.float32),
             positional_embeddings=(

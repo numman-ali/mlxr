@@ -138,12 +138,11 @@ class AudioEncoderModel(nn.Module):
         if int(spectrogram.shape[1]) == self.in_channels:
             spectrogram = mx.transpose(spectrogram, (0, 2, 3, 1))
         hidden = self.conv_in(spectrogram)
-        for level in range(len(self.down)):
-            stage = self.down[level]
-            for block_index in range(len(stage.block)):
-                hidden = stage.block[block_index](hidden, temb=None)
-                if block_index in stage.attn:
-                    hidden = stage.attn[block_index](hidden)
+        for stage in self.down:
+            for block, attn in zip(stage.block, stage.attn, strict=True):
+                hidden = block(hidden, temb=None)
+                if attn is not None:
+                    hidden = attn(hidden)
             if stage.downsample is not None:
                 hidden = stage.downsample(hidden)
         hidden = run_mid_block(self.mid, hidden)
@@ -280,12 +279,11 @@ class AudioDecoderModel(nn.Module):
         latent, target_shape = self._denormalize_latents(latent)
         hidden = self.conv_in(mx.transpose(latent, (0, 2, 3, 1)))
         hidden = run_mid_block(self.mid, hidden)
-        for level in reversed(range(len(self.up))):
-            stage = self.up[level]
-            for block_index in range(len(stage.block)):
-                hidden = stage.block[block_index](hidden, temb=None)
-                if block_index in stage.attn:
-                    hidden = stage.attn[block_index](hidden)
+        for stage in reversed(self.up):
+            for block, attn in zip(stage.block, stage.attn, strict=True):
+                hidden = block(hidden, temb=None)
+                if attn is not None:
+                    hidden = attn(hidden)
             if stage.upsample is not None:
                 hidden = stage.upsample(hidden)
         hidden = _silu(self.norm_out(hidden))

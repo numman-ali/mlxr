@@ -186,16 +186,16 @@ class Upsample2d(nn.Module):
 class EncoderStage(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.block: dict[int, ResidualBlock2d] = {}
-        self.attn: dict[int, SelfAttention2d] = {}
+        self.block: list[ResidualBlock2d] = []
+        self.attn: list[SelfAttention2d | None] = []
         self.downsample: Downsample2d | None = None
 
 
 class DecoderStage(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.block: dict[int, ResidualBlock2d] = {}
-        self.attn: dict[int, SelfAttention2d] = {}
+        self.block: list[ResidualBlock2d] = []
+        self.attn: list[SelfAttention2d | None] = []
         self.upsample: Upsample2d | None = None
 
 
@@ -264,8 +264,8 @@ def build_downsampling_stages(
     causality_axis: AudioCausalityAxis,
     attn_resolutions: set[int],
     resample_with_conv: bool,
-) -> tuple[dict[int, EncoderStage], int]:
-    stages: dict[int, EncoderStage] = {}
+) -> tuple[list[EncoderStage], int]:
+    stages: list[EncoderStage] = []
     current_resolution = resolution
     input_multipliers = (1, *ch_mult)
     block_in = ch
@@ -274,20 +274,26 @@ def build_downsampling_stages(
         block_in = ch * input_multipliers[level]
         block_out = ch * ch_mult[level]
         for block_index in range(num_res_blocks):
-            stage.block[block_index] = ResidualBlock2d(
-                in_channels=block_in,
-                out_channels=block_out,
-                temb_channels=temb_channels,
-                dropout=dropout,
-                norm_kind=norm_kind,
-                causality_axis=causality_axis,
+            stage.block.append(
+                ResidualBlock2d(
+                    in_channels=block_in,
+                    out_channels=block_out,
+                    temb_channels=temb_channels,
+                    dropout=dropout,
+                    norm_kind=norm_kind,
+                    causality_axis=causality_axis,
+                )
             )
             block_in = block_out
             if current_resolution in attn_resolutions:
-                stage.attn[block_index] = SelfAttention2d(
-                    block_in,
-                    norm_kind=norm_kind,
+                stage.attn.append(
+                    SelfAttention2d(
+                        block_in,
+                        norm_kind=norm_kind,
+                    )
                 )
+            else:
+                stage.attn.append(None)
         if level != len(ch_mult) - 1:
             stage.downsample = Downsample2d(
                 block_in,
@@ -295,7 +301,7 @@ def build_downsampling_stages(
                 causality_axis=causality_axis,
             )
             current_resolution //= 2
-        stages[level] = stage
+        stages.append(stage)
     return stages, block_in
 
 
@@ -312,28 +318,34 @@ def build_upsampling_stages(
     attn_resolutions: set[int],
     resample_with_conv: bool,
     initial_block_channels: int,
-) -> tuple[dict[int, DecoderStage], int]:
-    stages: dict[int, DecoderStage] = {}
+) -> tuple[list[DecoderStage], int]:
+    stages: list[DecoderStage] = []
     current_resolution = resolution // (2 ** (len(ch_mult) - 1))
     block_in = initial_block_channels
     for level in reversed(range(len(ch_mult))):
         stage = DecoderStage()
         block_out = ch * ch_mult[level]
         for block_index in range(num_res_blocks + 1):
-            stage.block[block_index] = ResidualBlock2d(
-                in_channels=block_in,
-                out_channels=block_out,
-                temb_channels=temb_channels,
-                dropout=dropout,
-                norm_kind=norm_kind,
-                causality_axis=causality_axis,
+            stage.block.append(
+                ResidualBlock2d(
+                    in_channels=block_in,
+                    out_channels=block_out,
+                    temb_channels=temb_channels,
+                    dropout=dropout,
+                    norm_kind=norm_kind,
+                    causality_axis=causality_axis,
+                )
             )
             block_in = block_out
             if current_resolution in attn_resolutions:
-                stage.attn[block_index] = SelfAttention2d(
-                    block_in,
-                    norm_kind=norm_kind,
+                stage.attn.append(
+                    SelfAttention2d(
+                        block_in,
+                        norm_kind=norm_kind,
+                    )
                 )
+            else:
+                stage.attn.append(None)
         if level != 0:
             stage.upsample = Upsample2d(
                 block_in,
@@ -341,5 +353,6 @@ def build_upsampling_stages(
                 causality_axis=causality_axis,
             )
             current_resolution *= 2
-        stages[level] = stage
+        stages.append(stage)
+    stages.reverse()
     return stages, block_in

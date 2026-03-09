@@ -42,6 +42,7 @@ def precompute_freqs_cis(
     positions: MLXArray,
     *,
     dim: int,
+    out_dtype: mx.Dtype | None = None,
     theta: float,
     max_pos: list[int],
     use_middle_indices_grid: bool,
@@ -66,15 +67,20 @@ def precompute_freqs_cis(
     if resolved_rope_type is LTXRopeType.SPLIT:
         expected_freqs = dim // 2
         pad_size = expected_freqs - int(freqs.shape[-1])
-        return _split_freqs_cis(
+        cos_freq, sin_freq = _split_freqs_cis(
             freqs,
             pad_size=pad_size,
             num_attention_heads=num_attention_heads,
         )
-    return _interleaved_freqs_cis(
-        freqs,
-        pad_size=dim % (2 * int(positions.shape[1])),
-    )
+    else:
+        cos_freq, sin_freq = _interleaved_freqs_cis(
+            freqs,
+            pad_size=dim % (2 * int(positions.shape[1])),
+        )
+    if out_dtype is not None:
+        cos_freq = cos_freq.astype(out_dtype)
+        sin_freq = sin_freq.astype(out_dtype)
+    return cos_freq, sin_freq
 
 
 def _apply_interleaved_rotary_emb(

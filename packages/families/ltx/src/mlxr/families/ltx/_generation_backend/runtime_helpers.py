@@ -367,7 +367,7 @@ def _ensure_transformer(
         weights_override=_ensure_checkpoint_weight_store(self).all_weights(),
     )
     if runtime_config.apply_gated_attention:
-        first_block = next(iter(transformer.transformer_blocks.values()))
+        first_block = transformer.transformer_blocks[0]
         required_gate_attrs: tuple[str, ...] = (
             "attn1",
             "attn2",
@@ -422,7 +422,7 @@ def _ensure_transformer(
                     "LTX checkpoint requires 9-way audio AdaLN modulation, but the "
                     "MLX transformer bridge is still using the wrong audio AdaLN shape"
                 )
-            first_block = next(iter(transformer.transformer_blocks.values()))
+            first_block = transformer.transformer_blocks[0]
             if not hasattr(first_block, "audio_prompt_scale_shift_table"):
                 raise RuntimeError(
                     "LTX checkpoint requires audio prompt AdaLN tables, but the MLX "

@@ -221,7 +221,7 @@ class VideoEncoder(nn.Module, _VAEEncoder):
             spatial_padding_mode=encoder_spatial_padding_mode,
         )
 
-        self.down_blocks: dict[int, _EncoderBlock] = {}
+        self.down_blocks: list[_EncoderBlock] = []
         for index, (block_name, raw_params) in enumerate(encoder_blocks):
             params = (
                 raw_params
@@ -234,7 +234,8 @@ class VideoEncoder(nn.Module, _VAEEncoder):
                 in_channels=feature_channels,
                 spatial_padding_mode=encoder_spatial_padding_mode,
             )
-            self.down_blocks[index] = block
+            del index
+            self.down_blocks.append(block)
 
         self.conv_act = nn.SiLU()
         conv_out_channels = out_channels
@@ -362,7 +363,7 @@ class VideoEncoder(nn.Module, _VAEEncoder):
             patch_size_t=1,
         )
         encoded = self.conv_in(encoded, causal=True)
-        for block in self.down_blocks.values():
+        for block in self.down_blocks:
             encoded = block(encoded, causal=True)
         encoded = self._pixel_norm(encoded)
         encoded = self.conv_act(encoded)

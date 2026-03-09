@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from .._checkpoint_contract import (
+    has_v2_projection_weights,
+    resolve_transformer_config_from_sources,
+    resolve_transformer_semantic_contract,
+)
 from ..prompt_encoding import PromptEncoder, PromptEncodingResult
 from . import runtime
-from .compat import safe_open
 from .components import (
-    _V2_EXPECTED_CONFIG,
     Embeddings1DConnector,
     GemmaFeatureExtractorV1,
     GemmaFeatureExtractorV2,
@@ -100,7 +102,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         def __init__(self, checkpoint_path: Path, text_encoder_path: Path):
             self.checkpoint_path = checkpoint_path
             self.text_encoder_path = text_encoder_path
-            self.max_length = 1024
+            self.max_length = 128
             self.language_model: LanguageModel | None = None
             self.feature_extractor: (
                 GemmaFeatureExtractorV1 | GemmaFeatureExtractorV2 | None
@@ -117,7 +119,7 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             self,
             prompt: str,
             *,
-            max_length: int = 1024,
+            max_length: int = 128,
             return_audio_context: bool = True,
             negative_prompt: str | None = None,
         ) -> PromptEncodingResult:
@@ -491,22 +493,24 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
             hidden_size = int(self.language_model.config.hidden_size)
             num_layers = int(self.language_model.config.num_hidden_layers) + 1
             flat_dim = hidden_size * num_layers
+            try:
+                sources = self._connector_sources()
+            except ValueError:
+                sources = []
             config_resolution = self._resolve_transformer_config()
             transformer_config = config_resolution.config
+            contract = resolve_transformer_semantic_contract(
+                transformer_config=transformer_config,
+                source=config_resolution.source,
+                has_v2_weights=has_v2_projection_weights(sources),
+            )
 
-            if self._is_v2_layout(transformer_config):
-                rope_type = self._required_transformer_string(
-                    transformer_config, "rope_type"
-                )
-                frequencies_precision = self._required_transformer_string(
-                    transformer_config, "frequencies_precision"
-                )
-                caption_proj_before_connector = self._required_transformer_bool(
-                    transformer_config, "caption_proj_before_connector"
-                )
-                connector_apply_gated_attention = self._required_transformer_bool(
-                    transformer_config, "connector_apply_gated_attention"
-                )
+            if contract.is_v2_prompt_layout:
+                if contract.connector_apply_gated_attention is None:
+                    raise NotImplementedError(
+                        "Current V2 LTX prompt config is missing required field "
+                        "'connector_apply_gated_attention'"
+                    )
                 video_heads = _int_value(
                     transformer_config.get("connector_num_attention_heads", 32),
                     context="Expected integer connector_num_attention_heads",
@@ -579,21 +583,17 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                         ),
                         context="Expected integer connector_positional_embedding_max_pos entries",
                     ),
-                    rope_type=rope_type,
-                    double_precision_rope=frequencies_precision == "float64",
-                    connector_apply_gated_attention=connector_apply_gated_attention,
-                    caption_proj_before_connector=caption_proj_before_connector,
-                    transformer_apply_gated_attention=(
-                        self._optional_transformer_bool(
-                            transformer_config, "apply_gated_attention"
-                        )
+                    rope_type=contract.rope_type,
+                    double_precision_rope=contract.double_precision_rope,
+                    connector_apply_gated_attention=(
+                        contract.connector_apply_gated_attention
                     ),
-                    transformer_cross_attention_adaln=(
-                        self._optional_transformer_bool(
-                            transformer_config, "cross_attention_adaln"
-                        )
+                    caption_proj_before_connector=(
+                        contract.caption_proj_before_connector
                     ),
-                    config_source=config_resolution.source,
+                    transformer_apply_gated_attention=contract.apply_gated_attention,
+                    transformer_cross_attention_adaln=(contract.cross_attention_adaln),
+                    config_source=contract.source,
                 )
 
             return _PromptLayout(
@@ -627,89 +627,14 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         def _resolve_transformer_config(self) -> _TransformerConfigResolution:
             if self._transformer_config_resolution is not None:
                 return self._transformer_config_resolution
-            for candidate in self._connector_sources():
-                with safe_open(str(candidate), framework="numpy") as handle:
-                    metadata = handle.metadata() or {}
-                config_raw = metadata.get("config")
-                if not config_raw:
-                    continue
-                try:
-                    config = json.loads(config_raw)
-                except json.JSONDecodeError:
-                    continue
-                transformer_config = config.get("transformer")
-                if isinstance(transformer_config, dict):
-                    self._transformer_config_resolution = _TransformerConfigResolution(
-                        config=transformer_config,
-                        source=str(candidate),
-                    )
-                    return self._transformer_config_resolution
+            resolution = resolve_transformer_config_from_sources(
+                self._connector_sources()
+            )
             self._transformer_config_resolution = _TransformerConfigResolution(
-                config={},
-                source=None,
+                config=resolution.config,
+                source=resolution.source,
             )
             return self._transformer_config_resolution
-
-        def _required_transformer_bool(
-            self, transformer_config: dict[str, object], key: str
-        ) -> bool:
-            if key not in transformer_config:
-                raise NotImplementedError(
-                    f"Current V2 LTX prompt config is missing required field '{key}'"
-                )
-            return _bool_value(
-                transformer_config[key],
-                context=f"Current V2 LTX prompt config field '{key}' must be boolean",
-            )
-
-        def _optional_transformer_bool(
-            self, transformer_config: dict[str, object], key: str
-        ) -> bool | None:
-            if key not in transformer_config:
-                return None
-            return _bool_value(
-                transformer_config[key],
-                context=f"Current V2 LTX prompt config field '{key}' must be boolean",
-            )
-
-        def _required_transformer_string(
-            self, transformer_config: dict[str, object], key: str
-        ) -> str:
-            value = transformer_config.get(key)
-            if not isinstance(value, str):
-                raise NotImplementedError(
-                    f"Current V2 LTX prompt config is missing required field '{key}'"
-                )
-            return value
-
-        def _is_v2_layout(self, transformer_config: dict[str, object]) -> bool:
-            overlapping_keys = transformer_config.keys() & _V2_EXPECTED_CONFIG.keys()
-            if not overlapping_keys:
-                for candidate in self._connector_sources():
-                    with safe_open(str(candidate), framework="numpy") as handle:
-                        keys = set(handle.keys())
-                    if "text_embedding_projection.video_aggregate_embed.weight" in keys:
-                        return True
-                return False
-            missing_keys = _V2_EXPECTED_CONFIG.keys() - overlapping_keys
-            if missing_keys:
-                raise NotImplementedError(
-                    "Partial V2 LTX prompt config is unsupported: missing "
-                    + ", ".join(sorted(missing_keys))
-                )
-            unexpected = [
-                key
-                for key in _V2_EXPECTED_CONFIG
-                if transformer_config.get(key) != _V2_EXPECTED_CONFIG[key]
-            ]
-            if unexpected:
-                raise NotImplementedError(
-                    "Unknown V2 LTX prompt config values: "
-                    + ", ".join(
-                        f"{key}={transformer_config.get(key)!r}" for key in unexpected
-                    )
-                )
-            return True
 
         def _feature_projection(
             self, weights: dict[str, mx.array]

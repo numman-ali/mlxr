@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Protocol, TypeAlias
@@ -65,6 +66,7 @@ class _PrecomputeFreqsCis(Protocol):
         positions: MLXArray,
         *,
         dim: int,
+        out_dtype: mx.Dtype | None = ...,
         theta: float,
         max_pos: list[int],
         use_middle_indices_grid: bool,
@@ -134,7 +136,7 @@ class _AudioVideoTransformer(Protocol):
     audio_num_attention_heads: int
 
     @property
-    def transformer_blocks(self) -> Mapping[int, object]: ...
+    def transformer_blocks(self) -> Sequence[object]: ...
 
     @property
     def adaln_single(self) -> object: ...
@@ -161,7 +163,7 @@ class _VideoTransformer(Protocol):
     rope_type: str
 
     @property
-    def transformer_blocks(self) -> Mapping[int, object]: ...
+    def transformer_blocks(self) -> Sequence[object]: ...
 
     @property
     def adaln_single(self) -> object: ...
@@ -631,6 +633,7 @@ class _PatchedTransformerArgs:
     x: mx.array
     context: mx.array
     context_mask: mx.array | None
+    self_attention_mask: mx.array | None
     timesteps: mx.array
     embedded_timestep: mx.array
     positional_embeddings: tuple[mx.array, mx.array]
@@ -650,4 +653,5 @@ class _PatchedModality:
     context: mx.array
     enabled: bool = True
     context_mask: mx.array | None = None
+    attention_mask: mx.array | None = None
     positional_embeddings: tuple[mx.array, mx.array] | None = None

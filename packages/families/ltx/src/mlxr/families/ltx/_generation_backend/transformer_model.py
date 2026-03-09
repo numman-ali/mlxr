@@ -218,8 +218,8 @@ class LTXModel(nn.Module):
     def _init_transformer_blocks(self, config: LTXModelConfig) -> None:
         video_config = config.get_video_config()
         audio_config = config.get_audio_config()
-        self._transformer_blocks = {
-            idx: BasicAVTransformerBlock(
+        self.transformer_blocks = [
+            BasicAVTransformerBlock(
                 idx=idx,
                 video=video_config,
                 audio=audio_config,
@@ -227,11 +227,7 @@ class LTXModel(nn.Module):
                 norm_eps=config.norm_eps,
             )
             for idx in range(config.num_layers)
-        }
-
-    @property
-    def transformer_blocks(self) -> Mapping[int, object]:
-        return self._transformer_blocks
+        ]
 
     def _process_transformer_blocks(
         self,
@@ -239,7 +235,7 @@ class LTXModel(nn.Module):
         video: _PatchedTransformerArgs | None,
         audio: _PatchedTransformerArgs | None,
     ) -> tuple[_PatchedTransformerArgs | None, _PatchedTransformerArgs | None]:
-        for block in self._transformer_blocks.values():
+        for block in self.transformer_blocks:
             video, audio = block(video=video, audio=audio)
         return video, audio
 
@@ -431,7 +427,7 @@ class LTXModel(nn.Module):
                 filtered_weights,
                 context="Owned LTX transformer weights",
             )
-            model.load_weights(list(filtered_weights.items()), strict=False)
+            model.load_weights(list(filtered_weights.items()), strict=True)
             return model
 
         align_module_dtype_to_weights(

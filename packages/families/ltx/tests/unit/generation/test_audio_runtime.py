@@ -106,6 +106,79 @@ class LTXAudioRuntimeTests(unittest.TestCase):
         self.assertEqual(runtime_config.audio_latent_mel_bins, 16)
         self.assertEqual(runtime_config.audio_cross_attention_dim, 2048)
         self.assertEqual(runtime_config.audio_positional_embedding_max_pos, [20])
+        self.assertEqual(runtime_config.av_ca_timestep_scale_multiplier, 1)
+
+    def test_ltx_generation_runtime_config_preserves_explicit_av_cross_timestep_scale(
+        self,
+    ) -> None:
+        from mlxr.families.ltx import _generation_backend as backend
+
+        checkpoint_metadata = {
+            "transformer": {
+                "num_attention_heads": 32,
+                "attention_head_dim": 128,
+                "cross_attention_dim": 4096,
+                "rope_type": "split",
+                "frequencies_precision": "float64",
+                "caption_proj_before_connector": True,
+                "av_ca_timestep_scale_multiplier": 1000,
+            },
+            "vae": {
+                "latent_channels": 128,
+                "out_channels": 3,
+                "patch_size": 4,
+                "decoder_base_channels": 128,
+                "decoder_blocks": [["res_x", {"num_layers": 4}]],
+                "norm_layer": "pixel_norm",
+                "decoder_spatial_padding_mode": "reflect",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_path = Path(tmp_dir) / "checkpoint.safetensors"
+            save_file(
+                {
+                    "transformer_blocks.0.attn1.to_gate_logits.weight": np.zeros(
+                        (32, 4096), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.prompt_scale_shift_table": np.zeros(
+                        (2, 4096), dtype=np.float32
+                    ),
+                    "audio_patchify_proj.weight": np.zeros(
+                        (2048, 128), dtype=np.float32
+                    ),
+                    "audio_proj_out.weight": np.zeros((128, 2048), dtype=np.float32),
+                    "audio_prompt_adaln_single.linear.weight": np.zeros(
+                        (4096, 2048), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.audio_prompt_scale_shift_table": np.zeros(
+                        (2, 2048), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.audio_attn1.to_q.weight": np.zeros(
+                        (2048, 2048), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.audio_attn2.to_q.weight": np.zeros(
+                        (2048, 2048), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.audio_to_video_attn.to_q.weight": np.zeros(
+                        (2048, 4096), dtype=np.float32
+                    ),
+                    "transformer_blocks.0.video_to_audio_attn.to_q.weight": np.zeros(
+                        (2048, 2048), dtype=np.float32
+                    ),
+                    "vae.per_channel_statistics.mean-of-means": np.zeros(
+                        (128,), dtype=np.float32
+                    ),
+                    "vae.per_channel_statistics.std-of-means": np.ones(
+                        (128,), dtype=np.float32
+                    ),
+                },
+                str(checkpoint_path),
+                metadata={"config": json.dumps(checkpoint_metadata)},
+            )
+
+            runtime_config = backend._runtime_model_config(checkpoint_path)
+
         self.assertEqual(runtime_config.av_ca_timestep_scale_multiplier, 1000)
 
     def test_ltx_runtime_imports_derive_audio_latent_mel_bins_from_transformer_contract(

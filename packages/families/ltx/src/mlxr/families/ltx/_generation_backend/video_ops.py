@@ -14,14 +14,17 @@ def unpatchify_video(
     batch, packed_channels, frames, height, width = x.shape
     channels = packed_channels // (patch_size_hw * patch_size_hw * patch_size_t)
 
+    # patchify_video packs channels as (c, p_t, p_w, p_h) to match official
+    # LTX ops. Mirror that exact factorization here before restoring
+    # (f * p_t, h * p_h, w * p_w).
     unpacked = mx.reshape(
         x,
         (
             batch,
             channels,
             patch_size_t,
-            patch_size_hw,
-            patch_size_hw,
+            patch_size_hw,  # packed width axis
+            patch_size_hw,  # packed height axis
             frames,
             height,
             width,

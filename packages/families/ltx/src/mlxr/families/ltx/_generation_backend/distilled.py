@@ -541,6 +541,16 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         )
         timings_ms["decode_duration_ms"] = _elapsed_ms(decode_started)
         frames_uint8 = _decode_to_uint8_frames(decoded_video, padded_shape=padded_shape)
+        if debug_dir is not None:
+            _emit_debug_frame_snapshot(
+                debug_dir=debug_dir,
+                stage_name="final",
+                frames_uint8=frames_uint8,
+                metadata={
+                    "tiling_mode": tiling_mode,
+                    "latents": _latent_stats(latents),
+                },
+            )
         audio_decode_started = time.perf_counter()
         if self._audio_enabled:
             if (
@@ -565,16 +575,6 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             audio_sample_rate = None
             audio_backend = None
             timings_ms["audio_decode_duration_ms"] = 0.0
-        if debug_dir is not None:
-            _emit_debug_frame_snapshot(
-                debug_dir=debug_dir,
-                stage_name="final",
-                frames_uint8=frames_uint8,
-                metadata={
-                    "tiling_mode": tiling_mode,
-                    "latents": _latent_stats(latents),
-                },
-            )
         mx.clear_cache()
 
         metadata: dict[str, object] = {

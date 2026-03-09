@@ -297,14 +297,14 @@ class ResBlockGroup(nn.Module):
         self.timestep_conditioning = timestep_conditioning
         if timestep_conditioning:
             self.time_embedder = PixArtAlphaTimestepEmbedder(embedding_dim=channels * 4)
-        self.res_blocks = {
-            index: ResnetBlock3DSimple(
+        self.res_blocks = [
+            ResnetBlock3DSimple(
                 channels=channels,
                 spatial_padding_mode=spatial_padding_mode,
                 timestep_conditioning=timestep_conditioning,
             )
-            for index in range(num_layers)
-        }
+            for _ in range(num_layers)
+        ]
 
     def __call__(
         self,
@@ -322,7 +322,7 @@ class ResBlockGroup(nn.Module):
             )
             timestep_embed = timestep_embed.reshape(batch_size, -1, 1, 1, 1)
 
-        for res_block in self.res_blocks.values():
+        for res_block in self.res_blocks:
             x = res_block(x, causal=causal, timestep_embed=timestep_embed)
         return x
 

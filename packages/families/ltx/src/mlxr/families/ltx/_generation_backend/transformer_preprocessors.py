@@ -123,6 +123,21 @@ class TransformerArgsPreprocessor:
             (attention_mask.shape[0], 1, -1, attention_mask.shape[-1])
         ) * mx.finfo(hidden_dtype).max
 
+    def _prepare_self_attention_mask(
+        self,
+        attention_mask: MLXArray | None,
+        hidden_dtype: mx.Dtype,
+    ) -> MLXArray | None:
+        if attention_mask is None:
+            return None
+        finfo = mx.finfo(hidden_dtype)
+        bias = mx.full(attention_mask.shape, finfo.min, dtype=hidden_dtype)
+        positive = attention_mask > 0
+        if bool(mx.any(positive).item()):
+            log_values = mx.log(attention_mask.astype(hidden_dtype))
+            bias = mx.where(positive, log_values, bias)
+        return mx.expand_dims(bias, axis=1)
+
     def _prepare_positional_embeddings(
         self,
         *,
@@ -131,10 +146,12 @@ class TransformerArgsPreprocessor:
         max_pos: list[int],
         use_middle_indices_grid: bool,
         num_attention_heads: int,
+        hidden_dtype: mx.Dtype,
     ) -> tuple[MLXArray, MLXArray]:
         return precompute_freqs_cis(
             positions,
             dim=inner_dim,
+            out_dtype=hidden_dtype,
             theta=self.positional_embedding_theta,
             max_pos=max_pos,
             use_middle_indices_grid=use_middle_indices_grid,
@@ -166,6 +183,9 @@ class TransformerArgsPreprocessor:
         attention_mask = self._prepare_attention_mask(
             attention_mask, modality.latent.dtype
         )
+        self_attention_mask = self._prepare_self_attention_mask(
+            modality.attention_mask, modality.latent.dtype
+        )
         positional_embeddings = (
             modality.positional_embeddings
             if modality.positional_embeddings is not None
@@ -175,12 +195,14 @@ class TransformerArgsPreprocessor:
                 max_pos=self.max_pos,
                 use_middle_indices_grid=self.use_middle_indices_grid,
                 num_attention_heads=self.num_attention_heads,
+                hidden_dtype=modality.latent.dtype,
             )
         )
         return _PatchedTransformerArgs(
             x=x,
             context=context,
             context_mask=attention_mask,
+            self_attention_mask=self_attention_mask,
             timesteps=timesteps,
             embedded_timestep=embedded_timestep,
             positional_embeddings=positional_embeddings,
@@ -269,20 +291,32 @@ class MultiModalTransformerArgsPreprocessor:
         transformer_args = self.simple_preprocessor.prepare(modality)
         if cross_modality is None:
             return transformer_args
-        if cross_modality.timesteps.shape[0] != modality.timesteps.shape[0]:
-            raise ValueError(
-                "Cross modality timesteps must have the same batch size as the modality"
-            )
+        if cross_modality.sigma.size > 1:
+            if cross_modality.sigma.shape[0] != modality.timesteps.shape[0]:
+                raise ValueError(
+                    "Cross modality sigma must have the same batch size as the modality"
+                )
+            if cross_modality.sigma.ndim != 1:
+                raise ValueError("Cross modality sigma must be a 1D tensor")
+        cross_timestep = mx.reshape(
+            cross_modality.sigma,
+            (
+                modality.timesteps.shape[0],
+                1,
+                *([1] * len(modality.timesteps.shape[2:])),
+            ),
+        )
         cross_pe = self.simple_preprocessor._prepare_positional_embeddings(
             positions=modality.positions[:, 0:1, :],
             inner_dim=self.audio_cross_attention_dim,
             max_pos=[self.cross_pe_max_pos],
             use_middle_indices_grid=True,
             num_attention_heads=self.simple_preprocessor.num_attention_heads,
+            hidden_dtype=modality.latent.dtype,
         )
         cross_scale_shift_timestep, cross_gate_timestep = (
             self._prepare_cross_attention_timestep(
-                timestep=modality.timesteps,
+                timestep=cross_timestep,
                 timestep_scale_multiplier=self.simple_preprocessor.timestep_scale_multiplier,
                 batch_size=int(transformer_args.x.shape[0]),
                 hidden_dtype=transformer_args.x.dtype,
@@ -292,6 +326,7 @@ class MultiModalTransformerArgsPreprocessor:
             x=transformer_args.x,
             context=transformer_args.context,
             context_mask=transformer_args.context_mask,
+            self_attention_mask=transformer_args.self_attention_mask,
             timesteps=transformer_args.timesteps,
             embedded_timestep=transformer_args.embedded_timestep,
             positional_embeddings=transformer_args.positional_embeddings,

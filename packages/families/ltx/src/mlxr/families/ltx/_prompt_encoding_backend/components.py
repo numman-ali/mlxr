@@ -14,6 +14,7 @@ from .compat import (
     RMSNorm,
     gelu_approx,
     mx,
+    np,
     safe_open,
 )
 from .masks import (
@@ -388,34 +389,37 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
         ) -> tuple[mx.array, mx.array]:
             batch_size, seq_len, dim = hidden_states.shape
             dtype = hidden_states.dtype
+            if seq_len % self.num_learnable_registers != 0:
+                raise ValueError(
+                    "Connector hidden state length must be divisible by the number of learnable registers"
+                )
             mask_binary = (attention_mask.squeeze(1).squeeze(1) >= -9000.0).astype(
                 mx.int32
             )
-            num_tiles = math.ceil(seq_len / self.num_learnable_registers)
-            registers = mx.tile(self.learnable_registers, (num_tiles, 1))[
-                :seq_len
-            ].astype(dtype)
+            num_tiles = seq_len // self.num_learnable_registers
+            registers = mx.tile(self.learnable_registers, (num_tiles, 1)).astype(dtype)
             result_list: list[mx.array] = []
             for batch_index in range(batch_size):
                 mask = mask_binary[batch_index]
                 states = hidden_states[batch_index]
                 num_valid = int(mx.sum(mask).item())
-                valid_tokens = states[seq_len - num_valid :]
+                valid_indices = np.nonzero(np.asarray(mask))[0]
+                valid_tokens = states[mx.array(valid_indices, dtype=mx.int32)]
                 pad_length = seq_len - num_valid
                 if pad_length > 0:
                     padding = mx.zeros((pad_length, dim), dtype=dtype)
                     adjusted = mx.concatenate([valid_tokens, padding], axis=0)
                 else:
                     adjusted = valid_tokens
-                flipped_mask = mx.concatenate(
+                register_mask = mx.concatenate(
                     [
                         mx.ones((num_valid,), dtype=mx.int32),
                         mx.zeros((pad_length,), dtype=mx.int32),
                     ],
                     axis=0,
                 )
-                flipped_mask = flipped_mask[:, None].astype(dtype)
-                combined = flipped_mask * adjusted + (1 - flipped_mask) * registers
+                register_mask = register_mask[:, None].astype(dtype)
+                combined = register_mask * adjusted + (1 - register_mask) * registers
                 result_list.append(combined)
             hidden_states = mx.stack(result_list, axis=0)
             return hidden_states, mx.zeros_like(attention_mask)
@@ -571,13 +575,6 @@ if runtime._RUNTIME_IMPORT_ERROR is None:
                 _rescale_norm(normalized, audio_output_dim, self.embedding_dim)
             )
             return video_features, audio_features
-
-    _V2_EXPECTED_CONFIG = {
-        "caption_proj_before_connector": True,
-        "caption_projection_first_linear": False,
-        "caption_proj_input_norm": False,
-        "caption_projection_second_linear": False,
-    }
 
     @dataclass(frozen=True, slots=True)
     class _PromptLayout:

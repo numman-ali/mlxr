@@ -407,8 +407,6 @@ def main() -> int:
 
         xml_text = _extract_review_xml(result.stdout)
         parsed_review = _parse_review(xml_text)
-        if args.strict:
-            _enforce_strict_review(parsed_review)
         persist_artifacts = args.save_dir is not None or args.keep_staged_copy
         artifacts: ReviewArtifacts | None = None
         if persist_artifacts:
@@ -420,6 +418,8 @@ def main() -> int:
                 staged_video_path=staged_video_path,
                 staged_audio_path=staged_audio_path,
             )
+        if args.strict:
+            _enforce_strict_review(parsed_review)
         _print_result(
             output_format=args.output_format,
             parsed_review=parsed_review,

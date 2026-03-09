@@ -219,7 +219,15 @@ class BasicAVTransformerBlock(nn.Module):
                 slice(0, 3),
             )
             norm_vx = rms_norm(vx, eps=self.norm_eps) * (1 + vscale_msa) + vshift_msa
-            vx = vx + self.attn1(norm_vx, pe=video.positional_embeddings) * vgate_msa
+            vx = (
+                vx
+                + self.attn1(
+                    norm_vx,
+                    pe=video.positional_embeddings,
+                    mask=video.self_attention_mask,
+                )
+                * vgate_msa
+            )
             vx = vx + self._apply_text_cross_attention(
                 x=vx,
                 context=video.context,
@@ -243,7 +251,12 @@ class BasicAVTransformerBlock(nn.Module):
             norm_ax = rms_norm(ax, eps=self.norm_eps) * (1 + ascale_msa) + ashift_msa
             ax = (
                 ax
-                + self.audio_attn1(norm_ax, pe=audio.positional_embeddings) * agate_msa
+                + self.audio_attn1(
+                    norm_ax,
+                    pe=audio.positional_embeddings,
+                    mask=audio.self_attention_mask,
+                )
+                * agate_msa
             )
             ax = ax + self._apply_text_cross_attention(
                 x=ax,
