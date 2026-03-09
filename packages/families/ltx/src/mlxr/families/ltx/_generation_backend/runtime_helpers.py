@@ -91,7 +91,7 @@ from .video_stack import (
     _upsample_latents,
 )
 from .video_tiling import TilingConfig
-from .weight_store import CheckpointWeightStore
+from .weight_store import CheckpointReader
 
 
 def _is_audio_video_transformer(
@@ -236,21 +236,19 @@ def _parameters_for_eval(module: object) -> object:
     return parameters()
 
 
-def _ensure_checkpoint_weight_store(
-    self: _RuntimeHelperHost,
-) -> CheckpointWeightStore:
-    store = getattr(self, "_checkpoint_weight_store", None)
-    if store is None:
-        store = CheckpointWeightStore(self.checkpoint_path)
-        setattr(self, "_checkpoint_weight_store", store)
-    return store
+def _ensure_checkpoint_reader(self: _RuntimeHelperHost) -> CheckpointReader:
+    reader = getattr(self, "_checkpoint_reader", None)
+    if reader is None:
+        reader = CheckpointReader(self.checkpoint_path)
+        setattr(self, "_checkpoint_reader", reader)
+    return reader
 
 
-def _release_checkpoint_weight_store(self: _RuntimeHelperHost) -> None:
-    store = getattr(self, "_checkpoint_weight_store", None)
-    if store is not None:
-        store.release()
-        setattr(self, "_checkpoint_weight_store", None)
+def _release_checkpoint_reader(self: _RuntimeHelperHost) -> None:
+    reader = getattr(self, "_checkpoint_reader", None)
+    if reader is not None:
+        reader.release()
+        setattr(self, "_checkpoint_reader", None)
 
 
 def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
@@ -287,10 +285,10 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         create_audio_position_grid=_create_audio_position_grid_ref,
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
-        load_vae_encoder=lambda checkpoint_path, *, weight_store=None: (
+        load_vae_encoder=lambda checkpoint_path, *, checkpoint_reader=None: (
             _load_runtime_vae_encoder(
                 checkpoint_path,
-                weight_store=weight_store,
+                checkpoint_reader=checkpoint_reader,
             )
         ),
         load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
@@ -364,7 +362,9 @@ def _ensure_transformer(
         self.checkpoint_path,
         config=config,
         strict=True,
-        weights_override=_ensure_checkpoint_weight_store(self).all_weights(),
+        weights_override=_ensure_checkpoint_reader(self).load_prefixes(
+            ("model.diffusion_model.",)
+        ),
     )
     if runtime_config.apply_gated_attention:
         first_block = transformer.transformer_blocks[0]
@@ -429,6 +429,7 @@ def _ensure_transformer(
                     "transformer bridge did not instantiate them"
                 )
     mx.eval(transformer.parameters())
+    _release_checkpoint_reader(self)
     self._transformer = transformer
     return transformer
 
@@ -439,10 +440,11 @@ def _ensure_vae_decoder(
     if self._vae_decoder is None:
         vae_decoder = _load_configured_vae_decoder(
             self.checkpoint_path,
-            weight_store=_ensure_checkpoint_weight_store(self),
+            checkpoint_reader=_ensure_checkpoint_reader(self),
         )
         mx.eval(vae_decoder.parameters())
         self._vae_decoder = vae_decoder
+        _release_checkpoint_reader(self)
     return self._vae_decoder
 
 
@@ -451,9 +453,10 @@ def _ensure_vae_statistics(self: _RuntimeHelperHost) -> tuple[MLXArray, MLXArray
     if statistics is None:
         statistics = _load_runtime_vae_statistics(
             self.checkpoint_path,
-            weight_store=_ensure_checkpoint_weight_store(self),
+            checkpoint_reader=_ensure_checkpoint_reader(self),
         )
         setattr(self, "_vae_statistics", statistics)
+        _release_checkpoint_reader(self)
     return statistics
 
 
@@ -463,9 +466,10 @@ def _ensure_vae_encoder(
     if self._vae_encoder is None:
         self._vae_encoder = imports.load_vae_encoder(
             self.checkpoint_path,
-            weight_store=_ensure_checkpoint_weight_store(self),
+            checkpoint_reader=_ensure_checkpoint_reader(self),
         )
         mx.eval(self._vae_encoder.parameters())
+        _release_checkpoint_reader(self)
     return self._vae_encoder
 
 
@@ -490,7 +494,7 @@ def _ensure_audio_encoder(
     checkpoint_audio_weights = _load_checkpoint_prefixed_weights(
         self.checkpoint_path,
         prefixes=("audio_vae.",),
-        weight_store=_ensure_checkpoint_weight_store(self),
+        checkpoint_reader=_ensure_checkpoint_reader(self),
     )
     sanitized = sanitize_audio_vae_weights(checkpoint_audio_weights)
     checkpoint_root = self.checkpoint_path.parent
@@ -548,6 +552,7 @@ def _ensure_audio_encoder(
     mx.eval(encoder.parameters())
     self._audio_encoder = encoder
     self._audio_processor = processor
+    _release_checkpoint_reader(self)
     return encoder, processor
 
 
@@ -627,7 +632,7 @@ def _ensure_audio_stack(
     checkpoint_audio_weights = _load_checkpoint_prefixed_weights(
         self.checkpoint_path,
         prefixes=("audio_vae.", "vocoder."),
-        weight_store=_ensure_checkpoint_weight_store(self),
+        checkpoint_reader=_ensure_checkpoint_reader(self),
     )
     checkpoint_root = self.checkpoint_path.parent
     if self._audio_decoder is None:
@@ -651,6 +656,7 @@ def _ensure_audio_stack(
         self._audio_output_sample_rate = output_sample_rate
         self._audio_backend = backend_label
     mx.clear_cache()
+    _release_checkpoint_reader(self)
     if (
         self._audio_decoder is None
         or self._vocoder is None

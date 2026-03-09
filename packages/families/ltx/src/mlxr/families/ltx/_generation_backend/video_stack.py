@@ -46,7 +46,7 @@ from .video_encoder import LatentLogVarianceType, VideoEncoder
 from .video_ops import unpatchify_video
 from .video_tiling import TilingConfig, decode_with_tiling
 from .weight_loading import align_module_dtype_to_weights
-from .weight_store import CheckpointWeightStore
+from .weight_store import CheckpointReader
 
 
 class _WrappedCausalConv3d(nn.Module):
@@ -513,7 +513,7 @@ def _validate_bwe_stft_buffers(
 def _load_configured_vae_decoder(
     checkpoint_path: Path,
     *,
-    weight_store: CheckpointWeightStore | None = None,
+    checkpoint_reader: CheckpointReader | None = None,
 ) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
 
@@ -530,8 +530,16 @@ def _load_configured_vae_decoder(
     )
 
     weights = _require_weight_mapping(
-        weight_store.all_weights()
-        if weight_store is not None
+        checkpoint_reader.load_prefixes(
+            (
+                "vae.decoder.",
+                "vae.per_channel_statistics.",
+                "per_channel_statistics.",
+                "latents_mean",
+                "latents_std",
+            )
+        )
+        if checkpoint_reader is not None
         else mx.load(str(checkpoint_path)),
         context=f"LTX checkpoint '{checkpoint_path}' did not load into a decoder weight mapping",
     )
@@ -608,12 +616,19 @@ def _load_configured_vae_decoder(
 def _load_runtime_vae_statistics(
     checkpoint_path: Path,
     *,
-    weight_store: CheckpointWeightStore | None = None,
+    checkpoint_reader: CheckpointReader | None = None,
 ) -> tuple[MLXArray, MLXArray]:
     vae_config = _runtime_vae_config(checkpoint_path)
     weights = _require_weight_mapping(
-        weight_store.all_weights()
-        if weight_store is not None
+        checkpoint_reader.load_prefixes(
+            (
+                "vae.per_channel_statistics.",
+                "per_channel_statistics.",
+                "latents_mean",
+                "latents_std",
+            )
+        )
+        if checkpoint_reader is not None
         else mx.load(str(checkpoint_path)),
         context=f"LTX checkpoint '{checkpoint_path}' did not load into a VAE statistics weight mapping",
     )
@@ -706,7 +721,7 @@ def _load_configured_upsampler(
 def _load_runtime_vae_encoder(
     checkpoint_path: Path,
     *,
-    weight_store: CheckpointWeightStore | None = None,
+    checkpoint_reader: CheckpointReader | None = None,
 ) -> _VAEEncoder:
     vae_config = _runtime_vae_config(checkpoint_path)
     padding_mode = PaddingModeType(vae_config.encoder_spatial_padding_mode)
@@ -721,8 +736,16 @@ def _load_runtime_vae_encoder(
     )
 
     weights = _require_weight_mapping(
-        weight_store.all_weights()
-        if weight_store is not None
+        checkpoint_reader.load_prefixes(
+            (
+                "vae.encoder.",
+                "vae_encoder.",
+                "encoder.",
+                "vae.per_channel_statistics.",
+                "per_channel_statistics.",
+            )
+        )
+        if checkpoint_reader is not None
         else mx.load(str(checkpoint_path)),
         context=f"LTX checkpoint '{checkpoint_path}' did not load into an encoder weight mapping",
     )

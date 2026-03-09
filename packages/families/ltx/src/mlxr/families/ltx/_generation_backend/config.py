@@ -19,7 +19,7 @@ from .types import (
     _RuntimeVocoderArchitectureConfig,
     _RuntimeVocoderConfig,
 )
-from .weight_store import CheckpointWeightStore
+from .weight_store import CheckpointReader
 
 _DEFAULT_VAE_ENCODER_BLOCKS: tuple[tuple[str, object], ...] = (
     ("res_x", {"num_layers": 4}),
@@ -162,22 +162,12 @@ def _load_checkpoint_prefixed_weights(
     checkpoint_path: Path,
     *,
     prefixes: tuple[str, ...],
-    weight_store: CheckpointWeightStore | None = None,
+    checkpoint_reader: CheckpointReader | None = None,
 ) -> dict[str, mx.array]:
-    if weight_store is not None:
-        return weight_store.prefixed_weights(prefixes)
-    weights = mx.load(str(checkpoint_path))
-    if not isinstance(weights, dict):
-        raise RuntimeError(
-            f"LTX checkpoint '{checkpoint_path}' did not load into a weight mapping"
-        )
-    selected = {
-        key: value for key, value in weights.items() if key.startswith(prefixes)
-    }
-    if not selected:
-        raise RuntimeError(
-            f"LTX checkpoint '{checkpoint_path}' is missing required prefixed weights for {prefixes!r}"
-        )
+    reader = checkpoint_reader or CheckpointReader(checkpoint_path)
+    selected = reader.load_prefixes(prefixes)
+    if checkpoint_reader is None:
+        reader.release()
     return selected
 
 

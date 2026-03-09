@@ -53,7 +53,7 @@ from .runtime_helpers import (
     _ensure_vae_statistics,
     _imports,
     _prepare_conditionings,
-    _release_checkpoint_weight_store,
+    _release_checkpoint_reader,
 )
 from .sampling import (
     _assert_prompt_runtime_contract,
@@ -73,7 +73,7 @@ from .types import (
     _VideoTransformer,
     _VocoderLike,
 )
-from .weight_store import CheckpointWeightStore
+from .weight_store import CheckpointReader
 
 
 def _require_audio_video_transformer(
@@ -118,7 +118,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     spatial_upsampler_path: Path
     _audio_enabled: bool = True
     _reference_imports: _ReferenceImports | None = None
-    _checkpoint_weight_store: CheckpointWeightStore | None = None
+    _checkpoint_reader: CheckpointReader | None = None
     _transformer: _AudioVideoTransformer | _VideoTransformer | None = None
     _vae_statistics: tuple[MLXArray, MLXArray] | None = None
     _vae_decoder: _VideoDecoderLike | None = None
@@ -143,7 +143,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     _prepare_conditionings = _prepare_conditionings
     _apply_conditionings_to_stage = _apply_conditionings_to_stage
     _decode_video = _decode_video
-    _release_checkpoint_weight_store = _release_checkpoint_weight_store
+    _release_checkpoint_reader = _release_checkpoint_reader
 
     def generate(
         self,
@@ -248,7 +248,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                     audio_frames=audio_frames,
                     model_dtype=model_dtype,
                 )
-        self._release_checkpoint_weight_store()
+        self._release_checkpoint_reader()
 
         mx.random.seed(effective_seed)
         timings_ms: dict[str, float] = {}
@@ -638,6 +638,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         )
 
     def close(self) -> None:
+        self._release_checkpoint_reader()
         self._transformer = None
         self._vae_statistics = None
         self._vae_decoder = None

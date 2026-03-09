@@ -10,7 +10,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .audio_autoencoder import AudioDecoderModel, AudioEncoderModel
-from .weight_store import CheckpointWeightStore
+from .weight_store import CheckpointReader
 
 MLXArray: TypeAlias = mx.array
 
@@ -260,7 +260,7 @@ class _LoadVAEEncoder(Protocol):
         self,
         checkpoint_path: Path,
         *,
-        weight_store: CheckpointWeightStore | None = ...,
+        checkpoint_reader: CheckpointReader | None = ...,
     ) -> _VAEEncoder: ...
 
 
@@ -445,7 +445,7 @@ class _RuntimeHelperHost(Protocol):
     spatial_upsampler_path: Path
     _audio_enabled: bool
     _reference_imports: _ReferenceImports | None
-    _checkpoint_weight_store: CheckpointWeightStore | None
+    _checkpoint_reader: CheckpointReader | None
     _transformer: _AudioVideoTransformer | _VideoTransformer | None
     _vae_statistics: tuple[MLXArray, MLXArray] | None
     _vae_decoder: _VideoDecoderLike | None
