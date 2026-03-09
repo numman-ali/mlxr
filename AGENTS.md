@@ -186,6 +186,7 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not blur source references, portable artifacts, and machine-local build cache.
 - Do not let host adapters own inference logic.
 - Do not let family adapters or host adapters become the de facto home for reusable workflow planning.
+- Do not leak family-specific validation or parity knobs into the shared product surface just because they help debug one current engine. If a control is not yet a clean cross-family concept, keep it family-local or diagnostic-only until the shared abstraction is designed deliberately.
 - Do not treat benchmark-free claims as settled architecture.
 - Do not move hotspots into native code before profiling evidence exists.
 - Do not let compatibility facades become the de facto core API.
@@ -297,6 +298,7 @@ Good work in this repo usually does one or more of these:
 - upgrades measurement quality
 - turns host-specific logic into shared runtime logic
 - keeps reusable workflow planning in the core workflow layer instead of scattering it across hosts or families
+- keeps product-surface controls intentional and layered: simple user intent at the edge, shared typed profiles only when they genuinely generalize, and family-specific debug controls kept out of the shared/public surface until proven reusable
 - makes a new family easier to onboard without warping the platform
 - improves agent legibility through modularity, separation of concerns, and explicit dependency seams
 - reduces the need for unsafe typing escape hatches such as avoidable `typing.cast` or broad `Any` in runtime code
