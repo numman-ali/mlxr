@@ -18,6 +18,7 @@ from .types import (
     _RuntimeVocoderArchitectureConfig,
     _RuntimeVocoderConfig,
 )
+from .weight_store import CheckpointWeightStore
 
 _DEFAULT_VAE_ENCODER_BLOCKS: tuple[tuple[str, object], ...] = (
     ("res_x", {"num_layers": 4}),
@@ -160,19 +161,18 @@ def _load_checkpoint_prefixed_weights(
     checkpoint_path: Path,
     *,
     prefixes: tuple[str, ...],
+    weight_store: CheckpointWeightStore | None = None,
 ) -> dict[str, mx.array]:
-    # Use the same MLX-native loader path as the main bridge. The audio branch in
-    # the current 22B checkpoint includes dtypes that do not round-trip cleanly
-    # through the numpy view returned by safetensors here.
+    if weight_store is not None:
+        return weight_store.prefixed_weights(prefixes)
     weights = mx.load(str(checkpoint_path))
     if not isinstance(weights, dict):
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' did not load into a weight mapping"
         )
-    selected: dict[str, mx.array] = {}
-    for key, value in weights.items():
-        if key.startswith(prefixes):
-            selected[key] = value
+    selected = {
+        key: value for key, value in weights.items() if key.startswith(prefixes)
+    }
     if not selected:
         raise RuntimeError(
             f"LTX checkpoint '{checkpoint_path}' is missing required prefixed weights for {prefixes!r}"
@@ -586,14 +586,11 @@ def _runtime_audio_encoder_config(checkpoint_root: Path) -> _RuntimeAudioEncoder
 
 
 def _validate_upsampler_layout(weights_path: Path) -> None:
-    raw_weights = mx.load(str(weights_path))
-    if not isinstance(raw_weights, dict):
-        raise RuntimeError(
-            f"LTX spatial upsampler '{weights_path}' did not load into a weight mapping"
-        )
+    with _safe_open_numpy(weights_path) as checkpoint:
+        keys = checkpoint.keys()
     if not any(
         key.startswith("upsampler.conv.") or key.startswith("upsampler.0.")
-        for key in raw_weights
+        for key in keys
     ):
         raise RuntimeError(
             f"LTX spatial upsampler '{weights_path}' is missing a supported x2 conv layout"

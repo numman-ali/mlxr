@@ -47,6 +47,7 @@ from .video_encoder import LatentLogVarianceType, VideoEncoder
 from .video_ops import unpatchify_video
 from .video_tiling import TilingConfig, decode_with_tiling
 from .weight_loading import align_module_dtype_to_weights
+from .weight_store import CheckpointWeightStore
 
 
 class _WrappedCausalConv3d(nn.Module):
@@ -498,6 +499,8 @@ def _validate_bwe_stft_buffers(
 
 def _load_configured_vae_decoder(
     checkpoint_path: Path,
+    *,
+    weight_store: CheckpointWeightStore | None = None,
 ) -> _VideoDecoderLike:
     vae_config = _runtime_vae_config(checkpoint_path)
 
@@ -514,7 +517,9 @@ def _load_configured_vae_decoder(
     )
 
     weights = _require_weight_mapping(
-        mx.load(str(checkpoint_path)),
+        weight_store.all_weights()
+        if weight_store is not None
+        else mx.load(str(checkpoint_path)),
         context=f"LTX checkpoint '{checkpoint_path}' did not load into a decoder weight mapping",
     )
     decoder_weights: dict[str, MLXArray] = {}
@@ -587,6 +592,64 @@ def _load_configured_vae_decoder(
     return decoder
 
 
+def _load_runtime_vae_statistics(
+    checkpoint_path: Path,
+    *,
+    weight_store: CheckpointWeightStore | None = None,
+) -> tuple[MLXArray, MLXArray]:
+    vae_config = _runtime_vae_config(checkpoint_path)
+    weights = _require_weight_mapping(
+        weight_store.all_weights()
+        if weight_store is not None
+        else mx.load(str(checkpoint_path)),
+        context=f"LTX checkpoint '{checkpoint_path}' did not load into a VAE statistics weight mapping",
+    )
+    mean = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.mean-of-means",
+            "vae.per_channel_statistics.mean",
+            "per_channel_statistics.mean-of-means",
+            "per_channel_statistics.mean",
+            "latents_mean",
+        ),
+    )
+    std = _first_present(
+        weights,
+        (
+            "vae.per_channel_statistics.std-of-means",
+            "vae.per_channel_statistics.std",
+            "per_channel_statistics.std-of-means",
+            "per_channel_statistics.std",
+            "latents_std",
+        ),
+    )
+    if mean is None or std is None:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' is missing VAE per-channel statistics"
+        )
+    mean_array = _require_array(
+        mean,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid latents_mean weights",
+    )
+    std_array = _require_array(
+        std,
+        context=f"LTX checkpoint '{checkpoint_path}' has invalid latents_std weights",
+    )
+    expected_shape = (vae_config.latent_channels,)
+    if tuple(int(size) for size in mean_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid latents_mean shape "
+            f"{tuple(int(size) for size in mean_array.shape)!r}; expected {expected_shape!r}"
+        )
+    if tuple(int(size) for size in std_array.shape) != expected_shape:
+        raise RuntimeError(
+            f"LTX checkpoint '{checkpoint_path}' has invalid latents_std shape "
+            f"{tuple(int(size) for size in std_array.shape)!r}; expected {expected_shape!r}"
+        )
+    return mean_array, std_array
+
+
 def _load_configured_upsampler(
     weights_path: Path,
 ) -> _UpsamplerLike:
@@ -629,6 +692,8 @@ def _load_configured_upsampler(
 
 def _load_runtime_vae_encoder(
     checkpoint_path: Path,
+    *,
+    weight_store: CheckpointWeightStore | None = None,
 ) -> _VAEEncoder:
     vae_config = _runtime_vae_config(checkpoint_path)
     padding_mode = PaddingModeType(vae_config.encoder_spatial_padding_mode)
@@ -643,7 +708,9 @@ def _load_runtime_vae_encoder(
     )
 
     weights = _require_weight_mapping(
-        mx.load(str(checkpoint_path)),
+        weight_store.all_weights()
+        if weight_store is not None
+        else mx.load(str(checkpoint_path)),
         context=f"LTX checkpoint '{checkpoint_path}' did not load into an encoder weight mapping",
     )
     encoder_weights: dict[str, MLXArray] = {}

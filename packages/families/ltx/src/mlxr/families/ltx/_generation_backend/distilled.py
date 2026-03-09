@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
 
 import mlx.core as mx
 import numpy as np
@@ -49,10 +50,16 @@ from .runtime_helpers import (
     _ensure_upsampler,
     _ensure_vae_decoder,
     _ensure_vae_encoder,
+    _ensure_vae_statistics,
     _imports,
     _prepare_conditionings,
+    _release_checkpoint_weight_store,
 )
-from .sampling import _assert_prompt_runtime_contract, _denoise_distilled_audio_video
+from .sampling import (
+    _assert_prompt_runtime_contract,
+    _denoise_distilled_audio_video,
+    _denoise_distilled_video_only,
+)
 from .types import (
     MLXArray,
     _AudioDecoderLike,
@@ -63,16 +70,57 @@ from .types import (
     _UpsamplerLike,
     _VAEEncoder,
     _VideoDecoderLike,
+    _VideoTransformer,
     _VocoderLike,
 )
+from .weight_store import CheckpointWeightStore
+
+
+def _require_audio_video_transformer(
+    transformer: _AudioVideoTransformer | _VideoTransformer | None,
+) -> _AudioVideoTransformer:
+    if not _is_audio_video_transformer(transformer):
+        raise RuntimeError("Expected audio-video transformer")
+    return transformer
+
+
+def _is_audio_video_transformer(
+    transformer: _AudioVideoTransformer | _VideoTransformer | None,
+) -> TypeGuard[_AudioVideoTransformer]:
+    return transformer is not None and hasattr(transformer, "audio_inner_dim")
+
+
+def _require_video_transformer(
+    transformer: _AudioVideoTransformer | _VideoTransformer | None,
+) -> _VideoTransformer:
+    if transformer is None:
+        raise RuntimeError("Expected video transformer")
+    return transformer
+
+
+def _require_video_decoder(
+    vae_decoder: _VideoDecoderLike | None,
+) -> _VideoDecoderLike:
+    if vae_decoder is None:
+        raise RuntimeError("Expected video decoder")
+    return vae_decoder
+
+
+def _require_audio_latents(audio_latents: MLXArray | None) -> MLXArray:
+    if audio_latents is None:
+        raise RuntimeError("Expected audio latents")
+    return audio_latents
 
 
 @dataclass(slots=True)
 class LTXDistilledVideoGenerator(VideoGenerator):
     checkpoint_path: Path
     spatial_upsampler_path: Path
+    _audio_enabled: bool = True
     _reference_imports: _ReferenceImports | None = None
-    _transformer: _AudioVideoTransformer | None = None
+    _checkpoint_weight_store: CheckpointWeightStore | None = None
+    _transformer: _AudioVideoTransformer | _VideoTransformer | None = None
+    _vae_statistics: tuple[MLXArray, MLXArray] | None = None
     _vae_decoder: _VideoDecoderLike | None = None
     _vae_encoder: _VAEEncoder | None = None
     _upsampler: _UpsamplerLike | None = None
@@ -95,6 +143,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     _prepare_conditionings = _prepare_conditionings
     _apply_conditionings_to_stage = _apply_conditionings_to_stage
     _decode_video = _decode_video
+    _release_checkpoint_weight_store = _release_checkpoint_weight_store
 
     def generate(
         self,
@@ -119,11 +168,25 @@ class LTXDistilledVideoGenerator(VideoGenerator):
 
         imports = self._imports()
         runtime_config = _runtime_model_config(self.checkpoint_path)
-        _assert_prompt_runtime_contract(prompt_context, runtime_config)
+        _assert_prompt_runtime_contract(
+            prompt_context,
+            runtime_config,
+            audio_required=self._audio_enabled,
+        )
         video_context = _require_video_context(prompt_context)
-        audio_context = _require_audio_context(prompt_context)
+        audio_context = (
+            _require_audio_context(prompt_context) if self._audio_enabled else None
+        )
         negative_video_context = _optional_negative_video_context(prompt_context)
-        negative_audio_context = _optional_negative_audio_context(prompt_context)
+        negative_audio_context = (
+            _optional_negative_audio_context(prompt_context)
+            if self._audio_enabled
+            else None
+        )
+        if not self._audio_enabled and audio_conditioning is not None:
+            raise ValueError(
+                "Owned LTX video-only debug mode does not support audio conditioning"
+            )
         padded_shape = _resolve_padded_shape(width=width, height=height)
         effective_seed = _effective_seed(
             prompt_context=prompt_context,
@@ -137,7 +200,11 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         stage1_width = padded_shape.internal_width // 2 // 32
         stage2_height = padded_shape.internal_height // 32
         stage2_width = padded_shape.internal_width // 32
-        audio_frames = int(imports.compute_audio_frames(num_frames, float(fps)))
+        audio_frames = (
+            int(imports.compute_audio_frames(num_frames, float(fps)))
+            if self._audio_enabled
+            else 0
+        )
         conditioned_audio_waveform: npt.NDArray[np.float32] | None = None
         conditioned_audio_sample_rate: int | None = None
         trace_recorder = TraceRecorder(enabled=_debug_trace_enabled())
@@ -147,20 +214,10 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         with trace_recorder.span(
             "ltx.ensure_transformer", snapshot=mlx_memory_snapshot
         ):
-            transformer = self._ensure_transformer(
-                imports, runtime_config, prompt_context
+            transformer: _AudioVideoTransformer | _VideoTransformer | None = (
+                self._ensure_transformer(imports, runtime_config, prompt_context)
             )
         _debug_progress("ensure_transformer done")
-        _debug_progress("ensure_vae_decoder start")
-        with trace_recorder.span(
-            "ltx.ensure_vae_decoder", snapshot=mlx_memory_snapshot
-        ):
-            vae_decoder = self._ensure_vae_decoder(imports)
-        _debug_progress("ensure_vae_decoder done")
-        _debug_progress("ensure_upsampler start")
-        with trace_recorder.span("ltx.ensure_upsampler", snapshot=mlx_memory_snapshot):
-            upsampler = self._ensure_upsampler(imports)
-        _debug_progress("ensure_upsampler done")
         with trace_recorder.span(
             "ltx.prepare_conditionings", snapshot=mlx_memory_snapshot
         ):
@@ -173,7 +230,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 model_dtype=model_dtype,
             )
         conditioned_audio_latents: MLXArray | None = None
-        if audio_conditioning is not None:
+        if self._audio_enabled and audio_conditioning is not None:
             with trace_recorder.span(
                 "ltx.encode_audio_conditioning",
                 snapshot=mlx_memory_snapshot,
@@ -188,6 +245,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                     audio_frames=audio_frames,
                     model_dtype=model_dtype,
                 )
+        self._release_checkpoint_weight_store()
 
         mx.random.seed(effective_seed)
         timings_ms: dict[str, float] = {}
@@ -201,11 +259,17 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             stage1_width,
             fps=float(fps),
         )
-        stage1_audio_positions = imports.create_audio_position_grid(1, audio_frames)
+        stage1_audio_positions = (
+            imports.create_audio_position_grid(1, audio_frames)
+            if self._audio_enabled
+            else None
+        )
         latents = mx.random.normal(
             (1, 128, latent_frames, stage1_height, stage1_width)
         ).astype(model_dtype)
-        if conditioned_audio_latents is None:
+        if not self._audio_enabled:
+            audio_latents = None
+        elif conditioned_audio_latents is None:
             audio_latents = mx.random.normal(
                 (
                     1,
@@ -226,27 +290,58 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             latents = stage1_state.latent
         else:
             stage1_state = None
-        latents, audio_latents = _denoise_distilled_audio_video(
-            imports=imports,
-            transformer=transformer,
-            latents=latents,
-            positions=stage1_positions,
-            text_embeddings=video_context,
-            audio_latents=audio_latents,
-            audio_positions=stage1_audio_positions,
-            audio_embeddings=audio_context,
-            negative_text_embeddings=negative_video_context,
-            negative_audio_embeddings=negative_audio_context,
-            sigmas=imports.stage_1_sigmas,
-            state=stage1_state,
-            runtime_config=runtime_config,
-            freeze_audio=audio_conditioning is not None,
-            trace_recorder=trace_recorder,
-            trace_sync=trace_sync,
-        )
-        mx.eval(latents, audio_latents)
+        if self._audio_enabled:
+            if (
+                audio_context is None
+                or stage1_audio_positions is None
+                or audio_latents is None
+            ):
+                raise RuntimeError("LTX audio-enabled path requires audio context")
+            stage1_transformer = _require_audio_video_transformer(transformer)
+            latents, audio_latents = _denoise_distilled_audio_video(
+                imports=imports,
+                transformer=stage1_transformer,
+                latents=latents,
+                positions=stage1_positions,
+                text_embeddings=video_context,
+                audio_latents=audio_latents,
+                audio_positions=stage1_audio_positions,
+                audio_embeddings=audio_context,
+                negative_text_embeddings=negative_video_context,
+                negative_audio_embeddings=negative_audio_context,
+                sigmas=imports.stage_1_sigmas,
+                state=stage1_state,
+                runtime_config=runtime_config,
+                freeze_audio=audio_conditioning is not None,
+                trace_recorder=trace_recorder,
+                trace_sync=trace_sync,
+            )
+            mx.eval(latents, audio_latents)
+        else:
+            video_transformer = _require_video_transformer(transformer)
+            latents = _denoise_distilled_video_only(
+                imports=imports,
+                transformer=video_transformer,
+                latents=latents,
+                positions=stage1_positions,
+                text_embeddings=video_context,
+                negative_text_embeddings=negative_video_context,
+                sigmas=imports.stage_1_sigmas,
+                state=stage1_state,
+                runtime_config=runtime_config,
+                trace_recorder=trace_recorder,
+                trace_sync=trace_sync,
+            )
+            mx.eval(latents)
         debug_dir = _debug_stage_dump_dir()
+        vae_decoder: _VideoDecoderLike | None = None
         if debug_dir is not None:
+            _debug_progress("ensure_vae_decoder start")
+            with trace_recorder.span(
+                "ltx.ensure_vae_decoder", snapshot=mlx_memory_snapshot
+            ):
+                vae_decoder = self._ensure_vae_decoder(imports)
+            _debug_progress("ensure_vae_decoder done")
             _debug_progress("debug decode stage1")
             stage1_padded_shape = _half_resolution_padded_shape(
                 padded_shape=padded_shape,
@@ -275,21 +370,31 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             )
             mx.clear_cache()
         timings_ms["stage1_duration_ms"] = _elapsed_ms(stage1_started)
+        if not self._audio_enabled:
+            self._transformer = None
+            transformer = None
+            mx.clear_cache()
 
         upsample_started = time.perf_counter()
+        latent_mean, latent_std = _ensure_vae_statistics(self)
+        _debug_progress("ensure_upsampler start")
+        with trace_recorder.span("ltx.ensure_upsampler", snapshot=mlx_memory_snapshot):
+            upsampler = self._ensure_upsampler(imports)
+        _debug_progress("ensure_upsampler done")
         _debug_progress("upsample start")
         latents = imports.upsample_latents(
             latents,
             upsampler,
-            vae_decoder.latents_mean,
-            vae_decoder.latents_std,
+            latent_mean,
+            latent_std,
         )
         mx.eval(latents)
         if debug_dir is not None:
             _debug_progress("debug decode post_x2")
+            post_x2_decoder = _require_video_decoder(vae_decoder)
             post_x2_decoded, post_x2_tiling = self._decode_video(
                 imports=imports,
-                vae_decoder=vae_decoder,
+                vae_decoder=post_x2_decoder,
                 latents=latents,
                 padded_shape=padded_shape,
                 num_frames=num_frames,
@@ -308,10 +413,23 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 },
             )
             mx.clear_cache()
+        self._upsampler = None
+        self._vae_decoder = None
+        vae_decoder = None
+        mx.clear_cache()
         timings_ms["upsample_duration_ms"] = _elapsed_ms(upsample_started)
 
         stage2_started = time.perf_counter()
         _debug_progress("stage2 setup")
+        if transformer is None:
+            _debug_progress("ensure_transformer start")
+            with trace_recorder.span(
+                "ltx.ensure_transformer.stage2", snapshot=mlx_memory_snapshot
+            ):
+                transformer = self._ensure_transformer(
+                    imports, runtime_config, prompt_context
+                )
+            _debug_progress("ensure_transformer done")
         stage2_positions = imports.create_position_grid(
             1,
             latent_frames,
@@ -319,7 +437,11 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             stage2_width,
             fps=float(fps),
         )
-        stage2_audio_positions = imports.create_audio_position_grid(1, audio_frames)
+        stage2_audio_positions = (
+            imports.create_audio_position_grid(1, audio_frames)
+            if self._audio_enabled
+            else None
+        )
         if conditioning_plan.stage2:
             stage2_state = self._apply_conditionings_to_stage(
                 imports=imports,
@@ -330,13 +452,17 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             latents = stage2_state.latent
             noise_scale = mx.array(float(imports.stage_2_sigmas[0]), dtype=model_dtype)
             one_minus_scale = mx.array(1.0, dtype=model_dtype) - noise_scale
-            if audio_conditioning is None:
+            if self._audio_enabled and audio_conditioning is None:
+                audio_latents = _require_audio_latents(audio_latents)
                 audio_latents = (
                     mx.random.normal(audio_latents.shape).astype(model_dtype)
                     * noise_scale
                     + audio_latents * one_minus_scale
                 ).astype(model_dtype)
-            mx.eval(latents, audio_latents)
+            if self._audio_enabled:
+                mx.eval(latents, audio_latents)
+            else:
+                mx.eval(latents)
         else:
             stage2_state = None
             noise_scale = mx.array(float(imports.stage_2_sigmas[0]), dtype=model_dtype)
@@ -345,38 +471,70 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 mx.random.normal(latents.shape).astype(model_dtype) * noise_scale
                 + latents * one_minus_scale
             ).astype(model_dtype)
-            if audio_conditioning is None:
+            if self._audio_enabled and audio_conditioning is None:
+                audio_latents = _require_audio_latents(audio_latents)
                 audio_latents = (
                     mx.random.normal(audio_latents.shape).astype(model_dtype)
                     * noise_scale
                     + audio_latents * one_minus_scale
                 ).astype(model_dtype)
+            if self._audio_enabled:
+                mx.eval(latents, audio_latents)
+            else:
+                mx.eval(latents)
+        if self._audio_enabled:
+            if audio_context is None or stage2_audio_positions is None:
+                raise RuntimeError("LTX audio-enabled path requires audio state")
+            stage2_transformer = _require_audio_video_transformer(transformer)
+            audio_latents = _require_audio_latents(audio_latents)
+            latents, audio_latents = _denoise_distilled_audio_video(
+                imports=imports,
+                transformer=stage2_transformer,
+                latents=latents,
+                positions=stage2_positions,
+                text_embeddings=video_context,
+                audio_latents=audio_latents,
+                audio_positions=stage2_audio_positions,
+                audio_embeddings=audio_context,
+                negative_text_embeddings=negative_video_context,
+                negative_audio_embeddings=negative_audio_context,
+                sigmas=imports.stage_2_sigmas,
+                state=stage2_state,
+                runtime_config=runtime_config,
+                freeze_audio=audio_conditioning is not None,
+                trace_recorder=trace_recorder,
+                trace_sync=trace_sync,
+            )
             mx.eval(latents, audio_latents)
-        latents, audio_latents = _denoise_distilled_audio_video(
-            imports=imports,
-            transformer=transformer,
-            latents=latents,
-            positions=stage2_positions,
-            text_embeddings=video_context,
-            audio_latents=audio_latents,
-            audio_positions=stage2_audio_positions,
-            audio_embeddings=audio_context,
-            negative_text_embeddings=negative_video_context,
-            negative_audio_embeddings=negative_audio_context,
-            sigmas=imports.stage_2_sigmas,
-            state=stage2_state,
-            runtime_config=runtime_config,
-            freeze_audio=audio_conditioning is not None,
-            trace_recorder=trace_recorder,
-            trace_sync=trace_sync,
-        )
-        mx.eval(latents, audio_latents)
+        else:
+            latents = _denoise_distilled_video_only(
+                imports=imports,
+                transformer=transformer,
+                latents=latents,
+                positions=stage2_positions,
+                text_embeddings=video_context,
+                negative_text_embeddings=negative_video_context,
+                sigmas=imports.stage_2_sigmas,
+                state=stage2_state,
+                runtime_config=runtime_config,
+                trace_recorder=trace_recorder,
+                trace_sync=trace_sync,
+            )
+            mx.eval(latents)
         timings_ms["stage2_duration_ms"] = _elapsed_ms(stage2_started)
 
         decode_started = time.perf_counter()
+        if vae_decoder is None:
+            _debug_progress("ensure_vae_decoder start")
+            with trace_recorder.span(
+                "ltx.ensure_vae_decoder.final", snapshot=mlx_memory_snapshot
+            ):
+                vae_decoder = self._ensure_vae_decoder(imports)
+            _debug_progress("ensure_vae_decoder done")
+        final_decoder = _require_video_decoder(vae_decoder)
         decoded_video, tiling_mode = self._decode_video(
             imports=imports,
-            vae_decoder=vae_decoder,
+            vae_decoder=final_decoder,
             latents=latents,
             padded_shape=padded_shape,
             num_frames=num_frames,
@@ -384,21 +542,29 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         timings_ms["decode_duration_ms"] = _elapsed_ms(decode_started)
         frames_uint8 = _decode_to_uint8_frames(decoded_video, padded_shape=padded_shape)
         audio_decode_started = time.perf_counter()
-        if (
-            conditioned_audio_waveform is not None
-            and conditioned_audio_sample_rate is not None
-        ):
-            audio_waveform: npt.NDArray[np.float32] | None = conditioned_audio_waveform
-            audio_sample_rate = conditioned_audio_sample_rate
-            audio_backend = "input_audio_passthrough"
-        else:
-            audio_waveform, audio_sample_rate, audio_backend = (
-                self._decode_audio_waveform(
-                    imports=imports,
-                    audio_latents=audio_latents,
+        if self._audio_enabled:
+            if (
+                conditioned_audio_waveform is not None
+                and conditioned_audio_sample_rate is not None
+            ):
+                audio_waveform: npt.NDArray[np.float32] | None = (
+                    conditioned_audio_waveform
                 )
-            )
-        timings_ms["audio_decode_duration_ms"] = _elapsed_ms(audio_decode_started)
+                audio_sample_rate = conditioned_audio_sample_rate
+                audio_backend = "input_audio_passthrough"
+            else:
+                audio_waveform, audio_sample_rate, audio_backend = (
+                    self._decode_audio_waveform(
+                        imports=imports,
+                        audio_latents=_require_audio_latents(audio_latents),
+                    )
+                )
+            timings_ms["audio_decode_duration_ms"] = _elapsed_ms(audio_decode_started)
+        else:
+            audio_waveform = None
+            audio_sample_rate = None
+            audio_backend = None
+            timings_ms["audio_decode_duration_ms"] = 0.0
         if debug_dir is not None:
             _emit_debug_frame_snapshot(
                 debug_dir=debug_dir,
@@ -412,7 +578,11 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         mx.clear_cache()
 
         metadata: dict[str, object] = {
-            "pipeline_kind": "distilled_two_stage",
+            "pipeline_kind": (
+                "distilled_two_stage"
+                if self._audio_enabled
+                else "distilled_two_stage_video_only"
+            ),
             "stage1_duration_ms": timings_ms["stage1_duration_ms"],
             "upsample_duration_ms": timings_ms["upsample_duration_ms"],
             "stage2_duration_ms": timings_ms["stage2_duration_ms"],
@@ -424,6 +594,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             "output_frames": num_frames,
             "internal_width": padded_shape.internal_width,
             "internal_height": padded_shape.internal_height,
+            "audio_enabled": self._audio_enabled,
             "audio_present": audio_waveform is not None,
             "audio_sample_rate": audio_sample_rate,
             "audio_channels": (
@@ -450,7 +621,11 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             frames=frames_uint8,
             fps=fps,
             seed=effective_seed,
-            backend="mlxr_ltx_distilled_two_stage",
+            backend=(
+                "mlxr_ltx_distilled_two_stage"
+                if self._audio_enabled
+                else "mlxr_ltx_distilled_two_stage_video_only"
+            ),
             conditioning_count=len(conditioning_inputs),
             prompt_signature=_prompt_signature(prompt_context.prompt_text),
             audio_waveform=audio_waveform,
@@ -460,6 +635,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
 
     def close(self) -> None:
         self._transformer = None
+        self._vae_statistics = None
         self._vae_decoder = None
         self._vae_encoder = None
         self._upsampler = None

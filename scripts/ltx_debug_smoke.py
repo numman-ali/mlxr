@@ -29,8 +29,12 @@ DEFAULT_MAX_ACTIVE_GB = 24.0
 DEFAULT_MAX_PEAK_GB = 32.0
 DEFAULT_MAX_SECONDS = 180.0
 DEFAULT_MEMORY_POLL_SECONDS = 0.5
-KNOWN_REAL_BACKENDS = frozenset({"mlxr_ltx_distilled_two_stage"})
-KNOWN_REAL_PIPELINE_KINDS = frozenset({"distilled_two_stage"})
+KNOWN_REAL_BACKENDS = frozenset(
+    {"mlxr_ltx_distilled_two_stage", "mlxr_ltx_distilled_two_stage_video_only"}
+)
+KNOWN_REAL_PIPELINE_KINDS = frozenset(
+    {"distilled_two_stage", "distilled_two_stage_video_only"}
+)
 PROFILE_PRESETS: dict[str, tuple[int, int, int, int]] = {
     "safe-smoke": (256, 160, 17, 24),
     "visual-gate": (384, 224, 17, 24),
@@ -45,7 +49,13 @@ def _now_utc() -> datetime:
 
 
 class PromptEncoderLike(Protocol):
-    def encode(self, prompt: str, *, negative_prompt: str | None = None) -> object: ...
+    def encode(
+        self,
+        prompt: str,
+        *,
+        negative_prompt: str | None = None,
+        return_audio_context: bool = True,
+    ) -> object: ...
 
     def close(self) -> None: ...
 
@@ -122,7 +132,7 @@ def _default_prompt_encoder_factory(
 
 
 def _default_video_generator_factory(
-    *, checkpoint_path: Path, spatial_upsampler_path: Path
+    *, checkpoint_path: Path, spatial_upsampler_path: Path, audio_enabled: bool
 ) -> VideoGeneratorLike:
     module = importlib.import_module("mlxr.families.ltx.generation")
     factory: Callable[..., VideoGeneratorLike] = getattr(
@@ -131,6 +141,7 @@ def _default_video_generator_factory(
     return factory(
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
+        audio_enabled=audio_enabled,
     )
 
 
@@ -166,6 +177,7 @@ class SmokeConfig:
     trace: bool
     trace_sync: bool
     clean_lifecycle: bool
+    video_only: bool
     backend_progress: bool
     heartbeat_seconds: float
     max_active_gb: float
@@ -241,6 +253,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Encode the prompt, close the encoder, clear cache, then load generate.",
     )
     parser.add_argument(
+        "--video-only",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run the owned LTX distilled bridge without the audio branch.",
+    )
+    parser.add_argument(
         "--backend-progress",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -313,6 +331,7 @@ def build_config(args: argparse.Namespace) -> SmokeConfig:
         trace=bool(args.trace),
         trace_sync=bool(args.trace_sync),
         clean_lifecycle=bool(args.clean_lifecycle),
+        video_only=bool(args.video_only),
         backend_progress=bool(args.backend_progress),
         heartbeat_seconds=float(args.heartbeat_seconds),
         max_active_gb=float(args.max_active_gb),
@@ -435,6 +454,7 @@ def run_smoke(
         "stage_debug": config.stage_debug,
         "trace": config.trace,
         "trace_sync": config.trace_sync,
+        "video_only": config.video_only,
         "backend_progress": config.backend_progress,
         "artifact_source": {
             "artifact_root": (
@@ -541,6 +561,8 @@ def run_smoke(
         env_updates["MLXR_LTX_DEBUG_TRACE_SYNC"] = "1"
     if config.backend_progress:
         env_updates["MLXR_LTX_DEBUG_PROGRESS"] = "1"
+    if config.video_only:
+        env_updates["MLXR_LTX_DEBUG_VIDEO_ONLY"] = "1"
 
     try:
         with temporary_env(env_updates):
@@ -556,6 +578,7 @@ def run_smoke(
             print("encoding prompt", flush=True)
             prompt_context = encoder.encode(
                 config.prompt,
+                return_audio_context=not config.video_only,
                 negative_prompt=config.negative_prompt,
             )
             timings_ms["prompt_encode"] = _elapsed_ms(prompt_started)
@@ -570,6 +593,7 @@ def run_smoke(
             generator = video_generator_factory(
                 checkpoint_path=config.artifact_paths.checkpoint_path,
                 spatial_upsampler_path=config.artifact_paths.spatial_upsampler_path,
+                audio_enabled=not config.video_only,
             )
 
             print("generating video", flush=True)
@@ -780,6 +804,7 @@ def _cli_args_from_config(config: SmokeConfig) -> list[str]:
         "--trace" if config.trace else "--no-trace",
         "--trace-sync" if config.trace_sync else "--no-trace-sync",
         "--clean-lifecycle" if config.clean_lifecycle else "--no-clean-lifecycle",
+        "--video-only" if config.video_only else "--no-video-only",
         "--backend-progress" if config.backend_progress else "--no-backend-progress",
         "--heartbeat-seconds",
         str(config.heartbeat_seconds),

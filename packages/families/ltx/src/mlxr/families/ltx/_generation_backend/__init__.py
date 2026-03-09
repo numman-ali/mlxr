@@ -18,7 +18,10 @@ from .types import _RuntimeModelConfig
 
 
 def create_video_generator(
-    *, checkpoint_path: Path, spatial_upsampler_path: Path
+    *,
+    checkpoint_path: Path,
+    spatial_upsampler_path: Path,
+    audio_enabled: bool = True,
 ) -> VideoGenerator:
     if can_use_reference_backend(
         checkpoint_path=checkpoint_path,
@@ -27,6 +30,7 @@ def create_video_generator(
         return LTXDistilledVideoGenerator(
             checkpoint_path=checkpoint_path,
             spatial_upsampler_path=spatial_upsampler_path,
+            _audio_enabled=audio_enabled,
         )
     return LTXPreviewVideoGenerator(
         checkpoint_path=checkpoint_path,

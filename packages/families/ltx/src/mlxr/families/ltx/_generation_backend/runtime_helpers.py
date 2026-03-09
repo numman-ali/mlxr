@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypeGuard
 
 import mlx.core as mx
 import numpy as np
@@ -74,6 +75,7 @@ from .types import (
     _UpsamplerLike,
     _VAEEncoder,
     _VideoDecoderLike,
+    _VideoTransformer,
     _VocoderLike,
 )
 from .video_stack import (
@@ -81,6 +83,7 @@ from .video_stack import (
     _load_configured_vae_decoder,
     _load_runtime_audio_decoder,
     _load_runtime_vae_encoder,
+    _load_runtime_vae_statistics,
     _load_runtime_vocoder,
     _require_per_channel_statistics,
     _require_weight_subset,
@@ -88,6 +91,15 @@ from .video_stack import (
     _upsample_latents,
 )
 from .video_tiling import TilingConfig
+from .weight_store import CheckpointWeightStore
+
+
+def _is_audio_video_transformer(
+    transformer: _AudioVideoTransformer | _VideoTransformer,
+) -> TypeGuard[_AudioVideoTransformer]:
+    return hasattr(transformer, "audio_adaln_single") and hasattr(
+        transformer, "audio_inner_dim"
+    )
 
 
 def _to_denoised_ref(
@@ -224,6 +236,23 @@ def _parameters_for_eval(module: object) -> object:
     return parameters()
 
 
+def _ensure_checkpoint_weight_store(
+    self: _RuntimeHelperHost,
+) -> CheckpointWeightStore:
+    store = getattr(self, "_checkpoint_weight_store", None)
+    if store is None:
+        store = CheckpointWeightStore(self.checkpoint_path)
+        setattr(self, "_checkpoint_weight_store", store)
+    return store
+
+
+def _release_checkpoint_weight_store(self: _RuntimeHelperHost) -> None:
+    store = getattr(self, "_checkpoint_weight_store", None)
+    if store is not None:
+        store.release()
+        setattr(self, "_checkpoint_weight_store", None)
+
+
 def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
     if self._reference_imports is not None:
         return self._reference_imports
@@ -258,8 +287,11 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         create_audio_position_grid=_create_audio_position_grid_ref,
         compute_audio_frames=_compute_audio_frames_ref,
         load_image=_load_image_ref,
-        load_vae_encoder=lambda checkpoint_path: _load_runtime_vae_encoder(
-            checkpoint_path
+        load_vae_encoder=lambda checkpoint_path, *, weight_store=None: (
+            _load_runtime_vae_encoder(
+                checkpoint_path,
+                weight_store=weight_store,
+            )
         ),
         load_audio_decoder=lambda checkpoint_root, *, unified_weights: (
             _load_runtime_audio_decoder(
@@ -285,57 +317,68 @@ def _ensure_transformer(
     imports: _ReferenceImports,
     runtime_config: _RuntimeModelConfig,
     prompt_context: PromptEncodingResult,
-) -> _AudioVideoTransformer:
+) -> _AudioVideoTransformer | _VideoTransformer:
     if self._transformer is not None:
         return self._transformer
 
-    config = LTXModelConfig.from_dict(
-        {
-            "model_type": LTXModelType.AudioVideo,
-            "num_attention_heads": runtime_config.num_attention_heads,
-            "attention_head_dim": runtime_config.attention_head_dim,
-            "in_channels": runtime_config.in_channels,
-            "out_channels": runtime_config.out_channels,
-            "num_layers": runtime_config.num_layers,
-            "cross_attention_dim": runtime_config.cross_attention_dim,
-            "caption_channels": _context_width(prompt_context.video_context),
-            "audio_num_attention_heads": runtime_config.audio_num_attention_heads,
-            "audio_attention_head_dim": runtime_config.audio_attention_head_dim,
-            "audio_in_channels": runtime_config.audio_in_channels,
-            "audio_out_channels": runtime_config.audio_out_channels,
-            "audio_cross_attention_dim": runtime_config.audio_cross_attention_dim,
-            "audio_caption_channels": _context_width(
-                _require_audio_context(prompt_context)
-            ),
-            "positional_embedding_theta": runtime_config.positional_embedding_theta,
-            "positional_embedding_max_pos": runtime_config.positional_embedding_max_pos,
-            "audio_positional_embedding_max_pos": runtime_config.audio_positional_embedding_max_pos,
-            "use_middle_indices_grid": runtime_config.use_middle_indices_grid,
-            "rope_type": prompt_context.rope_type,
-            "double_precision_rope": prompt_context.double_precision_rope,
-            "timestep_scale_multiplier": runtime_config.timestep_scale_multiplier,
-            "av_ca_timestep_scale_multiplier": runtime_config.av_ca_timestep_scale_multiplier,
-            "norm_eps": runtime_config.norm_eps,
-        }
-    )
+    audio_enabled = bool(getattr(self, "_audio_enabled", True))
+    config_dict: dict[str, object] = {
+        "model_type": (
+            LTXModelType.AudioVideo if audio_enabled else LTXModelType.VideoOnly
+        ),
+        "num_attention_heads": runtime_config.num_attention_heads,
+        "attention_head_dim": runtime_config.attention_head_dim,
+        "in_channels": runtime_config.in_channels,
+        "out_channels": runtime_config.out_channels,
+        "num_layers": runtime_config.num_layers,
+        "cross_attention_dim": runtime_config.cross_attention_dim,
+        "caption_channels": _context_width(prompt_context.video_context),
+        "positional_embedding_theta": runtime_config.positional_embedding_theta,
+        "positional_embedding_max_pos": runtime_config.positional_embedding_max_pos,
+        "use_middle_indices_grid": runtime_config.use_middle_indices_grid,
+        "rope_type": prompt_context.rope_type,
+        "double_precision_rope": prompt_context.double_precision_rope,
+        "timestep_scale_multiplier": runtime_config.timestep_scale_multiplier,
+        "av_ca_timestep_scale_multiplier": runtime_config.av_ca_timestep_scale_multiplier,
+        "norm_eps": runtime_config.norm_eps,
+    }
+    if audio_enabled:
+        config_dict.update(
+            {
+                "audio_num_attention_heads": runtime_config.audio_num_attention_heads,
+                "audio_attention_head_dim": runtime_config.audio_attention_head_dim,
+                "audio_in_channels": runtime_config.audio_in_channels,
+                "audio_out_channels": runtime_config.audio_out_channels,
+                "audio_cross_attention_dim": runtime_config.audio_cross_attention_dim,
+                "audio_caption_channels": _context_width(
+                    _require_audio_context(prompt_context)
+                ),
+                "audio_positional_embedding_max_pos": runtime_config.audio_positional_embedding_max_pos,
+            }
+        )
+    config = LTXModelConfig.from_dict(config_dict)
     config.apply_gated_attention = runtime_config.apply_gated_attention
     config.cross_attention_adaln = runtime_config.cross_attention_adaln
     config.caption_proj_before_connector = prompt_context.caption_proj_before_connector
-    transformer: _AudioVideoTransformer = LTXModel.from_pretrained(
+    transformer: _AudioVideoTransformer | _VideoTransformer = LTXModel.from_pretrained(
         self.checkpoint_path,
         config=config,
         strict=True,
+        weights_override=_ensure_checkpoint_weight_store(self).all_weights(),
     )
     if runtime_config.apply_gated_attention:
         first_block = next(iter(transformer.transformer_blocks.values()))
-        required_gate_attrs = (
+        required_gate_attrs: tuple[str, ...] = (
             "attn1",
             "attn2",
-            "audio_attn1",
-            "audio_attn2",
-            "audio_to_video_attn",
-            "video_to_audio_attn",
         )
+        if audio_enabled:
+            required_gate_attrs += (
+                "audio_attn1",
+                "audio_attn2",
+                "audio_to_video_attn",
+                "video_to_audio_attn",
+            )
         missing_gate_attrs = [
             attr
             for attr in required_gate_attrs
@@ -353,7 +396,7 @@ def _ensure_transformer(
                 "LTX checkpoint requires cross-attention AdaLN, but the MLX "
                 "transformer bridge did not instantiate prompt AdaLN"
             )
-        if not hasattr(transformer, "audio_prompt_adaln_single"):
+        if audio_enabled and not hasattr(transformer, "audio_prompt_adaln_single"):
             raise RuntimeError(
                 "LTX checkpoint requires audio prompt AdaLN, but the MLX "
                 "transformer bridge did not instantiate the audio prompt AdaLN"
@@ -364,21 +407,27 @@ def _ensure_transformer(
                 "LTX checkpoint requires 9-way AdaLN modulation, but the MLX "
                 "transformer bridge is still using the wrong AdaLN shape"
             )
-        audio_linear = getattr(transformer.audio_adaln_single, "linear", None)
-        if (
-            audio_linear is None
-            or int(audio_linear.weight.shape[0]) != 9 * transformer.audio_inner_dim
-        ):
-            raise RuntimeError(
-                "LTX checkpoint requires 9-way audio AdaLN modulation, but the "
-                "MLX transformer bridge is still using the wrong audio AdaLN shape"
-            )
-        first_block = next(iter(transformer.transformer_blocks.values()))
-        if not hasattr(first_block, "audio_prompt_scale_shift_table"):
-            raise RuntimeError(
-                "LTX checkpoint requires audio prompt AdaLN tables, but the MLX "
-                "transformer bridge did not instantiate them"
-            )
+        if audio_enabled:
+            if not _is_audio_video_transformer(transformer):
+                raise RuntimeError(
+                    "LTX checkpoint requires audio AdaLN, but the MLX transformer "
+                    "bridge did not instantiate the audio AdaLN shape"
+                )
+            audio_linear = getattr(transformer.audio_adaln_single, "linear", None)
+            if (
+                audio_linear is None
+                or int(audio_linear.weight.shape[0]) != 9 * transformer.audio_inner_dim
+            ):
+                raise RuntimeError(
+                    "LTX checkpoint requires 9-way audio AdaLN modulation, but the "
+                    "MLX transformer bridge is still using the wrong audio AdaLN shape"
+                )
+            first_block = next(iter(transformer.transformer_blocks.values()))
+            if not hasattr(first_block, "audio_prompt_scale_shift_table"):
+                raise RuntimeError(
+                    "LTX checkpoint requires audio prompt AdaLN tables, but the MLX "
+                    "transformer bridge did not instantiate them"
+                )
     mx.eval(transformer.parameters())
     self._transformer = transformer
     return transformer
@@ -388,17 +437,34 @@ def _ensure_vae_decoder(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _VideoDecoderLike:
     if self._vae_decoder is None:
-        vae_decoder = _load_configured_vae_decoder(self.checkpoint_path)
+        vae_decoder = _load_configured_vae_decoder(
+            self.checkpoint_path,
+            weight_store=_ensure_checkpoint_weight_store(self),
+        )
         mx.eval(vae_decoder.parameters())
         self._vae_decoder = vae_decoder
     return self._vae_decoder
+
+
+def _ensure_vae_statistics(self: _RuntimeHelperHost) -> tuple[MLXArray, MLXArray]:
+    statistics = getattr(self, "_vae_statistics", None)
+    if statistics is None:
+        statistics = _load_runtime_vae_statistics(
+            self.checkpoint_path,
+            weight_store=_ensure_checkpoint_weight_store(self),
+        )
+        setattr(self, "_vae_statistics", statistics)
+    return statistics
 
 
 def _ensure_vae_encoder(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _VAEEncoder:
     if self._vae_encoder is None:
-        self._vae_encoder = imports.load_vae_encoder(self.checkpoint_path)
+        self._vae_encoder = imports.load_vae_encoder(
+            self.checkpoint_path,
+            weight_store=_ensure_checkpoint_weight_store(self),
+        )
         mx.eval(self._vae_encoder.parameters())
     return self._vae_encoder
 
@@ -424,6 +490,7 @@ def _ensure_audio_encoder(
     checkpoint_audio_weights = _load_checkpoint_prefixed_weights(
         self.checkpoint_path,
         prefixes=("audio_vae.",),
+        weight_store=_ensure_checkpoint_weight_store(self),
     )
     sanitized = sanitize_audio_vae_weights(checkpoint_audio_weights)
     checkpoint_root = self.checkpoint_path.parent
@@ -560,6 +627,7 @@ def _ensure_audio_stack(
     checkpoint_audio_weights = _load_checkpoint_prefixed_weights(
         self.checkpoint_path,
         prefixes=("audio_vae.", "vocoder."),
+        weight_store=_ensure_checkpoint_weight_store(self),
     )
     checkpoint_root = self.checkpoint_path.parent
     if self._audio_decoder is None:

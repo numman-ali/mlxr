@@ -7,7 +7,7 @@ from mlxr.core.runtime import TraceRecorder, mlx_memory_snapshot
 
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import _attention_mask, _context_width
-from .debug import _debug_progress_enabled
+from .debug import _debug_progress, _debug_progress_enabled
 from .types import (
     MLXArray,
     _AudioVideoTransformer,
@@ -15,6 +15,7 @@ from .types import (
     _PatchedModality,
     _ReferenceImports,
     _RuntimeModelConfig,
+    _VideoTransformer,
 )
 
 _VIDEO_CFG_SCALE = 3.0
@@ -59,6 +60,8 @@ def _guided_prediction(
 def _assert_prompt_runtime_contract(
     prompt_context: PromptEncodingResult,
     runtime_config: _RuntimeModelConfig,
+    *,
+    audio_required: bool = True,
 ) -> None:
     if prompt_context.context_representation != "post_connector":
         raise ValueError(
@@ -79,7 +82,7 @@ def _assert_prompt_runtime_contract(
                 f"{prompt_context.transformer_context_dim} != runtime cross_attention_dim "
                 f"{runtime_config.cross_attention_dim}"
             )
-    if prompt_context.audio_context is None:
+    if audio_required and prompt_context.audio_context is None:
         raise ValueError(
             "LTX real generation requires audio_context from prompt_encode for the "
             "current 22B audio-video bridge"
@@ -89,13 +92,14 @@ def _assert_prompt_runtime_contract(
             "LTX real generation requires an all-valid post-connector prompt mask "
             "for the current 22B audio-video bridge"
         )
-    audio_context_width = _context_width(prompt_context.audio_context)
-    if audio_context_width != runtime_config.audio_cross_attention_dim:
-        raise ValueError(
-            "LTX prompt/generation config mismatch: audio context width "
-            f"{audio_context_width} != runtime audio_cross_attention_dim "
-            f"{runtime_config.audio_cross_attention_dim}"
-        )
+    if audio_required:
+        audio_context_width = _context_width(prompt_context.audio_context)
+        if audio_context_width != runtime_config.audio_cross_attention_dim:
+            raise ValueError(
+                "LTX prompt/generation config mismatch: audio context width "
+                f"{audio_context_width} != runtime audio_cross_attention_dim "
+                f"{runtime_config.audio_cross_attention_dim}"
+            )
     if (
         prompt_context.caption_proj_before_connector
         != runtime_config.caption_proj_before_connector
@@ -128,13 +132,14 @@ def _assert_prompt_runtime_contract(
     negative_video_context_width = _optional_context_width(
         prompt_context.negative_video_context
     )
-    negative_audio_context_width = _optional_context_width(
-        prompt_context.negative_audio_context
+    negative_audio_context_width = (
+        _optional_context_width(prompt_context.negative_audio_context)
+        if audio_required
+        else None
     )
     if prompt_context.negative_prompt_text is None:
-        if (
-            negative_video_context_width is not None
-            or negative_audio_context_width is not None
+        if negative_video_context_width is not None or (
+            audio_required and negative_audio_context_width is not None
         ):
             raise ValueError(
                 "LTX prompt contract mismatch: negative prompt contexts were populated "
@@ -145,7 +150,7 @@ def _assert_prompt_runtime_contract(
         raise ValueError(
             "LTX guided generation requires negative_video_context when negative_prompt_text is present"
         )
-    if negative_audio_context_width is None:
+    if audio_required and negative_audio_context_width is None:
         raise ValueError(
             "LTX guided generation requires negative_audio_context when negative_prompt_text is present"
         )
@@ -155,12 +160,198 @@ def _assert_prompt_runtime_contract(
             f"{negative_video_context_width} != runtime cross_attention_dim "
             f"{runtime_config.cross_attention_dim}"
         )
-    if negative_audio_context_width != runtime_config.audio_cross_attention_dim:
+    if audio_required and (
+        negative_audio_context_width != runtime_config.audio_cross_attention_dim
+    ):
         raise ValueError(
             "LTX negative prompt/generation config mismatch: negative audio context width "
             f"{negative_audio_context_width} != runtime audio_cross_attention_dim "
             f"{runtime_config.audio_cross_attention_dim}"
         )
+
+
+def _denoise_distilled_video_only(
+    *,
+    imports: _ReferenceImports,
+    transformer: _VideoTransformer,
+    latents: MLXArray,
+    positions: MLXArray,
+    text_embeddings: MLXArray,
+    negative_text_embeddings: MLXArray | None,
+    sigmas: tuple[float, ...],
+    state: _LatentStateLike | None,
+    runtime_config: _RuntimeModelConfig,
+    trace_recorder: TraceRecorder | None = None,
+    trace_sync: bool = False,
+) -> MLXArray:
+    latents_dtype = latents.dtype
+    cfg_enabled = negative_text_embeddings is not None
+    batch_size, channels, frames, latent_h, latent_w = latents.shape
+    num_tokens = int(frames * latent_h * latent_w)
+    precomputed_rope = imports.precompute_freqs_cis(
+        positions,
+        dim=transformer.inner_dim,
+        theta=transformer.positional_embedding_theta,
+        max_pos=transformer.positional_embedding_max_pos,
+        use_middle_indices_grid=transformer.use_middle_indices_grid,
+        num_attention_heads=transformer.num_attention_heads,
+        rope_type=transformer.rope_type,
+        double_precision=runtime_config.double_precision_rope,
+    )
+    if state is not None:
+        denoise_mask = mx.reshape(state.denoise_mask, (batch_size, 1, frames, 1, 1))
+        denoise_mask = mx.broadcast_to(
+            denoise_mask, (batch_size, 1, frames, latent_h, latent_w)
+        )
+        video_timesteps_mask = mx.reshape(
+            denoise_mask, (batch_size, num_tokens)
+        ).astype(latents_dtype)
+    else:
+        video_timesteps_mask = mx.ones((batch_size, num_tokens), dtype=latents_dtype)
+    total_steps = max(len(sigmas) - 1, 0)
+    for step_index, (sigma_value, sigma_next_value) in enumerate(
+        zip(sigmas[:-1], sigmas[1:]),
+        start=1,
+    ):
+        step_context = (
+            trace_recorder.span(
+                "ltx.denoise.step",
+                attributes={
+                    "step_index": step_index,
+                    "total_steps": total_steps,
+                    "sigma": round(float(sigma_value), 6),
+                    "sigma_next": round(float(sigma_next_value), 6),
+                    "cfg_enabled": cfg_enabled,
+                    "audio_enabled": False,
+                },
+                snapshot=mlx_memory_snapshot,
+            )
+            if trace_recorder is not None
+            else nullcontext()
+        )
+        with step_context:
+            velocity: MLXArray | None = None
+            negative_velocity: MLXArray | None = None
+            if _debug_progress_enabled():
+                _debug_progress(
+                    "denoise "
+                    f"step={step_index}/{total_steps} "
+                    f"sigma={float(sigma_value):.6f} "
+                    "audio_frames=0"
+                )
+            sigma = mx.array(float(sigma_value), dtype=latents_dtype)
+            sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
+            flat_latents = mx.transpose(
+                mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
+            )
+            modality = _PatchedModality(
+                latent=flat_latents,
+                sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
+                timesteps=sigma * video_timesteps_mask,
+                positions=positions,
+                context=text_embeddings,
+                context_mask=None,
+                enabled=True,
+                positional_embeddings=precomputed_rope,
+            )
+            conditioned_context = (
+                trace_recorder.span(
+                    "ltx.denoise.forward.conditioned",
+                    attributes={"step_index": step_index, "audio_enabled": False},
+                    sync=(lambda: _sync_optional_arrays(velocity))
+                    if trace_sync
+                    else None,
+                )
+                if trace_recorder is not None
+                else nullcontext()
+            )
+            with conditioned_context:
+                velocity, _ = transformer(video=modality, audio=None)
+            if _debug_progress_enabled():
+                _debug_progress(
+                    "denoise conditioned forward complete "
+                    f"step={step_index}/{total_steps}"
+                )
+            if velocity is None:
+                raise RuntimeError(
+                    "LTX transformer returned empty video velocity for an enabled video-only step"
+                )
+            velocity = mx.reshape(
+                mx.transpose(velocity, (0, 2, 1)),
+                (batch_size, channels, frames, latent_h, latent_w),
+            )
+            denoised = imports.to_denoised(latents, velocity, sigma)
+            negative_denoised: MLXArray | None = None
+            if negative_text_embeddings is not None:
+                negative_modality = _PatchedModality(
+                    latent=flat_latents,
+                    sigma=mx.full(
+                        (batch_size,), float(sigma_value), dtype=latents_dtype
+                    ),
+                    timesteps=sigma * video_timesteps_mask,
+                    positions=positions,
+                    context=negative_text_embeddings,
+                    context_mask=None,
+                    enabled=True,
+                    positional_embeddings=precomputed_rope,
+                )
+                negative_context = (
+                    trace_recorder.span(
+                        "ltx.denoise.forward.negative",
+                        attributes={"step_index": step_index, "audio_enabled": False},
+                        sync=(lambda: _sync_optional_arrays(negative_velocity))
+                        if trace_sync
+                        else None,
+                    )
+                    if trace_recorder is not None
+                    else nullcontext()
+                )
+                with negative_context:
+                    negative_velocity, _ = transformer(
+                        video=negative_modality,
+                        audio=None,
+                    )
+                if _debug_progress_enabled():
+                    _debug_progress(
+                        "denoise negative forward complete "
+                        f"step={step_index}/{total_steps}"
+                    )
+                if negative_velocity is None:
+                    raise RuntimeError(
+                        "LTX transformer returned empty negative video velocity for an enabled video-only step"
+                    )
+                negative_velocity = mx.reshape(
+                    mx.transpose(negative_velocity, (0, 2, 1)),
+                    (batch_size, channels, frames, latent_h, latent_w),
+                )
+                negative_denoised = imports.to_denoised(
+                    latents, negative_velocity, sigma
+                )
+            denoised = _guided_prediction(
+                denoised,
+                negative_denoised,
+                scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
+                rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+            )
+            if state is not None:
+                denoised = imports.apply_denoise_mask(
+                    denoised, state.clean_latent, state.denoise_mask
+                )
+            if float(sigma_next_value) == 0.0:
+                latents = denoised.astype(latents_dtype)
+            else:
+                latents = (
+                    denoised.astype(mx.float32)
+                    + sigma_next.astype(mx.float32)
+                    * (latents.astype(mx.float32) - denoised.astype(mx.float32))
+                    / sigma.astype(mx.float32)
+                ).astype(latents_dtype)
+            if _debug_progress_enabled():
+                _debug_progress(
+                    f"denoise state update complete step={step_index}/{total_steps}"
+                )
+            mx.eval(latents)
+    return latents
 
 
 def _denoise_distilled_audio_video(
@@ -252,12 +443,11 @@ def _denoise_distilled_audio_video(
             negative_velocity: MLXArray | None = None
             negative_audio_velocity: MLXArray | None = None
             if _debug_progress_enabled():
-                print(
-                    "[ltx] denoise "
+                _debug_progress(
+                    "denoise "
                     f"step={step_index}/{total_steps} "
                     f"sigma={float(sigma_value):.6f} "
-                    f"audio_frames={audio_frames}",
-                    flush=True,
+                    f"audio_frames={audio_frames}"
                 )
             sigma = mx.array(float(sigma_value), dtype=latents_dtype)
             sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
@@ -302,6 +492,11 @@ def _denoise_distilled_audio_video(
             with conditioned_context:
                 velocity, audio_velocity = transformer(
                     video=modality, audio=audio_modality
+                )
+            if _debug_progress_enabled():
+                _debug_progress(
+                    "denoise conditioned forward complete "
+                    f"step={step_index}/{total_steps}"
                 )
             if velocity is None or audio_velocity is None:
                 raise RuntimeError(
@@ -372,6 +567,11 @@ def _denoise_distilled_audio_video(
                         video=negative_modality,
                         audio=negative_audio_modality,
                     )
+                if _debug_progress_enabled():
+                    _debug_progress(
+                        "denoise negative forward complete "
+                        f"step={step_index}/{total_steps}"
+                    )
                 if negative_velocity is None or negative_audio_velocity is None:
                     raise RuntimeError(
                         "LTX transformer returned empty negative video/audio velocities for an enabled AV step"
@@ -435,5 +635,9 @@ def _denoise_distilled_audio_video(
                         )
                         / sigma.astype(mx.float32)
                     ).astype(latents_dtype)
+            if _debug_progress_enabled():
+                _debug_progress(
+                    f"denoise state update complete step={step_index}/{total_steps}"
+                )
             mx.eval(latents, audio_latents)
     return latents, audio_latents

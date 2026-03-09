@@ -168,6 +168,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     trace=True,
                     trace_sync=False,
                     clean_lifecycle=True,
+                    video_only=False,
                     backend_progress=True,
                     heartbeat_seconds=0.01,
                     max_active_gb=24.0,
@@ -187,10 +188,15 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     self.closed = False
 
                 def encode(
-                    self, prompt: str, *, negative_prompt: str | None = None
+                    self,
+                    prompt: str,
+                    *,
+                    return_audio_context: bool = True,
+                    negative_prompt: str | None = None,
                 ) -> object:
                     call_log.append(f"encode:{prompt}")
                     test_case.assertIsNone(negative_prompt)
+                    test_case.assertTrue(return_audio_context)
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),
@@ -367,6 +373,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
             trace=True,
             trace_sync=False,
             clean_lifecycle=True,
+            video_only=False,
             backend_progress=True,
             heartbeat_seconds=2.0,
             max_active_gb=24.0,
@@ -425,6 +432,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     trace=False,
                     trace_sync=False,
                     clean_lifecycle=True,
+                    video_only=False,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
                     max_active_gb=0.001,
@@ -435,12 +443,18 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     tmux_session_name="mlxr-ltx-debug",
                 )
             )
+            test_case = self
 
             class FakeEncoder:
                 def encode(
-                    self, prompt: str, *, negative_prompt: str | None = None
+                    self,
+                    prompt: str,
+                    *,
+                    return_audio_context: bool = True,
+                    negative_prompt: str | None = None,
                 ) -> object:
                     del prompt, negative_prompt
+                    test_case.assertTrue(return_audio_context)
                     return object()
 
                 def close(self) -> None:
@@ -541,6 +555,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     trace=True,
                     trace_sync=False,
                     clean_lifecycle=True,
+                    video_only=False,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
                     max_active_gb=24.0,
@@ -554,9 +569,13 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
 
             class FakeEncoder:
                 def encode(
-                    self, prompt: str, *, negative_prompt: str | None = None
+                    self,
+                    prompt: str,
+                    *,
+                    return_audio_context: bool = True,
+                    negative_prompt: str | None = None,
                 ) -> object:
-                    del negative_prompt
+                    del negative_prompt, return_audio_context
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),
@@ -647,6 +666,7 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
                     trace=True,
                     trace_sync=False,
                     clean_lifecycle=True,
+                    video_only=False,
                     backend_progress=False,
                     heartbeat_seconds=0.01,
                     max_active_gb=24.0,
@@ -660,9 +680,13 @@ class LTXDebugSmokeScriptTests(unittest.TestCase):
 
             class FakeEncoder:
                 def encode(
-                    self, prompt: str, *, negative_prompt: str | None = None
+                    self,
+                    prompt: str,
+                    *,
+                    return_audio_context: bool = True,
+                    negative_prompt: str | None = None,
                 ) -> object:
-                    del negative_prompt
+                    del negative_prompt, return_audio_context
                     return types.SimpleNamespace(
                         video_context=object(),
                         audio_context=object(),

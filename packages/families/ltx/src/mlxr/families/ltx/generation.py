@@ -64,6 +64,8 @@ class VideoGenerator(Protocol):
 def create_video_generator(
     checkpoint_path: Path,
     spatial_upsampler_path: Path,
+    *,
+    audio_enabled: bool = True,
 ) -> VideoGenerator:
     from ._generation_backend import (
         create_video_generator as create_backend_video_generator,
@@ -72,6 +74,7 @@ def create_video_generator(
     return create_backend_video_generator(
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
+        audio_enabled=audio_enabled,
     )
 
 

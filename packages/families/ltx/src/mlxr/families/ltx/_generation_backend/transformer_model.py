@@ -272,38 +272,62 @@ class LTXModel(nn.Module):
             raise ValueError("Audio is not enabled for this model")
 
         if self.model_type.is_video_enabled() and self.model_type.is_audio_enabled():
-            video_preprocessor = self.video_args_preprocessor
-            audio_preprocessor = self.audio_args_preprocessor
+            multimodal_video_preprocessor = self.video_args_preprocessor
+            multimodal_audio_preprocessor = self.audio_args_preprocessor
             if not isinstance(
-                video_preprocessor, MultiModalTransformerArgsPreprocessor
+                multimodal_video_preprocessor, MultiModalTransformerArgsPreprocessor
             ):
                 raise RuntimeError("Expected multimodal video preprocessor")
             if not isinstance(
-                audio_preprocessor, MultiModalTransformerArgsPreprocessor
+                multimodal_audio_preprocessor, MultiModalTransformerArgsPreprocessor
             ):
                 raise RuntimeError("Expected multimodal audio preprocessor")
             video_args = (
-                video_preprocessor.prepare(video, audio) if video is not None else None
+                multimodal_video_preprocessor.prepare(video, audio)
+                if video is not None
+                else None
             )
             audio_args = (
-                audio_preprocessor.prepare(audio, video) if audio is not None else None
+                multimodal_audio_preprocessor.prepare(audio, video)
+                if audio is not None
+                else None
             )
         else:
-            video_preprocessor = self.video_args_preprocessor
-            audio_preprocessor = self.audio_args_preprocessor
+            single_video_preprocessor: (
+                TransformerArgsPreprocessor
+                | MultiModalTransformerArgsPreprocessor
+                | None
+            ) = (
+                self.video_args_preprocessor
+                if self.model_type.is_video_enabled()
+                else None
+            )
+            single_audio_preprocessor: (
+                TransformerArgsPreprocessor
+                | MultiModalTransformerArgsPreprocessor
+                | None
+            ) = (
+                self.audio_args_preprocessor
+                if self.model_type.is_audio_enabled()
+                else None
+            )
             if video is not None and not isinstance(
-                video_preprocessor, TransformerArgsPreprocessor
+                single_video_preprocessor, TransformerArgsPreprocessor
             ):
                 raise RuntimeError("Expected single-modality video preprocessor")
             if audio is not None and not isinstance(
-                audio_preprocessor, TransformerArgsPreprocessor
+                single_audio_preprocessor, TransformerArgsPreprocessor
             ):
                 raise RuntimeError("Expected single-modality audio preprocessor")
             video_args = (
-                video_preprocessor.prepare(video) if video is not None else None
+                single_video_preprocessor.prepare(video)
+                if video is not None and single_video_preprocessor is not None
+                else None
             )
             audio_args = (
-                audio_preprocessor.prepare(audio) if audio is not None else None
+                single_audio_preprocessor.prepare(audio)
+                if audio is not None and single_audio_preprocessor is not None
+                else None
             )
 
         video_out, audio_out = self._process_transformer_blocks(
@@ -371,7 +395,7 @@ class LTXModel(nn.Module):
         weights_override: Mapping[str, MLXArray] | None = None,
     ) -> "LTXModel":
         weights = (
-            dict(weights_override)
+            weights_override
             if weights_override is not None
             else mx.load(str(checkpoint_path))
         )

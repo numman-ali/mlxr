@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 from .audio_autoencoder import AudioDecoderModel, AudioEncoderModel
+from .weight_store import CheckpointWeightStore
 
 MLXArray: TypeAlias = mx.array
 
@@ -151,6 +152,30 @@ class _AudioVideoTransformer(Protocol):
     def parameters(self) -> object: ...
 
 
+class _VideoTransformer(Protocol):
+    inner_dim: int
+    positional_embedding_theta: float
+    positional_embedding_max_pos: list[int]
+    use_middle_indices_grid: bool
+    num_attention_heads: int
+    rope_type: str
+
+    @property
+    def transformer_blocks(self) -> Mapping[int, object]: ...
+
+    @property
+    def adaln_single(self) -> object: ...
+
+    def __call__(
+        self,
+        *,
+        video: _PatchedModality | None = ...,
+        audio: _PatchedModality | None = ...,
+    ) -> tuple[MLXArray | None, MLXArray | None]: ...
+
+    def parameters(self) -> object: ...
+
+
 class _VideoDecoderLike(_GeneratorModule, Protocol):
     latents_mean: MLXArray
     latents_std: MLXArray
@@ -229,7 +254,12 @@ class _ModelConfigFactory(Protocol):
 
 
 class _LoadVAEEncoder(Protocol):
-    def __call__(self, checkpoint_path: Path) -> _VAEEncoder: ...
+    def __call__(
+        self,
+        checkpoint_path: Path,
+        *,
+        weight_store: CheckpointWeightStore | None = ...,
+    ) -> _VAEEncoder: ...
 
 
 class _LoadAudioDecoder(Protocol):
@@ -411,8 +441,11 @@ class _ComputeAudioFrames(Protocol):
 class _RuntimeHelperHost(Protocol):
     checkpoint_path: Path
     spatial_upsampler_path: Path
+    _audio_enabled: bool
     _reference_imports: _ReferenceImports | None
-    _transformer: _AudioVideoTransformer | None
+    _checkpoint_weight_store: CheckpointWeightStore | None
+    _transformer: _AudioVideoTransformer | _VideoTransformer | None
+    _vae_statistics: tuple[MLXArray, MLXArray] | None
     _vae_decoder: _VideoDecoderLike | None
     _vae_encoder: _VAEEncoder | None
     _upsampler: _UpsamplerLike | None

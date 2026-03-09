@@ -110,7 +110,18 @@ def _debug_progress_enabled() -> bool:
 
 def _debug_progress(message: str) -> None:
     if _debug_progress_enabled():
-        print(f"[ltx] {message}", flush=True)
+        active_gb = mx.get_active_memory() / (1024**3)
+        peak_gb = mx.get_peak_memory() / (1024**3)
+        cache_gb = mx.get_cache_memory() / (1024**3)
+        print(
+            (
+                f"[ltx] {message} "
+                f"active_gb={active_gb:.2f} "
+                f"peak_gb={peak_gb:.2f} "
+                f"cache_gb={cache_gb:.2f}"
+            ),
+            flush=True,
+        )
 
 
 def _debug_trace_enabled() -> bool:
