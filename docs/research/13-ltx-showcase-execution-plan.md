@@ -69,7 +69,7 @@ Current blocker for the original natural-audio showcase intent:
 - [x] close the remaining BWE-related audio-fidelity gap on the checkpoint-backed path
 - [x] compare current MLXR audio output against official `LTX-2` vocoder/BWE expectations
 - [x] confirm that the current remaining weakness is now mostly scene semantics on the conditioned path, not raw audio-fidelity plumbing
-- [ ] improve `video.condition.audio` scene quality so the output actually matches the intended prompt/reference pairing
+- [ ] broaden `video.condition.audio` scene quality beyond the current passing dog row so multiple conditioned scenes clear the same bar
 - [ ] keep the passthrough/reference-audio truth explicit until full parity is proven
 
 ### B. Text-first prompt and workflow quality
@@ -139,6 +139,13 @@ Current natural-audio showcase truth:
 - the rerun `nature_documentary` receipt at `tmp/showcase-runs/20260308T035528Z-showcase-nature-documentary/` still comes back as a visual match with piano-like music
 - the rerun `vintage_old_school` receipt at `tmp/showcase-runs/20260308T035838Z-showcase-vintage-old-school/` still comes back as a visual match with nostalgic instrumental music
 - the blocker is no longer “weak review tooling”; it is broadening the newer text-first natural-audio behavior beyond the dog scene
+
+Current conditioned-audio truth:
+
+- the preserved-reference `video.condition.audio` slice now clears a 6-second semantic rung through the real `mlxr` CLI path when given a real dog image anchor plus a real bark reference
+- Gemini identifies a golden-retriever-like dog in a grassy park and classifies the audio as barking with no music on `tmp/manual-runs/20260309T082500Z-natural-audio-dog-6s-a2vid-better-image/`
+- the earlier conditioned-audio mismatch was partly caused by a poisoned `dog_bark_ref.wav` fixture that actually contained upbeat vocal music
+- the next blocker for this row is broadening conditioned-scene quality beyond this dog case, not basic bridge truth
 
 Current score-friendly showcase truth:
 

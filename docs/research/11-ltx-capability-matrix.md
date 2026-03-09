@@ -75,7 +75,7 @@ Important upstream interpretation:
 | Distilled two-stage image-to-video | yes | `video.condition.image` | yes | implemented | coherence validated | promoted |
 | Audio-bearing output on AV path | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` or `wav` | yes | implemented | safe-rung validated; visual-gate BWE-enabled `48 kHz` dog clip confirmed | promoted |
 | Silent video output | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` | yes | encoder behavior exists | not separately validated as a promoted user mode | implemented encoder path only |
-| Audio-to-video conditioning | yes | `video.condition.audio` | yes | implemented | safe-rung validated; real bridge preserves resolved reference audio into muxed output; scene semantics still provisional | promoted with current passthrough-audio caveat |
+| Audio-to-video conditioning | yes | `video.condition.audio` | yes | implemented | safe-rung validated; preserved-reference bridge is real, and a 6-second dog/park/barking semantic rung now passes through the real `mlxr` CLI path with strict Gemini review | promoted with current preserved-reference caveat |
 | Reference-video conditioning | yes | `video.condition.video` | no | planned | not started | not yet supported |
 | Keyframe interpolation | yes | `video.interpolate` | no | planned | not started | not yet supported |
 | Retake | yes | `video.retake` | no | planned | not started | not yet supported |
@@ -102,7 +102,7 @@ Current non-truths:
 
 - `wav` does not mean `audio-only job` support exists yet
 - `audio` in `modalities_out` means the current AV bridge can now export audio, not that every LTX task is surfaced
-- the current `video.condition.audio` row preserves reference audio through the output path; it is a truthful preserved-reference capability, not yet a claim of broader reference-video control or strong conditioned-scene semantics
+- the current `video.condition.audio` row preserves reference audio through the output path and now has a passing dog/park/barking semantic rung through the real `mlxr` product path; it is still not yet a claim of broad conditioned-scene strength across other scene classes
 
 ## Current upstream-versus-MLXR gap
 

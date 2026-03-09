@@ -168,19 +168,22 @@ class LTXDistilledVideoGenerator(VideoGenerator):
 
         imports = self._imports()
         runtime_config = _runtime_model_config(self.checkpoint_path)
+        use_audio_video_denoising = self._audio_enabled and audio_conditioning is None
         _assert_prompt_runtime_contract(
             prompt_context,
             runtime_config,
-            audio_required=self._audio_enabled,
+            audio_required=use_audio_video_denoising,
         )
         video_context = _require_video_context(prompt_context)
         audio_context = (
-            _require_audio_context(prompt_context) if self._audio_enabled else None
+            _require_audio_context(prompt_context)
+            if use_audio_video_denoising
+            else None
         )
         negative_video_context = _optional_negative_video_context(prompt_context)
         negative_audio_context = (
             _optional_negative_audio_context(prompt_context)
-            if self._audio_enabled
+            if use_audio_video_denoising
             else None
         )
         if not self._audio_enabled and audio_conditioning is not None:
@@ -290,7 +293,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             latents = stage1_state.latent
         else:
             stage1_state = None
-        if self._audio_enabled:
+        if use_audio_video_denoising:
             if (
                 audio_context is None
                 or stage1_audio_positions is None
@@ -370,7 +373,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             )
             mx.clear_cache()
         timings_ms["stage1_duration_ms"] = _elapsed_ms(stage1_started)
-        if not self._audio_enabled:
+        if not use_audio_video_denoising:
             self._transformer = None
             transformer = None
             mx.clear_cache()
@@ -439,7 +442,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         )
         stage2_audio_positions = (
             imports.create_audio_position_grid(1, audio_frames)
-            if self._audio_enabled
+            if use_audio_video_denoising
             else None
         )
         if conditioning_plan.stage2:
@@ -452,14 +455,14 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             latents = stage2_state.latent
             noise_scale = mx.array(float(imports.stage_2_sigmas[0]), dtype=model_dtype)
             one_minus_scale = mx.array(1.0, dtype=model_dtype) - noise_scale
-            if self._audio_enabled and audio_conditioning is None:
+            if use_audio_video_denoising and audio_conditioning is None:
                 audio_latents = _require_audio_latents(audio_latents)
                 audio_latents = (
                     mx.random.normal(audio_latents.shape).astype(model_dtype)
                     * noise_scale
                     + audio_latents * one_minus_scale
                 ).astype(model_dtype)
-            if self._audio_enabled:
+            if use_audio_video_denoising:
                 mx.eval(latents, audio_latents)
             else:
                 mx.eval(latents)
@@ -471,18 +474,18 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 mx.random.normal(latents.shape).astype(model_dtype) * noise_scale
                 + latents * one_minus_scale
             ).astype(model_dtype)
-            if self._audio_enabled and audio_conditioning is None:
+            if use_audio_video_denoising and audio_conditioning is None:
                 audio_latents = _require_audio_latents(audio_latents)
                 audio_latents = (
                     mx.random.normal(audio_latents.shape).astype(model_dtype)
                     * noise_scale
                     + audio_latents * one_minus_scale
                 ).astype(model_dtype)
-            if self._audio_enabled:
+            if use_audio_video_denoising:
                 mx.eval(latents, audio_latents)
             else:
                 mx.eval(latents)
-        if self._audio_enabled:
+        if use_audio_video_denoising:
             if audio_context is None or stage2_audio_positions is None:
                 raise RuntimeError("LTX audio-enabled path requires audio state")
             stage2_transformer = _require_audio_video_transformer(transformer)
@@ -580,7 +583,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         metadata: dict[str, object] = {
             "pipeline_kind": (
                 "distilled_two_stage"
-                if self._audio_enabled
+                if use_audio_video_denoising
                 else "distilled_two_stage_video_only"
             ),
             "stage1_duration_ms": timings_ms["stage1_duration_ms"],
@@ -607,6 +610,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             "audio_backend": audio_backend,
             "audio_bwe_applied": audio_backend == "mlxr_vocoder_with_bwe",
             "audio_conditioned": audio_conditioning is not None,
+            "audio_video_denoising": use_audio_video_denoising,
             "guidance_mode": (
                 "cfg"
                 if prompt_context.negative_prompt_text is not None
