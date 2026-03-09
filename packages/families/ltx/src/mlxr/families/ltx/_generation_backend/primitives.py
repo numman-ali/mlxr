@@ -43,6 +43,13 @@ class VideoConditionByLatentIndex:
     strength: float = 1.0
 
 
+@dataclass(frozen=True, slots=True)
+class VideoConditionByKeyframeIndex:
+    latent: MLXArray
+    frame_idx: int = 0
+    strength: float = 1.0
+
+
 @dataclass(slots=True)
 class LatentState:
     latent: MLXArray
@@ -83,6 +90,16 @@ def apply_conditioning(
             )
 
         end_idx = min(frame_idx + cond_frames, frames)
+        target = slice(frame_idx, end_idx)
+        cond_target = cond_latent[:, :, : end_idx - frame_idx]
+
+        if isinstance(cond, VideoConditionByKeyframeIndex):
+            guided_latent = state.latent[:, :, target]
+            state.latent[:, :, target] = (
+                guided_latent * (1.0 - strength) + cond_target * strength
+            ).astype(dtype)
+            continue
+
         latent_parts: list[MLXArray] = []
         clean_parts: list[MLXArray] = []
         mask_parts: list[MLXArray] = []

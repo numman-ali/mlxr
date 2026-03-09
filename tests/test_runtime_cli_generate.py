@@ -125,11 +125,17 @@ class RuntimeCliGenerateTests(unittest.TestCase):
                     "dog in a park",
                     "--image",
                     str(image_path),
+                    "--image-frame-index",
+                    "8",
+                    "--image-strength",
+                    "0.75",
                     "--plan-only",
                 ]
             )
-            self.assertEqual(parsed.image, image_path)
-            self.assertTrue(parsed.plan_only)
+        self.assertEqual(parsed.image, image_path)
+        self.assertEqual(parsed.image_frame_index, 8)
+        self.assertEqual(parsed.image_strength, 0.75)
+        self.assertTrue(parsed.plan_only)
 
     def test_generate_parser_accepts_wait_and_export_flags(self) -> None:
         parser = build_parser()
@@ -214,6 +220,30 @@ class RuntimeCliGenerateTests(unittest.TestCase):
                     "-0.1",
                 ]
             )
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--image-frame-index",
+                    "-1",
+                ]
+            )
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--image-strength",
+                    "1.5",
+                ]
+            )
 
     def test_default_uds_path_uses_runtime_home_temp_socket(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -278,14 +308,39 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             client = _FakeClient()
             args = argparse.Namespace(
                 image=image_path,
+                image_frame_index=8,
+                image_strength=0.75,
                 audio=audio_path,
+                audio_start_seconds=0.5,
+                audio_max_duration_seconds=2.0,
                 plan_only=True,
             )
             references = _references_from_args(client, args)
             self.assertEqual(client.calls, [])
             self.assertEqual(
-                [(reference.kind, reference.input_handle) for reference in references],
-                [("image", None), ("audio", None)],
+                [
+                    (
+                        reference.kind,
+                        reference.input_handle,
+                        reference.metadata,
+                    )
+                    for reference in references
+                ],
+                [
+                    (
+                        "image",
+                        None,
+                        {"frame_index": 8, "strength": 0.75},
+                    ),
+                    (
+                        "audio",
+                        None,
+                        {
+                            "start_time_seconds": 0.5,
+                            "max_duration_seconds": 2.0,
+                        },
+                    ),
+                ],
             )
 
     def test_references_from_args_binds_imported_handles_for_execution(self) -> None:
@@ -297,7 +352,11 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             client = _FakeClient()
             args = argparse.Namespace(
                 image=image_path,
+                image_frame_index=8,
+                image_strength=0.75,
                 audio=audio_path,
+                audio_start_seconds=0.5,
+                audio_max_duration_seconds=2.0,
                 plan_only=False,
             )
             references = _references_from_args(client, args)
@@ -306,8 +365,29 @@ class RuntimeCliGenerateTests(unittest.TestCase):
                 [(image_path, "image"), (audio_path, "audio")],
             )
             self.assertEqual(
-                [(reference.kind, reference.input_handle) for reference in references],
-                [("image", "image-handle"), ("audio", "audio-handle")],
+                [
+                    (
+                        reference.kind,
+                        reference.input_handle,
+                        reference.metadata,
+                    )
+                    for reference in references
+                ],
+                [
+                    (
+                        "image",
+                        "image-handle",
+                        {"frame_index": 8, "strength": 0.75},
+                    ),
+                    (
+                        "audio",
+                        "audio-handle",
+                        {
+                            "start_time_seconds": 0.5,
+                            "max_duration_seconds": 2.0,
+                        },
+                    ),
+                ],
             )
 
     def test_wait_for_terminal_job_polls_until_completed(self) -> None:
@@ -357,7 +437,11 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             video_prompt=None,
             audio_prompt=None,
             image=None,
+            image_frame_index=0,
+            image_strength=1.0,
             audio=None,
+            audio_start_seconds=0.0,
+            audio_max_duration_seconds=None,
             width=None,
             height=None,
             num_frames=None,

@@ -486,7 +486,8 @@ class _ReferenceImports:
     to_denoised: _ToDenoised
     scaled_dot_product_attention: _ScaledDotProductAttentionFn
     latent_state_class: _LatentStateFactory
-    condition_class: _ConditionFactory
+    latent_condition_class: _ConditionFactory
+    keyframe_condition_class: _ConditionFactory
     stage_1_sigmas: tuple[float, ...]
     stage_2_sigmas: tuple[float, ...]
     apply_conditioning: _ApplyConditioning

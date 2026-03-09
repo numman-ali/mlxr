@@ -38,6 +38,7 @@ from .primitives import (
     STAGE_1_SIGMAS,
     STAGE_2_SIGMAS,
     LatentState,
+    VideoConditionByKeyframeIndex,
     VideoConditionByLatentIndex,
     apply_conditioning,
     apply_denoise_mask,
@@ -117,6 +118,19 @@ def _condition_ref(
     strength: float,
 ) -> _ConditionLike:
     return VideoConditionByLatentIndex(
+        latent=latent,
+        frame_idx=frame_idx,
+        strength=strength,
+    )
+
+
+def _keyframe_condition_ref(
+    *,
+    latent: MLXArray,
+    frame_idx: int,
+    strength: float,
+) -> _ConditionLike:
+    return VideoConditionByKeyframeIndex(
         latent=latent,
         frame_idx=frame_idx,
         strength=strength,
@@ -276,7 +290,8 @@ def _imports(self: _RuntimeHelperHost) -> _ReferenceImports:
         to_denoised=_to_denoised_ref,
         scaled_dot_product_attention=scaled_dot_product_attention,
         latent_state_class=LatentState,
-        condition_class=_condition_ref,
+        latent_condition_class=_condition_ref,
+        keyframe_condition_class=_keyframe_condition_ref,
         stage_1_sigmas=STAGE_1_SIGMAS,
         stage_2_sigmas=STAGE_2_SIGMAS,
         apply_conditioning=_apply_conditioning_ref,
@@ -736,14 +751,22 @@ def _prepare_conditionings(
             dtype=model_dtype,
         )
         stage1_conditionings.append(
-            imports.condition_class(
+            (
+                imports.latent_condition_class
+                if resolved_index == 0
+                else imports.keyframe_condition_class
+            )(
                 latent=stage1_latent,
                 frame_idx=resolved_index,
                 strength=float(conditioning_input.strength),
             )
         )
         stage2_conditionings.append(
-            imports.condition_class(
+            (
+                imports.latent_condition_class
+                if resolved_index == 0
+                else imports.keyframe_condition_class
+            )(
                 latent=stage2_latent,
                 frame_idx=resolved_index,
                 strength=float(conditioning_input.strength),

@@ -280,7 +280,31 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
         "--image", type=Path, help="Optional trusted local image reference"
     )
     parser.add_argument(
+        "--image-frame-index",
+        type=int,
+        default=0,
+        help="Optional frame index for the image reference. Non-zero values use later-frame keyframe guidance.",
+    )
+    parser.add_argument(
+        "--image-strength",
+        type=float,
+        default=1.0,
+        help="Conditioning strength for the image reference.",
+    )
+    parser.add_argument(
         "--audio", type=Path, help="Optional trusted local audio reference"
+    )
+    parser.add_argument(
+        "--audio-start-seconds",
+        type=float,
+        default=0.0,
+        help="Optional start offset for the audio reference.",
+    )
+    parser.add_argument(
+        "--audio-max-duration-seconds",
+        type=float,
+        default=None,
+        help="Optional maximum duration for the audio reference.",
     )
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
@@ -317,6 +341,17 @@ def _validate_cli_args(
         parser.error("--timeout-seconds must be greater than 0")
     if float(args.poll_interval_seconds) < 0:
         parser.error("--poll-interval-seconds must be non-negative")
+    if int(args.image_frame_index) < 0:
+        parser.error("--image-frame-index must be non-negative")
+    if not (0.0 <= float(args.image_strength) <= 1.0):
+        parser.error("--image-strength must be between 0.0 and 1.0")
+    if float(args.audio_start_seconds) < 0.0:
+        parser.error("--audio-start-seconds must be non-negative")
+    if (
+        args.audio_max_duration_seconds is not None
+        and float(args.audio_max_duration_seconds) <= 0.0
+    ):
+        parser.error("--audio-max-duration-seconds must be greater than 0")
 
 
 def _generation_params(args: argparse.Namespace) -> dict[str, int]:
@@ -341,6 +376,10 @@ def _references_from_args(
                     input_handle=None,
                     kind="image",
                     role="reference",
+                    metadata={
+                        "frame_index": int(args.image_frame_index),
+                        "strength": float(args.image_strength),
+                    },
                 )
             )
         else:
@@ -350,6 +389,10 @@ def _references_from_args(
                     input_handle=record.handle_id,
                     kind="image",
                     role="reference",
+                    metadata={
+                        "frame_index": int(args.image_frame_index),
+                        "strength": float(args.image_strength),
+                    },
                 )
             )
     if args.audio is not None:
@@ -359,6 +402,14 @@ def _references_from_args(
                     input_handle=None,
                     kind="audio",
                     role="reference",
+                    metadata={
+                        "start_time_seconds": float(args.audio_start_seconds),
+                        "max_duration_seconds": (
+                            float(args.audio_max_duration_seconds)
+                            if args.audio_max_duration_seconds is not None
+                            else None
+                        ),
+                    },
                 )
             )
         else:
@@ -368,6 +419,14 @@ def _references_from_args(
                     input_handle=record.handle_id,
                     kind="audio",
                     role="reference",
+                    metadata={
+                        "start_time_seconds": float(args.audio_start_seconds),
+                        "max_duration_seconds": (
+                            float(args.audio_max_duration_seconds)
+                            if args.audio_max_duration_seconds is not None
+                            else None
+                        ),
+                    },
                 )
             )
     return references
