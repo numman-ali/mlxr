@@ -47,7 +47,8 @@ Use this with:
 - [ ] `ICLoraPipeline` semantics are implemented.
 - [ ] `KeyframeInterpolationPipeline` semantics are implemented.
 - [~] `A2VidPipelineTwoStage` is represented by a narrower
-  `video.condition.audio` preserved-reference slice.
+  `video.condition.audio` preserved-reference slice, now quality-promoted for
+  current dog and anime conditioned rows.
 - [ ] `RetakePipeline` semantics are implemented.
 
 ## C. Asset and checkpoint contract
@@ -124,8 +125,8 @@ Use this with:
 - [x] Audio-bearing output is real.
 - [x] `wav` export is real as an output mode.
 - [x] Checkpoint-backed BWE path is real when the checkpoint supports it.
-- [~] `video.condition.audio` is real as a preserved-reference bridge slice.
-- [ ] `video.condition.audio` is quality-promoted as a conditioned-scene row.
+- [x] `video.condition.audio` is real as a preserved-reference bridge slice.
+- [x] `video.condition.audio` is quality-promoted as a conditioned-scene row.
 - [ ] Text-first natural-audio realism is broad enough to promote beyond the
   current known-good scenes.
 - [ ] Audio-to-video semantics match the upstream `A2VidPipelineTwoStage`

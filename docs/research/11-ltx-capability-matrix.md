@@ -75,7 +75,7 @@ Important upstream interpretation:
 | Distilled two-stage image-to-video | yes | `video.condition.image` | yes | implemented | coherence validated | promoted |
 | Audio-bearing output on AV path | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` or `wav` | yes | implemented | safe-rung validated; visual-gate BWE-enabled `48 kHz` dog clip confirmed | promoted |
 | Silent video output | yes | `video.generate` or `video.condition.image` with `artifact_format=mp4` | yes | encoder behavior exists | not separately validated as a promoted user mode | implemented encoder path only |
-| Audio-to-video conditioning | yes | `video.condition.audio` | yes | implemented | safe-rung validated; preserved-reference bridge is real, and a 6-second dog/park/barking semantic rung now passes through the real `mlxr` CLI path with strict Gemini review | promoted with current preserved-reference caveat |
+| Audio-to-video conditioning | yes | `video.condition.audio` | yes | implemented | safe-rung validated; a 6-second dog/park/barking row and a 6-second anime-conditioned row both now pass through the real `mlxr` CLI path with strict Gemini review and correct stream receipts | promoted conditioned-audio row with preserved-reference caveat |
 | Reference-video conditioning | yes | `video.condition.video` | no | planned | not started | not yet supported |
 | Keyframe interpolation | yes | `video.interpolate` | no | planned | not started | not yet supported |
 | Retake | yes | `video.retake` | no | planned | not started | not yet supported |
@@ -102,7 +102,7 @@ Current non-truths:
 
 - `wav` does not mean `audio-only job` support exists yet
 - `audio` in `modalities_out` means the current AV bridge can now export audio, not that every LTX task is surfaced
-- the current `video.condition.audio` row preserves reference audio through the output path and now has a passing dog/park/barking semantic rung through the real `mlxr` product path; it is still not yet a claim of broad conditioned-scene strength across other scene classes
+- the current `video.condition.audio` row preserves reference audio through the output path and now has strict Gemini-passing conditioned rows for both a dog/park/barking scene and a non-dog anime rooftop scene through the real `mlxr` product path; it is now a real conditioned-scene capability, but it is still not yet a claim of broad conditioned-scene strength across every scene class
 
 ## Current upstream-versus-MLXR gap
 
@@ -113,7 +113,7 @@ Today `MLXR` has truly implemented:
 - distilled two-stage text-to-video
 - distilled two-stage image-to-video
 - audio-bearing output on the AV path
-- a narrow `video.condition.audio` preserved-reference slice
+- a now quality-promoted `video.condition.audio` preserved-reference row
 
 Today `MLXR` does not yet expose the broader current upstream rows:
 
@@ -148,7 +148,7 @@ Current promoted rows only clear the first two rungs for:
 - distilled two-stage T2V
 - distilled two-stage I2V
 
-Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, `video.condition.audio` now passes the real safe-rung bridge with preserved reference audio, and the newer showcase-runner shaping slice now adds scenario-level `audio_intent` plus style-aware anti-music negatives. The next blocker has moved from raw audio fidelity to broader conditioned-scene quality, passive-ambience natural scenes, and capability completion.
+Audio export is now real-weight validated at the safe and visual-gate rungs, the text-first AV path now uses the repo-owned MLX BWE wrapper at `48 kHz`, and `video.condition.audio` now passes strict conditioned-scene review on both dog and non-dog rows through the real `mlxr` path while still preserving reference audio. The next blocker has moved from raw audio fidelity and first conditioned-scene truth to broader text-first natural-audio coverage, additional conditioned scene classes, and capability completion.
 
 Current showcase truth:
 
@@ -192,7 +192,7 @@ Recommended order:
 
 - The real `LTX-2.3` checkpoint currently used by `MLXR` already contains the audio VAE and vocoder weights, so audio export belongs to the core checkpoint-backed slice and does not require inventing extra artifact roles.
 - The current audible MLX path now uses the checkpoint's full BWE wrapper on top of the `AMP1` base vocoder contract, and the first visual-gate receipt for that path is the dog clip under `tmp/manual-runs/20260308T014947Z-dog-bwe-visual-gate-check/`.
-- The first truthful `video.condition.audio` slice preserves the resolved reference audio through the output path while conditioning generation on that runtime-managed audio handle. It is a real bridge capability, but its scene semantics should still be treated as provisional until the conditioned path clears the same visual/audio review bar as the text-first dog ladder.
+- The current truthful `video.condition.audio` slice preserves the resolved reference audio through the output path while conditioning generation on that runtime-managed audio handle. It now clears the same strict Gemini visual/audio bar on both a dog scene and a non-dog anime scene through the real `mlxr` product path, so the row is no longer just a bridge proof.
 - The current workflow and adapter path already carry image references through `video.condition.audio`, which matches the official upstream direction for combined text + image + audio inputs. That combined slice is now covered by runtime workflow tests, but it is not yet promoted as a quality-validated showcase capability.
 - The right canonical language is now: distilled is the current proving slice,
   standard two-stage is the next production-quality target, and HQ is the

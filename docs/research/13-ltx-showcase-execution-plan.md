@@ -45,8 +45,7 @@ Still not true:
 
 - text-first AV still drifts semantically on some clips
 - nature and vintage natural scenes still need to be re-run on the newer guidance path
-- the current `video.condition.audio` example proved the bridge, but not strong scene quality
-- conditioned-scene quality on `video.condition.audio` is still not strong enough to promote
+- the current `video.condition.audio` row is now strong enough to promote on a conditioned-audio basis, while broader scene coverage is still not universal
 - the five-scene natural-audio showcase pack is not ready to promote
 
 Already promoted at the current score-friendly bar:
@@ -69,7 +68,7 @@ Current blocker for the original natural-audio showcase intent:
 - [x] close the remaining BWE-related audio-fidelity gap on the checkpoint-backed path
 - [x] compare current MLXR audio output against official `LTX-2` vocoder/BWE expectations
 - [x] confirm that the current remaining weakness is now mostly scene semantics on the conditioned path, not raw audio-fidelity plumbing
-- [ ] broaden `video.condition.audio` scene quality beyond the current passing dog row so multiple conditioned scenes clear the same bar
+- [x] broaden `video.condition.audio` scene quality beyond the current passing dog row so multiple conditioned scenes clear the same bar
 - [ ] keep the passthrough/reference-audio truth explicit until full parity is proven
 
 ### B. Text-first prompt and workflow quality
@@ -105,7 +104,7 @@ Current blocker for the original natural-audio showcase intent:
 - [ ] land the upstream production-default `TI2VidTwoStagesPipeline` semantics on the full `dev` checkpoint
 - [ ] land the upstream `TI2VidTwoStagesHQPipeline` semantics as the next
   top-end alternate high-quality variant
-- [ ] strengthen `video.condition.audio` from “real bridge slice” to “quality-promoted capability”
+- [x] strengthen `video.condition.audio` from “real bridge slice” to “quality-promoted capability”
 - [ ] implement `video.condition.video`
 - [ ] implement `ICLoraPipeline` semantics for strong-control image/video conditioning
 - [ ] implement `video.interpolate`
@@ -145,7 +144,8 @@ Current conditioned-audio truth:
 - the preserved-reference `video.condition.audio` slice now clears a 6-second semantic rung through the real `mlxr` CLI path when given a real dog image anchor plus a real bark reference
 - Gemini identifies a golden-retriever-like dog in a grassy park and classifies the audio as barking with no music on `tmp/manual-runs/20260309T082500Z-natural-audio-dog-6s-a2vid-better-image/`
 - the earlier conditioned-audio mismatch was partly caused by a poisoned `dog_bark_ref.wav` fixture that actually contained upbeat vocal music
-- the next blocker for this row is broadening conditioned-scene quality beyond this dog case, not basic bridge truth
+- a second 6-second conditioned row now clears the same strict bar for an anime rooftop scene with whispered speech and piano ambience on `tmp/manual-runs/20260309T101500Z-anime-conditioned-6s/`
+- the next blocker for this row is broadening conditioned-scene quality beyond these first two classes, not basic bridge truth
 
 Current score-friendly showcase truth:
 

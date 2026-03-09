@@ -26,7 +26,7 @@ Already true:
 Not yet true:
 
 - text-first natural-audio realism is not broadly solved
-- `video.condition.audio` scene semantics are not quality-promoted yet
+- `video.condition.audio` is now quality-promoted on the current dog and anime conditioned rows, but broader conditioned-scene coverage is still not solved
 - `video.condition.video`, interpolation, retake, one-stage, HQ, and LoRA rows are still open
 - the workflow layer is still planning, not full core-owned orchestration
 
@@ -54,15 +54,15 @@ Not yet true:
 - [ ] Keep Gemini plus receipts as the acceptance gate for all reruns
 - [ ] Promote a broader natural-audio pack only if multiple non-dog natural scenes clear the same bar
 
-### B. Strengthen `video.condition.audio`
+### B. Broaden `video.condition.audio`
 
-- [ ] Move `video.condition.audio` from “real bridge with preserved reference audio” to “quality-promoted capability”
-- [ ] Prove that the audio reference changes the scene result in a meaningful way, not just the muxed output
+- [x] Move `video.condition.audio` from “real bridge with preserved reference audio” to “quality-promoted capability”
+- [x] Prove that the audio reference changes the scene result in a meaningful way, not just the muxed output
 - [ ] Add comparison receipts:
   - text-first AV
   - audio-conditioned AV
   - same prompt, same seed, different reference audio
-- [ ] Add clearer product-facing docs for what this row currently guarantees and what it does not
+- [x] Add clearer product-facing docs for what this row currently guarantees and what it does not
 
 ### C. Implement the next capability rows
 
