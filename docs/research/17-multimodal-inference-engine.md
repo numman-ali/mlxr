@@ -443,8 +443,6 @@ The current core contracts are close, but they are still too video-shaped for a 
 Current workflow intent is centered on:
 
 - one `prompt`
-- optional `video_prompt`
-- optional `audio_prompt`
 - media references by kind
 
 That is a good fit for LTX, but it is awkward for:

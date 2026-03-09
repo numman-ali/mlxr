@@ -6,7 +6,6 @@ from unittest.mock import patch
 from mlxr.families.ltx.family_options import (
     distilled_guidance_mode_from_extensions,
     effective_seed,
-    style_family_from_extensions,
 )
 
 
@@ -20,13 +19,6 @@ class LTXFamilyOptionsTests(unittest.TestCase):
 
             self.assertEqual(effective_seed(seed=None), 123456)
             randbelow.assert_called_once_with(2**31)
-
-    def test_style_family_from_extensions_normalizes_whitespace(self) -> None:
-        self.assertEqual(
-            style_family_from_extensions({"style_family": " naturalistic "}),
-            "naturalistic",
-        )
-        self.assertIsNone(style_family_from_extensions({"style_family": "   "}))
 
     def test_distilled_guidance_mode_defaults_to_positive_only(self) -> None:
         self.assertEqual(

@@ -206,7 +206,7 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
             self.assertNotIn("--strict", command)
             self.assertIn(str(video_path.parent / "gemini-review"), command)
 
-    def test_run_smoke_includes_negative_prompt_when_present(self) -> None:
+    def test_run_smoke_uses_verbatim_prompt_contract(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmp_dir:
             artifact_root = Path(tmp_dir) / "artifacts"
@@ -233,7 +233,6 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
                     output_root=output_root,
                     run_name="dog-scene",
                     prompt="dog in park",
-                    negative_prompt="background music, soundtrack",
                     width=384,
                     height=224,
                     num_frames=241,
@@ -245,41 +244,7 @@ class LTXShowcaseGenerateScriptTests(unittest.TestCase):
             self.assertEqual(payload["video_path"], "/tmp/clip.mp4")
             command = captured["command"]
             assert isinstance(command, list)
-            self.assertIn("--negative-prompt", command)
-            self.assertIn("background music, soundtrack", command)
-
-    def test_prompt_options_for_run_uses_requested_duration(self) -> None:
-        module = _load_module()
-        scene = next(
-            candidate
-            for candidate in module.SHOWCASE_SCENES
-            if candidate.scene_id == "cat_kitchen_natural"
-        )
-
-        adjusted = module._prompt_options_for_run(scene, num_frames=145, fps=24)
-
-        self.assertAlmostEqual(adjusted.duration_seconds, 6.0)
-        self.assertEqual(
-            adjusted.audio_prompt,
-            "Paw impact on countertop, chair creak, birdsong through window, refrigerator hum.",
-        )
-        self.assertTrue(adjusted.natural_audio)
-        self.assertTrue(adjusted.no_music)
-        self.assertEqual(adjusted.style_family, "naturalistic")
-        self.assertEqual(adjusted.orientation, "landscape")
-
-    def test_prompt_options_for_conditioned_scene_skip_text_audio_prompt(self) -> None:
-        module = _load_module()
-        scene = next(
-            candidate
-            for candidate in module.SHOWCASE_SCENES
-            if candidate.scene_id == "rain_alley_audio_conditioned"
-        )
-
-        adjusted = module._prompt_options_for_run(scene, num_frames=241, fps=24)
-
-        self.assertIsNone(adjusted.audio_prompt)
-        self.assertEqual(scene.conditioning_mode, "audio_conditioned")
+            self.assertNotIn("--negative-prompt", command)
 
     def test_run_gemini_review_surfaces_nonzero_exit_as_runtime_error(self) -> None:
         module = _load_module()

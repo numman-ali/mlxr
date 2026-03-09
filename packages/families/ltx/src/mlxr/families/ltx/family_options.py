@@ -21,16 +21,6 @@ def family_extensions(raw_extensions: object) -> Mapping[str, object]:
     return raw_extensions
 
 
-def style_family_from_extensions(raw_extensions: object) -> str | None:
-    style_family = family_extensions(raw_extensions).get("style_family")
-    if style_family is None:
-        return None
-    if not isinstance(style_family, str):
-        raise ValueError("LTX extensions.style_family must be a string when provided")
-    normalized = style_family.strip()
-    return normalized or None
-
-
 def distilled_guidance_mode_from_extensions(
     raw_extensions: object,
 ) -> DistilledGuidanceMode:

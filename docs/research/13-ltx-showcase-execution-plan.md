@@ -58,8 +58,8 @@ Already promoted at the current score-friendly bar:
 
 Current blocker for the original natural-audio showcase intent:
 
-- the 10-second dog scene now clears the stronger video-plus-audio Gemini review path on the newer negative-guidance/rescaled-CFG path
-- nature and vintage natural scenes have not yet been revalidated on that newer path, so the current text-first `natural_audio` / `no_music` story is still not broad enough to promote as a natural-sound showcase pack
+- some historical natural-audio wins came from older prompt-shaping or guidance experiments that are no longer part of the promoted pass-through runtime contract
+- nature and vintage natural scenes need fresh validation on the current pass-through prompt contract before the repo can promote a natural-sound showcase pack
 
 ## Execution checklist
 
@@ -73,17 +73,11 @@ Current blocker for the original natural-audio showcase intent:
 
 ### B. Text-first prompt and workflow quality
 
-- [x] use the new prompting guide as the source of truth for prompt shaping
-- [x] add a repo-owned text-first prompt shaper shared by the LTX workflow layer and the showcase runner
-- [ ] keep the default UX text-first
-- [x] improve the planner’s internal prompt shaping for:
-  - `natural_audio`
-  - `no_music`
-  - duration
-  - orientation
-- [x] keep all of those truthful as text-shaping aids, not hard guarantees
-- [ ] validate that prompt shaping helps without hiding model limitations
-- [x] add the first family-local negative-guidance slice and rescaled CFG recovery path for text-first natural-audio scenes
+- [x] keep the default UX text-first
+- [x] make the promoted runtime path pass caller-authored prompts through verbatim
+- [x] remove repo-owned prompt composition from the LTX workflow layer and the first-party showcase runner
+- [ ] validate the strongest text-first scenes again on the current pass-through prompt contract
+- [ ] keep historical shaping or guidance experiments clearly labeled as historical rather than current product truth
 
 ### C. Semantic validation workflow
 

@@ -26,12 +26,7 @@ class WorkflowReference(BaseModel):
 class WorkflowPreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    natural_audio: bool = False
-    no_music: bool = False
-    enhance_prompt: bool = False
     quality: Literal["auto", "fast", "balanced", "high"] = "auto"
-    duration_seconds: float | None = None
-    orientation: str | None = None
 
 
 class WorkflowIntent(BaseModel):
@@ -39,8 +34,6 @@ class WorkflowIntent(BaseModel):
 
     model_id: str
     prompt: str
-    video_prompt: str | None = None
-    audio_prompt: str | None = None
     references: list[WorkflowReference] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
     output: JobOutputPolicy = Field(default_factory=JobOutputPolicy)
@@ -77,8 +70,6 @@ class WorkflowPlan(BaseModel):
     selected_profile: str | None = None
     pipeline_variant: str | None = None
     resolved_prompt: str
-    resolved_video_prompt: str | None = None
-    resolved_audio_prompt: str | None = None
     references: list[WorkflowReference] = Field(default_factory=list)
     stages: list[WorkflowStageSpec] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

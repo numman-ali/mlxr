@@ -155,10 +155,9 @@ Current showcase truth:
 - the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
 - it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
 - the historical dog recovery receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/` came from an earlier family-local CFG experiment, but the promoted owned distilled product path now defaults back to positive-only denoising
-- the newer showcase-runner shaping slice clearly rescues `heron_marsh_documentary` as a no-music Gemini match at the 10-second `384x224 / 241f / 24fps` rung
-- separate current repo receipts also show no-music Gemini matches for `basketball_court_dusk` and `cafe_sidewalk_human` at that same rung
+- some older showcase receipts generated under repo-owned prompt-shaping experiments clear no-music review bars, but those should now be treated as historical evidence rather than as the current pass-through prompt contract
 - the current best-available promoted pack that incorporates that dog recovery is `tmp/showcase-runs/showcase-pack-20260308-best-available.json`
-- it still does not prove that text-first natural-audio realism is solved broadly; passive animal ambience, vintage-natural scenes, and quiet human scenes can still drift badly, as shown by the current `cat_kitchen_natural`, rerun `vintage_laundromat`, `bookshop_dialogue_quiet`, and `cafe_sidewalk_human` receipts
+- it still does not prove that text-first natural-audio realism is solved broadly; passive animal ambience and vintage-natural scenes still need fresh validation on the current pass-through prompt contract, and conditioned audio remains the stronger promoted control path when exact sound behavior matters
 
 ## Recommended next implementation order
 

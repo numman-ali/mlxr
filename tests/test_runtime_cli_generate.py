@@ -162,6 +162,20 @@ class RuntimeCliGenerateTests(unittest.TestCase):
         self.assertEqual(parsed.export_path, Path("/tmp/result.mp4"))
         self.assertTrue(parsed.overwrite_export)
 
+    def test_generate_parser_rejects_removed_prompt_authoring_flags(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "generate",
+                    "--model-id",
+                    "ltx-2.3-fast-local",
+                    "--prompt",
+                    "golden retriever in a park",
+                    "--no-music",
+                ]
+            )
+
     def test_generate_parser_rejects_export_without_wait(self) -> None:
         parser = build_parser()
         with self.assertRaises(SystemExit):
@@ -434,8 +448,6 @@ class RuntimeCliGenerateTests(unittest.TestCase):
         args = argparse.Namespace(
             model_id="ltx-2.3-fast-local",
             prompt="golden retriever in a park",
-            video_prompt=None,
-            audio_prompt=None,
             image=None,
             image_frame_index=0,
             image_strength=1.0,
@@ -448,9 +460,6 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             fps=None,
             seed=None,
             artifact_format="mp4",
-            natural_audio=False,
-            no_music=False,
-            enhance_prompt=False,
             quality="auto",
             plan_only=False,
             wait=True,

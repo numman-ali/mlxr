@@ -20,8 +20,8 @@ Already true:
 - the real non-preview `LTX-2.3` bridge is working
 - the first best-available five-clip text-first showcase pack is promoted
 - the natural-audio dog scene is now green on the stronger Gemini video-plus-audio review bar
-- the newer negative-guidance/rescaled-CFG path is real and committed
-- the rerun documentary and natural-vintage scenes still drift into music-like audio
+- the promoted runtime path now passes caller-authored prompts through verbatim instead of composing prompt text in the workflow layer
+- conditioned-audio validation is stronger than text-only audio steering
 
 Not yet true:
 
@@ -36,21 +36,20 @@ Not yet true:
   - broader natural-audio realism on text-first AV
   - or the next capability row, `video.condition.video`
 - [ ] Keep the current best-available pack truthful; do not replace it until a new pack clears the same review bar
-- [ ] Do not claim that `no_music` is generally solved from the dog result alone
+- [ ] Do not claim that text-only no-music prompting is generally solved from one scene-level win alone
 
 ## LTX product-quality tasks
 
 ### A. Broaden natural-audio realism
 
-- [ ] Investigate why the newer guidance path fixes the dog scene but not `nature_documentary`
-- [ ] Investigate why the newer guidance path fixes the dog scene but not `vintage_old_school`
-- [ ] Compare the successful dog prompt against the failing natural-scene prompts and isolate which prompt/audio-brief features matter
+- [ ] Revalidate the strongest natural-audio scenes on the current pass-through prompt contract
+- [ ] Compare text-first and audio-conditioned results for the same scene and seed before blaming prompt wording alone
 - [ ] Test whether the blocker is:
   - subject class
   - scene class
-  - audio brief wording
-  - CFG scale split
-  - negative prompt vocabulary
+  - authored prompt wording
+  - early denoise behavior
+  - audio-conditioning absence
 - [ ] Keep Gemini plus receipts as the acceptance gate for all reruns
 - [ ] Promote a broader natural-audio pack only if multiple non-dog natural scenes clear the same bar
 
@@ -84,9 +83,8 @@ Not yet true:
 - [ ] Keep the default user-facing generation contract simple:
   - one prompt
   - optional refs
-  - simple preferences
-- [ ] Keep internal visual/audio intent splitting inside the workflow layer, not as the default UI
-- [ ] Keep family-specific prompt shaping inside the family package unless a second family proves it belongs in core
+  - actual inference parameters only
+- [ ] Keep prompt composition out of the promoted runtime and first-party clients unless it earns a deliberate separate design later
 - [ ] Keep host adapters thin; do not let desktop or CLI own inference logic
 
 ### B. Continue the workflow/orchestration roadmap

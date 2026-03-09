@@ -10,13 +10,7 @@ from mlxr.core.schemas import (
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
 
-from .family_options import family_extensions, style_family_from_extensions
-from .prompting import (
-    Orientation,
-    PromptShapingOptions,
-    ShapedPromptBundle,
-    shape_text_first_prompt_bundle,
-)
+from .family_options import family_extensions
 
 
 class LTXWorkflowStrategy(FamilyWorkflowStrategy):
@@ -45,24 +39,6 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             raise ValueError(
                 f"Model '{context.model.model_id}' does not support workflow task '{task}'"
             )
-        if intent.preferences.enhance_prompt:
-            warnings.append(
-                "Prompt enhancement is requested, but the current LTX runtime path does not implement it yet."
-            )
-        if intent.audio_prompt and not capability.conditioning.get("audio", False):
-            warnings.append(
-                "Audio prompt details will stay descriptive only until audio-conditioned generation lands."
-            )
-        if task == "video.generate" and intent.preferences.natural_audio:
-            warnings.append(
-                "Natural-audio preference is text-first guidance only on the current AV path; validate the output if exact diegetic sound matters."
-            )
-        if task == "video.generate" and intent.preferences.no_music:
-            warnings.append(
-                "The current text-only AV path may still drift toward soundtrack-like audio; audio-conditioned generation is the stronger control path."
-            )
-
-        resolved_prompts = _resolved_prompts(intent)
         pipeline_variant = _pipeline_variant(capability)
         selected_profile = _selected_profile(capability, task)
 
@@ -73,9 +49,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             selected_task=task,
             selected_profile=selected_profile,
             pipeline_variant=pipeline_variant,
-            resolved_prompt=resolved_prompts.prompt,
-            resolved_video_prompt=intent.video_prompt,
-            resolved_audio_prompt=intent.audio_prompt,
+            resolved_prompt=intent.prompt,
             references=list(references),
             stages=[
                 WorkflowStageSpec(
@@ -99,8 +73,6 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "implemented_task_surface": list(capability.tasks),
                 "supported_reference_kinds": _supported_reference_kinds(capability),
                 "workflow_mode": "simple_generation",
-                "resolved_negative_prompt": resolved_prompts.negative_prompt,
-                "resolved_style_family": _style_family(intent),
             },
         )
 
@@ -114,10 +86,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             raise ValueError(
                 f"Model '{context.model.model_id}' does not support task '{plan.selected_task}'"
             )
-        resolved_prompts = _resolved_prompts(intent)
         inputs: dict[str, object] = {"prompt": plan.resolved_prompt}
-        if resolved_prompts.negative_prompt is not None:
-            inputs["negative_prompt"] = resolved_prompts.negative_prompt
         if plan.selected_task in {"video.condition.image", "video.condition.audio"}:
             images: list[dict[str, object]] = []
             for reference in intent.references:
@@ -199,14 +168,8 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
         ltx_extensions.update(
             {
                 "workflow_variant": plan.pipeline_variant,
-                "resolved_video_prompt": plan.resolved_video_prompt,
-                "resolved_audio_prompt": plan.resolved_audio_prompt,
-                "resolved_negative_prompt": resolved_prompts.negative_prompt,
             }
         )
-        resolved_style_family = _style_family(intent)
-        if resolved_style_family is not None:
-            ltx_extensions["style_family"] = resolved_style_family
         extensions["ltx"] = ltx_extensions
         extensions["workflow"] = {
             "selected_task": plan.selected_task,
@@ -232,39 +195,6 @@ def _references_by_kind(
     for reference in references:
         grouped.setdefault(reference.kind, []).append(reference)
     return grouped
-
-
-def _resolved_prompts(intent: WorkflowIntent) -> ShapedPromptBundle:
-    orientation = _normalized_orientation(intent.preferences.orientation)
-    return shape_text_first_prompt_bundle(
-        intent.prompt,
-        options=PromptShapingOptions(
-            video_prompt=intent.video_prompt,
-            audio_prompt=intent.audio_prompt,
-            natural_audio=intent.preferences.natural_audio,
-            no_music=intent.preferences.no_music,
-            style_family=_style_family(intent),
-            duration_seconds=intent.preferences.duration_seconds,
-            orientation=orientation,
-        ),
-    )
-
-
-def _style_family(intent: WorkflowIntent) -> str | None:
-    return style_family_from_extensions(intent.extensions.get("ltx"))
-
-
-def _normalized_orientation(raw_orientation: str | None) -> Orientation | None:
-    if raw_orientation is None:
-        return None
-    normalized_orientation = raw_orientation.strip().lower()
-    if normalized_orientation == "portrait":
-        return "portrait"
-    if normalized_orientation == "landscape":
-        return "landscape"
-    if normalized_orientation == "square":
-        return "square"
-    return None
 
 
 def _selected_profile(capability: CapabilityDescriptor, task: str) -> str | None:

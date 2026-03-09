@@ -9,11 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from mlxr.families.ltx.prompting import (
-    PromptShapingOptions,
-    shape_text_first_prompt_bundle,
-)
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "tmp" / "showcase-runs"
 DEFAULT_SCENARIO_PACK = (
@@ -86,7 +81,6 @@ class SceneSummary(TypedDict):
     scene_id: str
     purpose: str
     prompt: str
-    negative_prompt: str | None
     video_path: str
     manifest_path: str
     ffprobe_path: str
@@ -234,22 +228,13 @@ def main(argv: list[str] | None = None) -> int:
 
     summary: list[SceneSummary] = []
     for scene in selected:
-        prompt_options = _prompt_options_for_run(
-            scene,
-            num_frames=int(args.num_frames),
-            fps=int(args.fps),
-        )
-        resolved_prompts = shape_text_first_prompt_bundle(
-            scene.prompt, options=prompt_options
-        )
-        prompt = resolved_prompts.prompt
+        prompt = scene.prompt
         run_name = f"showcase-{scene.scene_id}"
         run_result = _run_smoke(
             artifact_root=args.artifact_root.expanduser().resolve(),
             output_root=output_root,
             run_name=run_name,
             prompt=prompt,
-            negative_prompt=resolved_prompts.negative_prompt,
             width=int(args.width),
             height=int(args.height),
             num_frames=int(args.num_frames),
@@ -273,7 +258,6 @@ def main(argv: list[str] | None = None) -> int:
             "scene_id": scene.scene_id,
             "purpose": scene.purpose,
             "prompt": prompt,
-            "negative_prompt": resolved_prompts.negative_prompt,
             "video_path": run_result["video_path"],
             "manifest_path": run_result["manifest_path"],
             "ffprobe_path": str(ffprobe_path),
@@ -297,22 +281,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _prompt_options_for_run(
-    scene: ShowcaseScene, *, num_frames: int, fps: int
-) -> PromptShapingOptions:
-    audio_prompt: str | None = scene.audio_intent
-    if scene.conditioning_mode != "text_first":
-        audio_prompt = None
-    return PromptShapingOptions(
-        audio_prompt=audio_prompt,
-        natural_audio=not scene.music_allowed,
-        no_music=not scene.music_allowed,
-        style_family=scene.style_family,
-        duration_seconds=(num_frames - 1) / fps,
-        orientation="landscape",
-    )
-
-
 def _selected_scenes(
     scenes: tuple[ShowcaseScene, ...], scene_ids: list[str] | None
 ) -> tuple[ShowcaseScene, ...]:
@@ -331,7 +299,6 @@ def _run_smoke(
     output_root: Path,
     run_name: str,
     prompt: str,
-    negative_prompt: str | None,
     width: int,
     height: int,
     num_frames: int,
@@ -360,8 +327,6 @@ def _run_smoke(
         run_name,
         "--no-stage-debug",
     ]
-    if negative_prompt is not None:
-        command.extend(["--negative-prompt", negative_prompt])
     result = subprocess.run(
         command, check=True, capture_output=True, text=True, cwd=REPO_ROOT
     )

@@ -47,9 +47,7 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(result.plan.family, "ltx")
                 self.assertEqual(result.plan.pipeline_variant, "distilled_two_stage")
 
-    def test_workflow_plan_resolved_prompt_applies_text_first_audio_preferences(
-        self,
-    ) -> None:
+    def test_workflow_plan_keeps_user_prompt_verbatim(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             state = make_state(root)
@@ -62,56 +60,19 @@ class RuntimeWorkflowTests(unittest.TestCase):
                     json={
                         "model_id": "ltx-2.3-fast-local",
                         "prompt": "golden retriever with its owner in a park",
-                        "audio_prompt": "happy barking and light footsteps",
-                        "preferences": {
-                            "natural_audio": True,
-                            "no_music": True,
-                            "duration_seconds": 10.0,
-                            "orientation": "landscape",
-                        },
                         "params": {"width": 96, "height": 64, "num_frames": 9},
                         "output": {"artifact_format": "mp4"},
                     },
                 )
                 self.assertEqual(response.status_code, 200, response.text)
                 result = response_model(response, WorkflowPlanResult)
-                self.assertIn(
-                    "Audio details: happy barking and light footsteps",
+                self.assertEqual(
                     result.plan.resolved_prompt,
+                    "golden retriever with its owner in a park",
                 )
-                self.assertIn(
-                    "Audio direction: use only natural diegetic environmental sound",
-                    result.plan.resolved_prompt,
-                )
-                self.assertIn(
-                    "Audio prohibition: no soundtrack, no score, no background music",
-                    result.plan.resolved_prompt,
-                )
-                self.assertIn("no piano", result.plan.resolved_prompt)
-                self.assertIn(
-                    "Target duration: about 10.0 seconds.", result.plan.resolved_prompt
-                )
-                self.assertIn(
-                    "Framing preference: landscape composition.",
-                    result.plan.resolved_prompt,
-                )
-                self.assertIn(
-                    "Natural-audio preference is text-first guidance only",
-                    "\n".join(result.plan.warnings),
-                )
-                self.assertIn(
-                    "may still drift toward soundtrack-like audio",
-                    "\n".join(result.plan.warnings),
-                )
-                resolved_negative_prompt = result.plan.metadata.get(
-                    "resolved_negative_prompt"
-                )
-                self.assertIsInstance(resolved_negative_prompt, str)
-                assert isinstance(resolved_negative_prompt, str)
-                self.assertIn("background music", resolved_negative_prompt)
-                self.assertIn("chimes", resolved_negative_prompt)
+                self.assertEqual(result.plan.warnings, [])
 
-    def test_workflow_plan_uses_family_local_style_hint_for_negative_shaping(
+    def test_workflow_plan_rejects_legacy_prompt_authoring_fields(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -131,27 +92,11 @@ class RuntimeWorkflowTests(unittest.TestCase):
                             "natural_audio": True,
                             "no_music": True,
                         },
-                        "extensions": {
-                            "ltx": {
-                                "style_family": "naturalistic",
-                            }
-                        },
                         "params": {"width": 96, "height": 64, "num_frames": 9},
                         "output": {"artifact_format": "mp4"},
                     },
                 )
-                self.assertEqual(response.status_code, 200, response.text)
-                result = response_model(response, WorkflowPlanResult)
-                resolved_negative_prompt = result.plan.metadata.get(
-                    "resolved_negative_prompt"
-                )
-                self.assertIsInstance(resolved_negative_prompt, str)
-                assert isinstance(resolved_negative_prompt, str)
-                self.assertIn("soft piano bed", resolved_negative_prompt)
-                self.assertEqual(
-                    result.plan.metadata.get("resolved_style_family"),
-                    "naturalistic",
-                )
+                self.assertEqual(response.status_code, 422)
 
     def test_workflow_plan_selects_image_conditioning_when_image_reference_exists(
         self,
@@ -316,11 +261,6 @@ class RuntimeWorkflowTests(unittest.TestCase):
                         "intent": {
                             "model_id": "ltx-2.3-fast-local",
                             "prompt": "golden retriever in a park",
-                            "audio_prompt": "happy barking and light footsteps",
-                            "preferences": {
-                                "natural_audio": True,
-                                "no_music": True,
-                            },
                             "params": {
                                 "width": 96,
                                 "height": 64,
@@ -336,7 +276,7 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 result = response_model(response, WorkflowRunResult)
                 terminal = wait_for_job_terminal_state(client, result.submit.job_id)
                 self.assertEqual(terminal["state"], "completed")
-                self.assertTrue(generators[0].calls[0]["negative_prompt_present"])
+                self.assertFalse(generators[0].calls[0]["negative_prompt_present"])
                 self.assertEqual(
                     generators[0].calls[0]["guidance_mode"], "positive_only"
                 )
@@ -362,11 +302,6 @@ class RuntimeWorkflowTests(unittest.TestCase):
                         "intent": {
                             "model_id": "ltx-2.3-fast-local",
                             "prompt": "quiet bookshop conversation",
-                            "audio_prompt": "soft page turns and room tone",
-                            "preferences": {
-                                "natural_audio": True,
-                                "no_music": True,
-                            },
                             "extensions": {
                                 "ltx": {
                                     "distilled_guidance_mode": "cfg",

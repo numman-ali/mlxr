@@ -154,8 +154,7 @@ Use this with:
 ## K. Prompt and workflow layer
 
 - [x] Default user story remains one prompt plus optional refs.
-- [x] Prompt shaping follows the repo-owned prompting guide.
-- [x] Internal audio/video intent splitting remains internal, not required UI.
+- [x] The promoted runtime path passes caller-authored prompts through verbatim.
 - [ ] Prompt enhancement is implemented as a real workflow stage.
 - [ ] Prompt enhancement is promoted only after real runtime validation.
 - [ ] Workflow docs remain honest about planning vs orchestration.

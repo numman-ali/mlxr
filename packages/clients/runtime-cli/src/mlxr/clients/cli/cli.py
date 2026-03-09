@@ -222,14 +222,9 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
         intent = WorkflowIntent(
             model_id=str(args.model_id),
             prompt=str(args.prompt),
-            video_prompt=str(args.video_prompt) if args.video_prompt else None,
-            audio_prompt=str(args.audio_prompt) if args.audio_prompt else None,
             references=references,
             params=_generation_params(args),
             preferences=WorkflowPreferences(
-                natural_audio=bool(args.natural_audio),
-                no_music=bool(args.no_music),
-                enhance_prompt=bool(args.enhance_prompt),
                 quality=_workflow_quality(str(args.quality)),
             ),
             output=JobOutputPolicy(artifact_format=str(args.artifact_format)),
@@ -274,8 +269,6 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
 def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model-id", required=True)
     parser.add_argument("--prompt", required=True)
-    parser.add_argument("--video-prompt")
-    parser.add_argument("--audio-prompt")
     parser.add_argument(
         "--image", type=Path, help="Optional trusted local image reference"
     )
@@ -316,9 +309,6 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
         default="mp4",
         choices=("mp4", "wav"),
     )
-    parser.add_argument("--natural-audio", action="store_true")
-    parser.add_argument("--no-music", action="store_true")
-    parser.add_argument("--enhance-prompt", action="store_true")
     parser.add_argument(
         "--quality",
         default="auto",

@@ -160,7 +160,7 @@ Current LTX showcase truth:
 
 - the audio-aware Gemini pass confirms that the current text-first natural scenes are still drifting into soundtrack-like music
 - this is now confirmed on the 10-second dog, nature, and vintage receipts, not just inferred from one weak review pass
-- until that changes, text-first `natural_audio` / `no_music` must remain advisory rather than promotable guarantees
+- until broader pass-through validation exists, text-first no-music or natural-audio wording must remain advisory rather than promotable guarantees
 
 ## How To Interpret Stage Snapshots
 
