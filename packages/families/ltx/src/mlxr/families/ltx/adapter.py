@@ -27,6 +27,7 @@ from ._adapter.capability import (
     load,
 )
 from ._adapter.stages import (
+    _distilled_guidance_mode,
     _fps,
     _negative_prompt_text,
     _num_frames,
@@ -72,6 +73,7 @@ class LTXFamilyAdapter:
     _stage_dimension = _stage_dimension
     _num_frames = _num_frames
     _fps = _fps
+    _distilled_guidance_mode = _distilled_guidance_mode
     _seed = _seed
     _stage_task = _stage_task
 

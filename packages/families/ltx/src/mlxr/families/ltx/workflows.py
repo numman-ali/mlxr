@@ -10,6 +10,7 @@ from mlxr.core.schemas import (
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
 
+from .family_options import family_extensions, style_family_from_extensions
 from .prompting import (
     Orientation,
     PromptShapingOptions,
@@ -99,6 +100,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "supported_reference_kinds": _supported_reference_kinds(capability),
                 "workflow_mode": "simple_generation",
                 "resolved_negative_prompt": resolved_prompts.negative_prompt,
+                "resolved_style_family": _style_family(intent),
             },
         )
 
@@ -193,7 +195,7 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             }
 
         extensions = dict(intent.extensions)
-        ltx_extensions = dict(extensions.get("ltx", {}))
+        ltx_extensions = dict(family_extensions(extensions.get("ltx")))
         ltx_extensions.update(
             {
                 "workflow_variant": plan.pipeline_variant,
@@ -202,6 +204,9 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "resolved_negative_prompt": resolved_prompts.negative_prompt,
             }
         )
+        resolved_style_family = _style_family(intent)
+        if resolved_style_family is not None:
+            ltx_extensions["style_family"] = resolved_style_family
         extensions["ltx"] = ltx_extensions
         extensions["workflow"] = {
             "selected_task": plan.selected_task,
@@ -238,10 +243,15 @@ def _resolved_prompts(intent: WorkflowIntent) -> ShapedPromptBundle:
             audio_prompt=intent.audio_prompt,
             natural_audio=intent.preferences.natural_audio,
             no_music=intent.preferences.no_music,
+            style_family=_style_family(intent),
             duration_seconds=intent.preferences.duration_seconds,
             orientation=orientation,
         ),
     )
+
+
+def _style_family(intent: WorkflowIntent) -> str | None:
+    return style_family_from_extensions(intent.extensions.get("ltx"))
 
 
 def _normalized_orientation(raw_orientation: str | None) -> Orientation | None:

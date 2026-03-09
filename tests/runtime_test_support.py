@@ -274,6 +274,7 @@ class FakeVideoGenerator:
     ) -> None:
         self.backend = backend
         self.include_audio = include_audio
+        self.guidance_mode = "positive_only"
         self.calls: list[dict[str, object]] = []
         self.closed = False
 
@@ -301,6 +302,7 @@ class FakeVideoGenerator:
                 "audio_conditioned": audio_conditioning is not None,
                 "negative_prompt_present": prompt_context.negative_prompt_text
                 is not None,
+                "guidance_mode": self.guidance_mode,
             }
         )
         effective_seed = 0 if seed is None else seed

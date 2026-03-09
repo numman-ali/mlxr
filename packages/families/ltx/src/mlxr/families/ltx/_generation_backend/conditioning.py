@@ -213,29 +213,6 @@ def _prompt_context_dtype(context: MLXArray) -> mx.Dtype:
     return getattr(context, "dtype", mx.bfloat16)
 
 
-def _effective_seed(
-    *,
-    prompt_context: PromptEncodingResult,
-    checkpoint_path: Path,
-    spatial_upsampler_path: Path,
-    seed: int | None,
-) -> int:
-    payload = "|".join(
-        (
-            prompt_context.prompt_text,
-            str(prompt_context.token_count),
-            str(prompt_context.sequence_length),
-            checkpoint_path.name,
-            str(checkpoint_path.stat().st_size),
-            spatial_upsampler_path.name,
-            str(spatial_upsampler_path.stat().st_size),
-            str(seed if seed is not None else "auto"),
-        )
-    )
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return int(digest[:8], 16)
-
-
 def _prompt_signature(prompt_text: str) -> str:
     return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:12]
 

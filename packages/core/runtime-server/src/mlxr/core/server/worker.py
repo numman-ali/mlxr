@@ -148,6 +148,9 @@ def run_job_worker(
                         "num_frames": request.params.get("num_frames"),
                         "fps": request.params.get("fps"),
                         "seed": request.params.get("seed"),
+                        "family_extensions": _family_extensions(
+                            model.family, request.extensions
+                        ),
                         "simulate_delay_seconds": request.extensions.get(
                             "simulate_delay_seconds", 0.05
                         ),
@@ -235,6 +238,15 @@ def cancellation_requested(command_queue: MessageQueue) -> bool:
     except queue.Empty:
         return False
     return command.get("command") == "cancel"
+
+
+def _family_extensions(family: str, extensions: dict[str, object]) -> dict[str, object]:
+    raw_family_extensions = extensions.get(family)
+    if raw_family_extensions is None:
+        return {}
+    if not isinstance(raw_family_extensions, dict):
+        raise ValueError(f"Job extensions.{family} must be an object when provided")
+    return dict(raw_family_extensions)
 
 
 def emit_phase_event(

@@ -9,6 +9,10 @@ import mlx.core as mx
 from mlxr.core.runtime import ExecutionStage, LoadedModelHandle, StageResult
 from mlxr.core.schemas import ArtifactHandle
 
+from ..family_options import (
+    DistilledGuidanceMode,
+    distilled_guidance_mode_from_extensions,
+)
 from ..generation import AudioConditioningInput, ConditioningInput, VideoGenerator
 from ..prompt_encoding import PromptEncoder
 from .state import LoadedLTXRuntimeState
@@ -145,6 +149,10 @@ def run_stage(
             runtime_state.prompt_encoder = None
             mx.clear_cache()
         generator = self._video_generator(runtime_state)
+        _apply_family_stage_options(
+            generator,
+            distilled_guidance_mode=self._distilled_guidance_mode(stage),
+        )
         generated_video = generator.generate(
             prompt_context=runtime_state.prompt_context,
             conditioning_inputs=runtime_state.conditioning_inputs,
@@ -440,6 +448,14 @@ def _seed(self: LTXFamilyAdapter, stage: ExecutionStage) -> int | None:
     return value
 
 
+def _distilled_guidance_mode(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> DistilledGuidanceMode:
+    return distilled_guidance_mode_from_extensions(
+        stage.params.get("family_extensions")
+    )
+
+
 def _stage_task(self: LTXFamilyAdapter, stage: ExecutionStage) -> str:
     value = stage.params.get("task")
     if isinstance(value, str) and value:
@@ -459,3 +475,10 @@ def _negative_prompt_text(
         )
     normalized = negative_prompt.strip()
     return normalized or None
+
+
+def _apply_family_stage_options(
+    generator: VideoGenerator, *, distilled_guidance_mode: DistilledGuidanceMode
+) -> None:
+    if hasattr(generator, "guidance_mode"):
+        setattr(generator, "guidance_mode", distilled_guidance_mode)

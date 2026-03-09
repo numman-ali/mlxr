@@ -10,6 +10,7 @@ import numpy as np
 import numpy.typing as npt
 from mlxr.core.runtime import TraceRecorder, mlx_memory_snapshot
 
+from ..family_options import DistilledGuidanceMode, effective_seed
 from ..generation import (
     AudioConditioningInput,
     ConditioningInput,
@@ -18,7 +19,6 @@ from ..generation import (
 )
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import (
-    _effective_seed,
     _half_resolution_padded_shape,
     _optional_negative_audio_context,
     _optional_negative_video_context,
@@ -116,6 +116,7 @@ def _require_audio_latents(audio_latents: MLXArray | None) -> MLXArray:
 class LTXDistilledVideoGenerator(VideoGenerator):
     checkpoint_path: Path
     spatial_upsampler_path: Path
+    guidance_mode: DistilledGuidanceMode = "positive_only"
     _audio_enabled: bool = True
     _reference_imports: _ReferenceImports | None = None
     _checkpoint_reader: CheckpointReader | None = None
@@ -180,10 +181,18 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             if use_audio_video_denoising
             else None
         )
-        negative_video_context = _optional_negative_video_context(prompt_context)
+        negative_guidance_active = (
+            self.guidance_mode == "cfg"
+            and prompt_context.negative_prompt_text is not None
+        )
+        negative_video_context = (
+            _optional_negative_video_context(prompt_context)
+            if negative_guidance_active
+            else None
+        )
         negative_audio_context = (
             _optional_negative_audio_context(prompt_context)
-            if use_audio_video_denoising
+            if use_audio_video_denoising and negative_guidance_active
             else None
         )
         if not self._audio_enabled and audio_conditioning is not None:
@@ -191,12 +200,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 "Owned LTX video-only debug mode does not support audio conditioning"
             )
         padded_shape = _resolve_padded_shape(width=width, height=height)
-        effective_seed = _effective_seed(
-            prompt_context=prompt_context,
-            checkpoint_path=self.checkpoint_path,
-            spatial_upsampler_path=self.spatial_upsampler_path,
-            seed=seed,
-        )
+        effective_generation_seed = effective_seed(seed=seed)
         model_dtype = _prompt_context_dtype(video_context)
         latent_frames = 1 + (num_frames - 1) // 8
         stage1_height = padded_shape.internal_height // 2 // 32
@@ -250,7 +254,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
                 )
         self._release_checkpoint_reader()
 
-        mx.random.seed(effective_seed)
+        mx.random.seed(effective_generation_seed)
         timings_ms: dict[str, float] = {}
 
         stage1_started = time.perf_counter()
@@ -611,12 +615,9 @@ class LTXDistilledVideoGenerator(VideoGenerator):
             "audio_bwe_applied": audio_backend == "mlxr_vocoder_with_bwe",
             "audio_conditioned": audio_conditioning is not None,
             "audio_video_denoising": use_audio_video_denoising,
-            "guidance_mode": (
-                "cfg"
-                if prompt_context.negative_prompt_text is not None
-                else "positive_only"
-            ),
+            "guidance_mode": "cfg" if negative_guidance_active else "positive_only",
             "negative_prompt_present": prompt_context.negative_prompt_text is not None,
+            "negative_prompt_applied": negative_guidance_active,
         }
         if trace_recorder.enabled:
             metadata["trace"] = trace_recorder.to_metadata()
@@ -624,7 +625,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         return GeneratedVideo(
             frames=frames_uint8,
             fps=fps,
-            seed=effective_seed,
+            seed=effective_generation_seed,
             backend=(
                 "mlxr_ltx_distilled_two_stage"
                 if self._audio_enabled

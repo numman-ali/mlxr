@@ -6,6 +6,7 @@ from pathlib import Path
 import mlx.core as mx
 import numpy as np
 
+from ..family_options import effective_seed
 from ..generation import (
     AudioConditioningInput,
     ConditioningInput,
@@ -16,7 +17,6 @@ from ..prompt_encoding import PromptEncodingResult
 from .conditioning import (
     _apply_conditioning,
     _base_frames,
-    _effective_seed,
     _prompt_signature,
 )
 
@@ -44,19 +44,14 @@ class LTXPreviewVideoGenerator(VideoGenerator):
             raise ValueError("LTX preview generation requires at least one frame")
         if fps < 1:
             raise ValueError("LTX preview generation requires fps >= 1")
-        effective_seed = _effective_seed(
-            prompt_context=prompt_context,
-            checkpoint_path=self.checkpoint_path,
-            spatial_upsampler_path=self.spatial_upsampler_path,
-            seed=seed,
-        )
-        mx.random.seed(effective_seed)
+        effective_generation_seed = effective_seed(seed=seed)
+        mx.random.seed(effective_generation_seed)
         frames = _base_frames(
             width=width,
             height=height,
             num_frames=num_frames,
             prompt_context=prompt_context,
-            seed=effective_seed,
+            seed=effective_generation_seed,
         )
         for conditioning_input in conditioning_inputs:
             frames = _apply_conditioning(
@@ -71,7 +66,7 @@ class LTXPreviewVideoGenerator(VideoGenerator):
         return GeneratedVideo(
             frames=frames_uint8,
             fps=fps,
-            seed=effective_seed,
+            seed=effective_generation_seed,
             backend="mlx_prompt_conditioned_preview",
             conditioning_count=len(conditioning_inputs),
             prompt_signature=_prompt_signature(prompt_context.prompt_text),

@@ -111,6 +111,48 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertIn("background music", resolved_negative_prompt)
                 self.assertIn("chimes", resolved_negative_prompt)
 
+    def test_workflow_plan_uses_family_local_style_hint_for_negative_shaping(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            state = make_state(root)
+            source_dir = make_local_bundle(root)
+            with TestClient(create_app(state)) as client:
+                register_local_ltx_model(client, source_dir)
+
+                response = client.post(
+                    "/v1/workflows/plan",
+                    json={
+                        "model_id": "ltx-2.3-fast-local",
+                        "prompt": "Two people speak quietly inside a small bookshop.",
+                        "audio_prompt": "soft page turns and hushed room tone",
+                        "preferences": {
+                            "natural_audio": True,
+                            "no_music": True,
+                        },
+                        "extensions": {
+                            "ltx": {
+                                "style_family": "naturalistic",
+                            }
+                        },
+                        "params": {"width": 96, "height": 64, "num_frames": 9},
+                        "output": {"artifact_format": "mp4"},
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response_model(response, WorkflowPlanResult)
+                resolved_negative_prompt = result.plan.metadata.get(
+                    "resolved_negative_prompt"
+                )
+                self.assertIsInstance(resolved_negative_prompt, str)
+                assert isinstance(resolved_negative_prompt, str)
+                self.assertIn("soft piano bed", resolved_negative_prompt)
+                self.assertEqual(
+                    result.plan.metadata.get("resolved_style_family"),
+                    "naturalistic",
+                )
+
     def test_workflow_plan_selects_image_conditioning_when_image_reference_exists(
         self,
     ) -> None:
@@ -295,6 +337,57 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 terminal = wait_for_job_terminal_state(client, result.submit.job_id)
                 self.assertEqual(terminal["state"], "completed")
                 self.assertTrue(generators[0].calls[0]["negative_prompt_present"])
+                self.assertEqual(
+                    generators[0].calls[0]["guidance_mode"], "positive_only"
+                )
+
+    def test_workflow_run_can_opt_in_family_local_distilled_cfg_guidance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(root)
+            state = make_state(root)
+            with (
+                patched_inline_job_process_context(),
+                patched_ltx_prompt_encoder(),
+                patched_ltx_video_generator(include_audio=True) as generators,
+                TestClient(create_app(state)) as client,
+            ):
+                register_local_ltx_model(client, source_dir)
+
+                response = client.post(
+                    "/v1/workflows/run",
+                    json={
+                        "intent": {
+                            "model_id": "ltx-2.3-fast-local",
+                            "prompt": "quiet bookshop conversation",
+                            "audio_prompt": "soft page turns and room tone",
+                            "preferences": {
+                                "natural_audio": True,
+                                "no_music": True,
+                            },
+                            "extensions": {
+                                "ltx": {
+                                    "distilled_guidance_mode": "cfg",
+                                }
+                            },
+                            "params": {
+                                "width": 96,
+                                "height": 64,
+                                "num_frames": 9,
+                                "fps": 12,
+                                "seed": 17,
+                            },
+                            "output": {"artifact_format": "mp4"},
+                        }
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                result = response_model(response, WorkflowRunResult)
+                terminal = wait_for_job_terminal_state(client, result.submit.job_id)
+                self.assertEqual(terminal["state"], "completed")
+                self.assertEqual(generators[0].calls[0]["guidance_mode"], "cfg")
 
     def test_workflow_run_supports_audio_conditioning_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -154,11 +154,11 @@ Current showcase truth:
 
 - the first promoted text-first five-clip showcase pack is the score-friendly set captured in `tmp/showcase-runs/showcase-pack-20260308.json`
 - it proves that the current text-first AV path can carry distinct 10-second stylized scenes with good, audible audio at the safe rung
-- the newer negative-guidance/rescaled-CFG path now gives the first successful 10-second natural-audio dog scene at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`
+- the historical dog recovery receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/` came from an earlier family-local CFG experiment, but the promoted owned distilled product path now defaults back to positive-only denoising
 - the newer showcase-runner shaping slice clearly rescues `heron_marsh_documentary` as a no-music Gemini match at the 10-second `384x224 / 241f / 24fps` rung
 - separate current repo receipts also show no-music Gemini matches for `basketball_court_dusk` and `cafe_sidewalk_human` at that same rung
 - the current best-available promoted pack that incorporates that dog recovery is `tmp/showcase-runs/showcase-pack-20260308-best-available.json`
-- it still does not prove that text-first natural-audio realism is solved broadly; passive animal ambience and vintage-natural scenes can still drift back into music-like audio, as shown by the current `cat_kitchen_natural` and rerun `vintage_laundromat` receipts
+- it still does not prove that text-first natural-audio realism is solved broadly; passive animal ambience, vintage-natural scenes, and quiet human scenes can still drift badly, as shown by the current `cat_kitchen_natural`, rerun `vintage_laundromat`, `bookshop_dialogue_quiet`, and `cafe_sidewalk_human` receipts
 
 ## Recommended next implementation order
 

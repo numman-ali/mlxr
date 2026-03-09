@@ -147,12 +147,12 @@ Current caveat:
 
 - stronger text shaping improves scene description quality
 - `no_music` is still not a blanket guarantee for text-first natural-audio scenes
-- the first repo-owned scene-level recovery path that improved this was family-local negative guidance plus rescaled CFG on the distilled AV bridge
-- that path is now strong enough for the 10-second dog receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`, where Gemini reviews the clip as a golden retriever with barking and natural outdoor ambience
-- the current showcase runner now feeds each scenario's `audio_intent` into the shared prompt shaper and adds style-aware anti-music negatives for `naturalistic`, `documentary`, and `vintage` scenes
+- the earlier family-local negative-guidance plus rescaled-CFG experiment helped the historical dog receipt at `tmp/showcase-runs/20260308T034004Z-showcase-dog-park-natural/`, but the promoted owned distilled product path now defaults back to positive-only denoising because that CFG slice did not generalize cleanly
+- the current showcase runner still feeds each scenario's `audio_intent` into the shared prompt shaper and adds style-aware anti-music negatives for `naturalistic`, `documentary`, and `vintage` scenes
+- the real workflow path can now also read an `ltx`-local `style_family` hint from `intent.extensions["ltx"]` without widening the shared workflow preferences surface
 - that newer runner-only slice clearly rescues `heron_marsh_documentary` at the 10-second `384x224 / 241f` no-music review bar
 - separate current repo receipts also show no-music wins for `basketball_court_dusk` and `cafe_sidewalk_human`, but those are not clean proof that this specific shaping change caused the improvement
-- it still does not generalize to every natural scene; `cat_kitchen_natural` and the rerun `vintage_laundromat` still come back with music-like audio
+- it still does not generalize to every natural scene; `cat_kitchen_natural`, the rerun `vintage_laundromat`, and current real-CLI `bookshop_dialogue_quiet` / `cafe_sidewalk_human` runs still drift into the wrong scene with music-like audio
 - score-friendly text-first scenes remain the safest promoted showcase set until more natural scenes clear the same bar
 
 ## Sources
