@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import mlx.core as mx
 import numpy as np
@@ -89,6 +90,48 @@ class CheckpointReaderTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "required prefixed weights"):
             reader.load_prefixes(("bar.",))
+
+    def test_checkpoint_reader_falls_back_to_mlx_load_for_bfloat16_numpy_gap(
+        self,
+    ) -> None:
+        checkpoint_path = Path("/tmp/fallback.safetensors")
+        reader = CheckpointReader(checkpoint_path)
+
+        class _Handle:
+            def __enter__(self) -> "_Handle":
+                return self
+
+            def __exit__(
+                self,
+                exc_type: type[BaseException] | None,
+                exc: BaseException | None,
+                tb: object | None,
+            ) -> None:
+                return None
+
+            def keys(self) -> list[str]:
+                return ["foo"]
+
+            def metadata(self) -> dict[str, str] | None:
+                return None
+
+            def get_tensor(self, key: str) -> np.ndarray:
+                raise TypeError("data type 'bfloat16' not understood")
+
+        with (
+            patch(
+                "mlxr.families.ltx._generation_backend.weight_store._safe_open_numpy",
+                return_value=_Handle(),
+            ),
+            patch(
+                "mlxr.families.ltx._generation_backend.weight_store.mx.load",
+                return_value={"foo": mx.ones((2,), dtype=mx.bfloat16)},
+            ),
+        ):
+            loaded = reader.load_exact(("foo",))
+
+        self.assertEqual(set(loaded), {"foo"})
+        self.assertEqual(loaded["foo"].dtype, mx.bfloat16)
 
     def _write_checkpoint(
         self,

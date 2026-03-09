@@ -59,6 +59,7 @@ class CheckpointReader:
     def __init__(self, checkpoint_path: Path) -> None:
         self._index = CheckpointIndex(checkpoint_path)
         self._resident: dict[str, MLXArray] = {}
+        self._fallback_mapping: dict[str, MLXArray] | None = None
 
     @property
     def checkpoint_path(self) -> Path:
@@ -109,7 +110,9 @@ class CheckpointReader:
         if keys is None:
             if self._resident:
                 self._resident.clear()
-                mx.clear_cache()
+            if self._fallback_mapping is not None:
+                self._fallback_mapping = None
+            mx.clear_cache()
             return
         released = False
         for key in tuple(keys):
@@ -123,9 +126,26 @@ class CheckpointReader:
         missing = [key for key in keys if key not in self._resident]
         if not missing:
             return
-        with _safe_open_numpy(self.checkpoint_path) as handle:
+        if self._fallback_mapping is not None:
             for key in missing:
-                self._resident[key] = mx.array(handle.get_tensor(key))
+                self._resident[key] = self._fallback_mapping[key]
+            return
+        try:
+            with _safe_open_numpy(self.checkpoint_path) as handle:
+                for key in missing:
+                    self._resident[key] = mx.array(handle.get_tensor(key))
+            return
+        except (TypeError, ValueError) as exc:
+            if "bfloat16" not in str(exc):
+                raise
+        loaded = mx.load(str(self.checkpoint_path))
+        if not isinstance(loaded, dict):
+            raise RuntimeError(
+                f"LTX checkpoint '{self.checkpoint_path}' did not load into a weight mapping"
+            )
+        self._fallback_mapping = loaded
+        for key in missing:
+            self._resident[key] = self._fallback_mapping[key]
 
 
 class CheckpointReaderView(Mapping[str, MLXArray]):
