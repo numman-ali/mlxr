@@ -1,112 +1,88 @@
 # MLXR
 
-Last verified: 2026-03-12
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mlxr-logo-light.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/brand/mlxr-logo-dark.svg">
+    <img src="docs/assets/brand/mlxr-logo-dark.svg" alt="MLXR" width="760">
+  </picture>
+</p>
 
-`MLXR` is a local-first MLX runtime for Apple Silicon.
+<p align="center">
+  <strong>Local-first MLX runtime for Apple Silicon.</strong><br>
+  One runtime for video, image generation, editing, provenance, and thin clients.
+</p>
 
-It is built around one idea:
+<p align="center">
+  Python • MLX • Apple Silicon • <code>uv</code> • daemon + CLI
+</p>
 
-- one shared runtime
-- many thin surfaces
-- truthful capability reporting
-- provider and provenance preserved end to end
+<p align="center">
+  <a href="docs/current-status.md">Current status</a>
+  ·
+  <a href="docs/roadmap.md">Roadmap</a>
+  ·
+  <a href="docs/cli-ergonomics.md">CLI</a>
+  ·
+  <a href="docs/mac-app-v1-product-spec.md">Mac app v1</a>
+  ·
+  <a href="docs/open-source-release-checklist.md">Release checklist</a>
+</p>
 
-Today, `MLXR` is already a real runtime with a real CLI and real family slices
-for video and image generation. It is not yet a frozen public API or a finished
-desktop product.
+<p align="center">
+  <img src="docs/assets/readme/hero.png" alt="MLXR hero" width="1000">
+</p>
+
+`MLXR` means `MLX Runtime`.
+
+It is a local-first generative runtime built for Apple Silicon: one shared runtime, many thin surfaces, explicit provenance, and support claims that stay tied to real receipts instead of hope.
+
+The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished desktop app. The next product step is a simple native Mac app over the same runtime.
+
+## See It In Motion
+
+<p align="center">
+  <a href="docs/assets/readme/mlxr-reel.mp4">
+    <img src="docs/assets/readme/reel-poster.png" alt="Watch the MLXR reel" width="1000">
+  </a>
+</p>
+
+<p align="center">
+  Open the poster to play a short 720p reel built from current runtime outputs.
+</p>
+
+## Showcase
+
+<p align="center">
+  <img src="docs/assets/readme/showcase-grid.png" alt="MLXR showcase grid" width="1100">
+</p>
+
+## Why MLXR
+
+- One shared runtime, many thin surfaces. The daemon owns jobs, artifacts, provenance, and workflow planning; clients stay thin over it.
+- Local-first by design. Transport is UDS-first, data flow is handle-based, and the repo is built around Apple Silicon reality rather than generic local-serving assumptions.
+- Truthful capability reporting. Rows are promoted only after real receipts, not because upstream has a feature name.
+- Cross-family pressure matters. `LTX`, `Qwen-Image`, `FLUX.2`, and `Z-Image` all push the runtime toward reusable platform seams instead of one-family hacks.
 
 ## What Is Real Today
 
-- a shared runtime with source, artifact, provenance, and job models
-- a local daemon API with UDS-first transport and handle-based import or export
-- a first-party `mlxr` CLI thin client
-- promoted LTX fast video slices
-- real Qwen-Image, FLUX.2, and Z-Image image-family slices
-- growing cross-family validation pressure
+- A shared runtime with source, artifact, provenance, and job models.
+- A local daemon API with UDS-first transport and handle-based import and export.
+- A first-party `mlxr` CLI with `generate`, `serve`, `doctor`, `models list`, `models install`, and `feedback`.
+- Promoted `LTX` fast video slices.
+- Real `Qwen-Image`, `FLUX.2`, and `Z-Image` image-family slices.
+- Public docs for current status, roadmap, open-source maintenance, and the first Mac app direction.
 
 What is not true yet:
 
-- a stable v1 public API
-- complete desktop or Comfy adapters
-- a released first-party Mac app
-- a fully closed cross-family benchmark matrix
+- A stable v1 public API.
+- A released first-party Mac app.
+- Complete desktop or Comfy adapters.
+- A fully closed cross-family benchmark matrix.
 
-## Runtime Shape
+## Quickstart
 
-```mermaid
-flowchart LR
-    CLI["CLI"] --> R["MLXR Runtime"]
-    Mac["Simple Mac App"] --> R
-    Desktop["Desktop Compatibility Adapter"] --> R
-    Comfy["Comfy Adapter"] --> R
-    R --> Providers["Providers"]
-    R --> Families["Family Adapters"]
-    Families --> LTX["LTX"]
-    Families --> Qwen["Qwen-Image"]
-    Families --> Flux["FLUX.2"]
-    Families --> ZImage["Z-Image"]
-```
-
-The runtime is the source of truth. Clients and adapters stay thin over it.
-
-## Public Status
-
-| Area | Current status |
-| --- | --- |
-| Shared runtime | real |
-| Local daemon API | real |
-| `mlxr` CLI | real |
-| `ltx-desktop` adapter | planned |
-| Comfy adapter | planned |
-| First-party Mac app | planned next |
-| Embedded Apple-first host access | planned later |
-
-## Current Best Answers
-
-If someone asks what to use today, the clean answers are:
-
-- LTX fast for text-to-video and image-to-video
-- LTX conditioned-audio for the current promoted audio-conditioned slice
-- Qwen-Image for the strongest local image generation and editing path
-- FLUX.2 `klein-9b` for straightforward local still-image generation and
-  single-reference edit
-- Z-Image for prompt-only still-image generation
-
-For the detailed truth by family, use:
-
-- [LTX capability matrix](docs/research/11-ltx-capability-matrix.md)
-- [Z-Image family candidate](docs/research/20-z-image-family-candidate.md)
-- [Qwen-Image capability matrix](docs/research/26-qwen-image-capability-matrix.md)
-- [FLUX.2 capability matrix](docs/research/23-flux2-capability-matrix.md)
-
-## First Open-Source Milestone
-
-The current milestone is:
-
-1. make the runtime and CLI public, legible, and trustworthy
-2. clean up docs, roadmap, and contribution posture
-3. prepare a simple native Mac app over the same runtime
-
-That first app is intentionally smaller than the later `MLXR Studio` vision.
-
-## Start Here
-
-- [Current status](docs/current-status.md)
-- [Roadmap](docs/roadmap.md)
-- [Product requirements](docs/01-product-requirements.md)
-- [Technical design](docs/02-universal-mlx-runtime-design.md)
-- [Phased delivery plan](docs/03-phased-delivery-plan.md)
-- [Benchmark matrix](docs/benchmark-matrix.md)
-- [CLI ergonomics](docs/cli-ergonomics.md)
-- [Mac app v1 product spec](docs/mac-app-v1-product-spec.md)
-- [Open-source release checklist](docs/open-source-release-checklist.md)
-- [Open-source maintenance model](docs/open-source-maintenance.md)
-
-## CLI
-
-The current public CLI is `mlxr`.
-
-First-run flow from a published install:
+Published CLI flow:
 
 ```bash
 uv tool install mlxr
@@ -116,36 +92,48 @@ mlxr models install ltx-2.3-fast-local
 mlxr generate --model-id ltx-2.3-fast-local --prompt "golden retriever in a park" --wait --export-path out.mp4
 ```
 
-Current repo-local flow:
+Repo-local flow:
 
 ```bash
 uv sync
 uv run mlxr
 ```
 
-The CLI now includes:
+## Current Best Lanes
 
-- `mlxr generate`
-- `mlxr serve`
-- `mlxr doctor`
-- `mlxr models list`
-- `mlxr models install`
-- `mlxr feedback`
+- `LTX fast` for text-to-video and image-to-video.
+- `LTX conditioned-audio` for the strongest current audio-conditioned video lane.
+- `Qwen-Image` for the strongest local image generation and editing story.
+- `FLUX.2 klein-9b` for straightforward still-image generation and single-reference edit.
+- `Z-Image Turbo` for prompt-first still-image generation.
 
-## Platform Docs
+For the exact truth by family, use:
 
+- [LTX capability matrix](docs/research/11-ltx-capability-matrix.md)
+- [Qwen-Image capability matrix](docs/research/26-qwen-image-capability-matrix.md)
+- [FLUX.2 capability matrix](docs/research/23-flux2-capability-matrix.md)
+- [Z-Image family candidate](docs/research/20-z-image-family-candidate.md)
+
+## Start Here
+
+If you want to understand the project quickly:
+
+- [Current status](docs/current-status.md)
+- [Roadmap](docs/roadmap.md)
+- [CLI ergonomics](docs/cli-ergonomics.md)
+- [Mac app v1 product spec](docs/mac-app-v1-product-spec.md)
+- [Open-source maintenance model](docs/open-source-maintenance.md)
+
+If you want the platform docs:
+
+- [Product requirements](docs/01-product-requirements.md)
+- [Technical design](docs/02-universal-mlx-runtime-design.md)
+- [Phased delivery plan](docs/03-phased-delivery-plan.md)
+- [Benchmark matrix](docs/benchmark-matrix.md)
 - [Workflow orchestration design](docs/workflow-orchestration-design.md)
-- [Capability schema](docs/capability-schema.md)
 - [Provider and provenance model](docs/provider-and-provenance-model.md)
 - [Model acquisition and cache](docs/model-acquisition-and-cache.md)
 - [Operations and packaging](docs/operations-and-packaging.md)
-
-## Research And Family Docs
-
-- [LTX next-phase task list](docs/research/15-next-phase-task-list.md)
-- [LTX capability closure plan](docs/research/25-ltx-capability-closure-plan.md)
-- [Qwen-Image family candidate](docs/research/21-qwen-image-family-candidate.md)
-- [FLUX.2 family candidate](docs/research/22-flux2-family-candidate.md)
 
 ## Development
 
@@ -161,39 +149,19 @@ uv run pre-commit run --all-files
 
 `verify` is the main acceptance gate.
 
-## Repo Layout
+If you are contributing, start with:
 
-```text
-mlxr/
-  README.md
-  AGENTS.md
-  MEMORY.md
-  docs/
-  packages/
-    core/
-    families/
-    clients/
-    adapters/
-  references/
-    official/
-    ecosystem/
-  scripts/
-```
-
-The `references/` tree is for upstream inspection and is intentionally not the
-repo's implementation source.
-
-## Operating Docs
-
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SUPPORT.md](SUPPORT.md)
 - [AGENTS.md](AGENTS.md)
 - [MEMORY.md](MEMORY.md)
-- [agent-native-development.md](docs/agent-native-development.md)
-- [dev-harness.md](docs/dev-harness.md)
-- [skill-policy.md](docs/skill-policy.md)
 
 ## License And Models
 
-The repo code is intended to be released under Apache-2.0.
+The repository code is released under [Apache-2.0](LICENSE).
 
-Model families preserve upstream model licenses independently. A permissive repo
-license does not make upstream model weights redistributable.
+Model families preserve upstream model licenses independently. A permissive repo license does not make upstream model weights redistributable.
+
+_Last verified: 2026-03-12_

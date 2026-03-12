@@ -1,0 +1,23 @@
+<svg width="1180" height="320" viewBox="0 0 1180 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(0 0)">
+    <defs>
+      <linearGradient id="tile" x1="35" y1="28" x2="218" y2="236" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#0C1E2C"/>
+        <stop offset="1" stop-color="#07111C"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(126 126) rotate(90) scale(110)">
+        <stop stop-color="#173956"/>
+        <stop offset="1" stop-color="#173956" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect x="28" y="28" width="196" height="196" rx="56" fill="url(#tile)"/>
+    <rect x="28" y="28" width="196" height="196" rx="56" fill="url(#glow)"/>
+    <path d="M70 174L108 82" stroke="#5CD6FF" stroke-width="28" stroke-linecap="round"/>
+    <path d="M126 174V82" stroke="#1FC6B2" stroke-width="28" stroke-linecap="round"/>
+    <path d="M182 174L144 82" stroke="#FF8A45" stroke-width="28" stroke-linecap="round"/>
+    <path d="M78 94L174 162" stroke="#FF4F78" stroke-width="22" stroke-linecap="round"/>
+    <circle cx="126" cy="126" r="10" fill="#FFD27A"/>
+  </g>
+  <text x="278" y="142" fill="#07111C" style="font-family: 'Futura', 'Trebuchet MS', 'Avenir Next', sans-serif; font-size: 108px; font-weight: 700; letter-spacing: 10px;">MLXR</text>
+  <text x="282" y="210" fill="#0C1E2C" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 34px; font-weight: 500; letter-spacing: 2px;">local-first MLX runtime for Apple Silicon</text>
+</svg>

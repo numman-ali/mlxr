@@ -19,6 +19,7 @@ dist/
 tmp/
 tmp/**
 *.log
+.DS_Store
 
 # Benchmarks and generated outputs
 benchmarks/output/
