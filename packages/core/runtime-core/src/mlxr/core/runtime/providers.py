@@ -76,9 +76,11 @@ class LocalFileProviderAdapter:
 
         files = self._collect_files(path)
         pinned_ref = self._structural_digest(path, files)
+        resolved_locator = dict(source_ref.locator)
+        resolved_locator["path"] = str(path)
         return ResolvedSource(
             provider=self.provider_id,
-            locator={"path": str(path)},
+            locator=resolved_locator,
             pinned_ref=f"structural-sha256:{pinned_ref}",
             access_state="local-only",
             license=source_ref.locator.get("license"),

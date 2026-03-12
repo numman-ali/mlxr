@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import shutil
 import threading
 import uuid
@@ -32,7 +33,7 @@ from .worker import WorkerMessage, run_job_worker
 class ManagedMessageQueue(Protocol):
     def put(self, item: WorkerMessage) -> None: ...
 
-    def get(self) -> WorkerMessage: ...
+    def get(self, timeout: float | None = None) -> WorkerMessage: ...
 
     def close(self) -> None: ...
 
@@ -46,6 +47,9 @@ class ManagedProcess(Protocol):
 
     def terminate(self) -> None: ...
 
+    @property
+    def exitcode(self) -> int | None: ...
+
 
 class ProcessContext(Protocol):
     def Queue(self) -> ManagedMessageQueue: ...
@@ -55,6 +59,111 @@ class ProcessContext(Protocol):
 
 TERMINAL_STATES = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 HEAVY_JOB_SCHEDULER_CLASSES = {"media_video_dit"}
+
+
+class ThreadMessageQueue(queue.Queue[dict[str, object]]):
+    def close(self) -> None:
+        return None
+
+
+class ThreadManagedProcess:
+    def __init__(
+        self,
+        *,
+        target: object,
+        kwargs: dict[str, object],
+    ) -> None:
+        if not callable(target):
+            raise TypeError("ThreadManagedProcess target must be callable")
+        self._target = target
+        self._kwargs = kwargs
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self) -> None:
+        self._target(**self._kwargs)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def join(self, timeout: float | None = None) -> None:
+        self._thread.join(timeout)
+
+    def is_alive(self) -> bool:
+        return self._thread.is_alive()
+
+    def terminate(self) -> None:
+        return None
+
+    @property
+    def exitcode(self) -> int | None:
+        if self._thread.is_alive():
+            return None
+        return 0
+
+
+class ThreadProcessContext:
+    def Queue(self) -> ThreadMessageQueue:
+        return ThreadMessageQueue()
+
+    def Process(
+        self,
+        target: object,
+        kwargs: dict[str, object],
+    ) -> ThreadManagedProcess:
+        return ThreadManagedProcess(target=target, kwargs=kwargs)
+
+
+def _process_exited(process: ManagedProcess) -> bool:
+    exitcode = process.exitcode
+    if exitcode is not None:
+        return True
+    return not process.is_alive()
+
+
+def _integer_constraint(
+    constraints: dict[str, object], key: str
+) -> dict[str, object] | None:
+    raw = constraints.get(key)
+    return raw if isinstance(raw, dict) else None
+
+
+def _validate_dimension_constraint(
+    *,
+    name: str,
+    value: object,
+    constraints: dict[str, object],
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, int):
+        raise JobValidationError(f"{name} must be an integer")
+    constraint = _integer_constraint(constraints, name)
+    if constraint is None:
+        return
+    multiple_of = constraint.get("multiple_of")
+    if isinstance(multiple_of, int) and multiple_of > 0 and value % multiple_of != 0:
+        raise JobValidationError(f"{name} must be an integer multiple of {multiple_of}")
+    minimum = constraint.get("minimum")
+    if isinstance(minimum, int) and value < minimum:
+        raise JobValidationError(f"{name} must be >= {minimum}")
+
+
+def _validate_num_frames_constraint(
+    value: object, constraints: dict[str, object]
+) -> None:
+    if value is None:
+        return
+    if not isinstance(value, int):
+        raise JobValidationError("num_frames must be an integer")
+    constraint = _integer_constraint(constraints, "num_frames")
+    if constraint is None:
+        return
+    minimum = constraint.get("minimum")
+    if isinstance(minimum, int) and value < minimum:
+        raise JobValidationError(f"num_frames must be >= {minimum}")
+    formula = constraint.get("formula")
+    if formula == "8n+1" and (value < 1 or (value - 1) % 8 != 0):
+        raise JobValidationError("num_frames must satisfy the current 8n+1 rule")
 
 
 class JobManagerError(Exception):
@@ -99,6 +208,7 @@ class JobManager:
         self._running_jobs: dict[str, RunningJob] = {}
         self._subscribers: dict[str, list[Queue[RuntimeEvent]]] = {}
         self._lock = threading.RLock()
+        self._reconcile_orphaned_jobs()
 
     def submit(self, request: JobRequest) -> JobRecord:
         prepared_request = self._prepared_request(request)
@@ -143,7 +253,7 @@ class JobManager:
                 )
             )
 
-            context = _job_process_context()
+            context = _job_process_context(self.settings.job_execution_mode)
             event_queue = context.Queue()
             command_queue = context.Queue()
             process = context.Process(
@@ -258,7 +368,12 @@ class JobManager:
     ) -> None:
         try:
             while True:
-                message = event_queue.get()
+                try:
+                    message = event_queue.get(timeout=0.2)
+                except queue.Empty:
+                    if _process_exited(process):
+                        break
+                    continue
                 if not isinstance(message, dict):
                     continue
                 message_type = message.get("type")
@@ -285,11 +400,16 @@ class JobManager:
                 process.join(timeout=1)
             record = self.job_store.get(job_id)
             if record is not None and record.state not in TERMINAL_STATES:
+                error_message = "Worker exited before reaching a terminal state"
+                if process.exitcode is not None:
+                    error_message = (
+                        f"{error_message} (exitcode={process.exitcode})"
+                    )
                 failed_record = record.model_copy(
                     update={
                         "state": JobState.FAILED,
                         "updated_at": datetime.now(timezone.utc),
-                        "error": "Worker exited before reaching a terminal state",
+                        "error": error_message,
                     }
                 )
                 self.job_store.save(failed_record)
@@ -298,6 +418,22 @@ class JobManager:
             with self._lock:
                 self._running_jobs.pop(job_id, None)
                 self._subscribers.pop(job_id, None)
+
+    def _reconcile_orphaned_jobs(self) -> None:
+        now = datetime.now(timezone.utc)
+        for record in self.job_store.list_records():
+            if record.state in TERMINAL_STATES:
+                continue
+            failed_record = record.model_copy(
+                update={
+                    "state": JobState.FAILED,
+                    "updated_at": now,
+                    "error": (
+                        "Control-plane restarted before job reached a terminal state"
+                    ),
+                }
+            )
+            self.job_store.save(failed_record)
 
     def _append_event(self, event: RuntimeEvent) -> None:
         self.job_store.append_event(event.job_id, event)
@@ -314,6 +450,8 @@ class JobManager:
         next_record.updated_at = datetime.now(timezone.utc)
         if event.kind == RuntimeEventKind.JOB_PHASE_CHANGED and event.phase is not None:
             next_record.state = JobState(event.phase)
+            if next_record.state not in TERMINAL_STATES:
+                next_record.error = None
         elif event.kind == RuntimeEventKind.JOB_COMPLETED:
             next_record.state = JobState.COMPLETED
             next_record.error = None
@@ -408,26 +546,52 @@ class JobManager:
             raise JobValidationError(
                 f"Artifact format '{artifact_format}' is not supported for '{model_id}'"
             )
+        if request.task == "video.condition.video" and artifact_format == "wav":
+            raise JobValidationError(
+                "video.condition.video currently only supports mp4 output"
+            )
         width = request.params.get("width")
-        if width is not None and (not isinstance(width, int) or width % 32 != 0):
-            raise JobValidationError("width must be an integer multiple of 32")
         height = request.params.get("height")
-        if height is not None and (not isinstance(height, int) or height % 32 != 0):
-            raise JobValidationError("height must be an integer multiple of 32")
+        constraints = dict(capability.constraints)
+        _validate_dimension_constraint(
+            name="width", value=width, constraints=constraints
+        )
+        _validate_dimension_constraint(
+            name="height", value=height, constraints=constraints
+        )
         num_frames = request.params.get("num_frames")
-        if num_frames is not None and (
-            not isinstance(num_frames, int)
-            or num_frames < 1
-            or (num_frames - 1) % 8 != 0
-        ):
-            raise JobValidationError("num_frames must satisfy the current 8n+1 rule")
+        _validate_num_frames_constraint(num_frames, constraints)
         images = request.inputs.get("images")
+        videos = request.inputs.get("videos")
         audio = request.inputs.get("audio")
+        loras = request.inputs.get("loras")
+        if request.task == "image.edit" and (
+            not isinstance(images, list) or not images
+        ):
+            raise JobValidationError("image.edit requires at least one image input")
         if request.task == "video.condition.image" and (
             not isinstance(images, list) or not images
         ):
             raise JobValidationError(
                 "video.condition.image requires at least one image input"
+            )
+        if request.task == "video.interpolate" and (
+            not isinstance(images, list) or len(images) < 2
+        ):
+            raise JobValidationError(
+                "video.interpolate requires at least two image inputs"
+            )
+        if request.task == "video.condition.video" and (
+            not isinstance(videos, list) or len(videos) != 1
+        ):
+            raise JobValidationError(
+                "video.condition.video requires exactly one reference video input"
+            )
+        if request.task == "video.retake" and (
+            not isinstance(videos, list) or len(videos) != 1
+        ):
+            raise JobValidationError(
+                "video.retake requires exactly one source video input"
             )
         if request.task == "video.condition.audio" and not isinstance(audio, dict):
             raise JobValidationError(
@@ -436,6 +600,7 @@ class JobManager:
         if images is not None:
             if not isinstance(images, list):
                 raise JobValidationError("images must be a list when provided")
+            image_frame_indices: list[int] = []
             for image in images:
                 if not isinstance(image, dict):
                     raise JobValidationError("images entries must be objects")
@@ -453,6 +618,7 @@ class JobManager:
                     raise JobValidationError(
                         "images frame_index must be within num_frames"
                     )
+                image_frame_indices.append(frame_index)
                 strength = image.get("strength", 1.0)
                 if not isinstance(strength, (int, float)):
                     raise JobValidationError("images strength must be numeric")
@@ -461,6 +627,61 @@ class JobManager:
                     raise JobValidationError(
                         "images strength must be between 0.0 and 1.0"
                     )
+            if (
+                request.task == "video.interpolate"
+                and len(set(image_frame_indices)) < 2
+            ):
+                raise JobValidationError(
+                    "video.interpolate requires image inputs at at least two distinct frame indices"
+                )
+        if videos is not None:
+            if not isinstance(videos, list):
+                raise JobValidationError("videos must be a list when provided")
+            for video in videos:
+                if not isinstance(video, dict):
+                    raise JobValidationError("videos entries must be objects")
+                handle_id = video.get("input_handle")
+                if not isinstance(handle_id, str) or not handle_id:
+                    raise JobValidationError(
+                        "videos entries require a non-empty input_handle"
+                    )
+                strength = video.get("strength", 1.0)
+                if not isinstance(strength, (int, float)):
+                    raise JobValidationError("videos strength must be numeric")
+                strength_value = float(strength)
+                if not 0.0 <= strength_value <= 1.0:
+                    raise JobValidationError(
+                        "videos strength must be between 0.0 and 1.0"
+                    )
+        if request.task == "video.retake":
+            start_seconds = request.params.get("window_start_seconds")
+            end_seconds = request.params.get("window_end_seconds")
+            if not isinstance(start_seconds, (int, float)):
+                raise JobValidationError(
+                    "video.retake requires numeric params.window_start_seconds"
+                )
+            if not isinstance(end_seconds, (int, float)):
+                raise JobValidationError(
+                    "video.retake requires numeric params.window_end_seconds"
+                )
+            if float(start_seconds) < 0.0:
+                raise JobValidationError(
+                    "video.retake params.window_start_seconds must be >= 0.0"
+                )
+            if float(end_seconds) <= float(start_seconds):
+                raise JobValidationError(
+                    "video.retake params.window_end_seconds must be greater than params.window_start_seconds"
+                )
+            regenerate_video = request.params.get("regenerate_video", True)
+            regenerate_audio = request.params.get("regenerate_audio", True)
+            if not isinstance(regenerate_video, bool):
+                raise JobValidationError(
+                    "video.retake params.regenerate_video must be boolean when provided"
+                )
+            if not isinstance(regenerate_audio, bool):
+                raise JobValidationError(
+                    "video.retake params.regenerate_audio must be boolean when provided"
+                )
         if audio is not None:
             if not isinstance(audio, dict):
                 raise JobValidationError("audio must be an object when provided")
@@ -484,6 +705,28 @@ class JobManager:
                     raise JobValidationError(
                         "audio max_duration_seconds must be > 0.0 when provided"
                     )
+        if loras is not None:
+            if not isinstance(loras, list):
+                raise JobValidationError("loras must be a list when provided")
+            for lora in loras:
+                if not isinstance(lora, dict):
+                    raise JobValidationError("loras entries must be objects")
+                handle_id = lora.get("input_handle")
+                if not isinstance(handle_id, str) or not handle_id:
+                    raise JobValidationError(
+                        "loras entries require a non-empty input_handle"
+                    )
+                strength = lora.get("strength", 1.0)
+                if not isinstance(strength, (int, float)):
+                    raise JobValidationError("loras strength must be numeric")
+                if float(strength) <= 0.0:
+                    raise JobValidationError("loras strength must be greater than 0.0")
+        if request.task == "video.condition.video" and (
+            not isinstance(loras, list) or len(loras) != 1
+        ):
+            raise JobValidationError(
+                "video.condition.video requires exactly one LoRA input"
+            )
         for handle_id in _collect_input_handles(request.inputs):
             if self.input_store.get(handle_id) is None:
                 raise JobValidationError(f"Unknown input handle '{handle_id}'")
@@ -510,5 +753,12 @@ def _collect_input_handles(value: object) -> list[str]:
     return handles
 
 
-def _job_process_context() -> ProcessContext:
-    return get_context("spawn")
+def _job_process_context(mode: str = "spawn") -> ProcessContext:
+    normalized = mode.strip().lower()
+    if normalized == "spawn":
+        return get_context("spawn")
+    if normalized == "thread":
+        return ThreadProcessContext()
+    raise RuntimeError(
+        "Unsupported job execution mode; expected 'spawn' or 'thread'"
+    )

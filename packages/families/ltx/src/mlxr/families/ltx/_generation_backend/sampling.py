@@ -57,6 +57,54 @@ def _guided_prediction(
     return predicted * rescaled_factor
 
 
+def _combined_video_modality(
+    *,
+    latents: MLXArray,
+    channels: int,
+    positions: MLXArray,
+    sigma_value: float,
+    timesteps_mask: MLXArray,
+    text_embeddings: MLXArray,
+    positional_embeddings: tuple[MLXArray, MLXArray],
+    reference_tokens: MLXArray | None,
+    reference_positions: MLXArray | None,
+    reference_timesteps_mask: MLXArray | None,
+    reference_attention_mask: MLXArray | None,
+    latents_dtype: mx.Dtype,
+) -> tuple[_PatchedModality, int]:
+    batch_size = int(latents.shape[0])
+    flat_latents = mx.transpose(
+        mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
+    )
+    target_token_count = int(flat_latents.shape[1])
+    combined_latents = flat_latents
+    combined_positions = positions
+    combined_timesteps_mask = timesteps_mask
+    if (
+        reference_tokens is not None
+        and reference_positions is not None
+        and reference_timesteps_mask is not None
+    ):
+        combined_latents = mx.concatenate([flat_latents, reference_tokens], axis=1)
+        combined_positions = mx.concatenate([positions, reference_positions], axis=2)
+        combined_timesteps_mask = mx.concatenate(
+            [timesteps_mask, reference_timesteps_mask.astype(latents_dtype)], axis=1
+        )
+    modality = _PatchedModality(
+        latent=combined_latents,
+        sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
+        timesteps=mx.array(float(sigma_value), dtype=latents_dtype)
+        * combined_timesteps_mask,
+        positions=combined_positions,
+        context=text_embeddings,
+        context_mask=None,
+        attention_mask=reference_attention_mask,
+        enabled=True,
+        positional_embeddings=positional_embeddings,
+    )
+    return modality, target_token_count
+
+
 def _assert_prompt_runtime_contract(
     prompt_context: PromptEncodingResult,
     runtime_config: _RuntimeModelConfig,
@@ -181,6 +229,12 @@ def _denoise_distilled_video_only(
     sigmas: tuple[float, ...],
     state: _LatentStateLike | None,
     runtime_config: _RuntimeModelConfig,
+    video_cfg_scale: float = _VIDEO_CFG_SCALE,
+    guidance_rescale_scale: float = _GUIDANCE_RESCALE_SCALE,
+    reference_tokens: MLXArray | None = None,
+    reference_positions: MLXArray | None = None,
+    reference_timesteps_mask: MLXArray | None = None,
+    reference_attention_mask: MLXArray | None = None,
     trace_recorder: TraceRecorder | None = None,
     trace_sync: bool = False,
 ) -> MLXArray:
@@ -189,7 +243,11 @@ def _denoise_distilled_video_only(
     batch_size, channels, frames, latent_h, latent_w = latents.shape
     num_tokens = int(frames * latent_h * latent_w)
     precomputed_rope = imports.precompute_freqs_cis(
-        positions,
+        (
+            mx.concatenate([positions, reference_positions], axis=2)
+            if reference_positions is not None
+            else positions
+        ),
         dim=transformer.inner_dim,
         theta=transformer.positional_embedding_theta,
         max_pos=transformer.positional_embedding_max_pos,
@@ -241,18 +299,19 @@ def _denoise_distilled_video_only(
                 )
             sigma = mx.array(float(sigma_value), dtype=latents_dtype)
             sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
-            flat_latents = mx.transpose(
-                mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
-            )
-            modality = _PatchedModality(
-                latent=flat_latents,
-                sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
-                timesteps=sigma * video_timesteps_mask,
+            modality, target_token_count = _combined_video_modality(
+                latents=latents,
+                channels=channels,
                 positions=positions,
-                context=text_embeddings,
-                context_mask=None,
-                enabled=True,
+                sigma_value=float(sigma_value),
+                timesteps_mask=video_timesteps_mask,
+                text_embeddings=text_embeddings,
                 positional_embeddings=precomputed_rope,
+                reference_tokens=reference_tokens,
+                reference_positions=reference_positions,
+                reference_timesteps_mask=reference_timesteps_mask,
+                reference_attention_mask=reference_attention_mask,
+                latents_dtype=latents_dtype,
             )
             conditioned_context = (
                 trace_recorder.span(
@@ -276,6 +335,7 @@ def _denoise_distilled_video_only(
                 raise RuntimeError(
                     "LTX transformer returned empty video velocity for an enabled video-only step"
                 )
+            velocity = velocity[:, :target_token_count, :]
             velocity = mx.reshape(
                 mx.transpose(velocity, (0, 2, 1)),
                 (batch_size, channels, frames, latent_h, latent_w),
@@ -283,17 +343,19 @@ def _denoise_distilled_video_only(
             denoised = imports.to_denoised(latents, velocity, sigma)
             negative_denoised: MLXArray | None = None
             if negative_text_embeddings is not None:
-                negative_modality = _PatchedModality(
-                    latent=flat_latents,
-                    sigma=mx.full(
-                        (batch_size,), float(sigma_value), dtype=latents_dtype
-                    ),
-                    timesteps=sigma * video_timesteps_mask,
+                negative_modality, _ = _combined_video_modality(
+                    latents=latents,
+                    channels=channels,
                     positions=positions,
-                    context=negative_text_embeddings,
-                    context_mask=None,
-                    enabled=True,
+                    sigma_value=float(sigma_value),
+                    timesteps_mask=video_timesteps_mask,
+                    text_embeddings=negative_text_embeddings,
                     positional_embeddings=precomputed_rope,
+                    reference_tokens=reference_tokens,
+                    reference_positions=reference_positions,
+                    reference_timesteps_mask=reference_timesteps_mask,
+                    reference_attention_mask=reference_attention_mask,
+                    latents_dtype=latents_dtype,
                 )
                 negative_context = (
                     trace_recorder.span(
@@ -320,6 +382,7 @@ def _denoise_distilled_video_only(
                     raise RuntimeError(
                         "LTX transformer returned empty negative video velocity for an enabled video-only step"
                     )
+                negative_velocity = negative_velocity[:, :target_token_count, :]
                 negative_velocity = mx.reshape(
                     mx.transpose(negative_velocity, (0, 2, 1)),
                     (batch_size, channels, frames, latent_h, latent_w),
@@ -330,8 +393,8 @@ def _denoise_distilled_video_only(
             denoised = _guided_prediction(
                 denoised,
                 negative_denoised,
-                scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
-                rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+                scale=video_cfg_scale if cfg_enabled else 1.0,
+                rescale_scale=guidance_rescale_scale if cfg_enabled else 0.0,
             )
             if state is not None:
                 denoised = imports.apply_denoise_mask(
@@ -368,8 +431,16 @@ def _denoise_distilled_audio_video(
     negative_audio_embeddings: MLXArray | None,
     sigmas: tuple[float, ...],
     state: _LatentStateLike | None,
+    audio_state: _LatentStateLike | None = None,
     runtime_config: _RuntimeModelConfig,
     freeze_audio: bool = False,
+    video_cfg_scale: float = _VIDEO_CFG_SCALE,
+    audio_cfg_scale: float = _AUDIO_CFG_SCALE,
+    guidance_rescale_scale: float = _GUIDANCE_RESCALE_SCALE,
+    reference_tokens: MLXArray | None = None,
+    reference_positions: MLXArray | None = None,
+    reference_timesteps_mask: MLXArray | None = None,
+    reference_attention_mask: MLXArray | None = None,
     trace_recorder: TraceRecorder | None = None,
     trace_sync: bool = False,
 ) -> tuple[MLXArray, MLXArray]:
@@ -381,7 +452,11 @@ def _denoise_distilled_audio_video(
     num_tokens = int(frames * latent_h * latent_w)
     audio_batch, audio_channels, audio_frames, audio_bins = audio_latents.shape
     precomputed_rope = imports.precompute_freqs_cis(
-        positions,
+        (
+            mx.concatenate([positions, reference_positions], axis=2)
+            if reference_positions is not None
+            else positions
+        ),
         dim=transformer.inner_dim,
         theta=transformer.positional_embedding_theta,
         max_pos=transformer.positional_embedding_max_pos,
@@ -410,11 +485,16 @@ def _denoise_distilled_audio_video(
         ).astype(latents_dtype)
     else:
         video_timesteps_mask = mx.ones((batch_size, num_tokens), dtype=latents_dtype)
-    audio_timesteps_mask = (
-        mx.zeros((audio_batch, audio_frames), dtype=latents_dtype)
-        if freeze_audio
-        else mx.ones((audio_batch, audio_frames), dtype=latents_dtype)
-    )
+    if freeze_audio:
+        audio_timesteps_mask = mx.zeros(
+            (audio_batch, audio_frames), dtype=latents_dtype
+        )
+    elif audio_state is not None:
+        audio_timesteps_mask = mx.reshape(
+            audio_state.denoise_mask, (audio_batch, audio_frames)
+        ).astype(latents_dtype)
+    else:
+        audio_timesteps_mask = mx.ones((audio_batch, audio_frames), dtype=latents_dtype)
     total_steps = max(len(sigmas) - 1, 0)
     for step_index, (sigma_value, sigma_next_value) in enumerate(
         zip(sigmas[:-1], sigmas[1:]),
@@ -451,18 +531,19 @@ def _denoise_distilled_audio_video(
                 )
             sigma = mx.array(float(sigma_value), dtype=latents_dtype)
             sigma_next = mx.array(float(sigma_next_value), dtype=latents_dtype)
-            flat_latents = mx.transpose(
-                mx.reshape(latents, (batch_size, channels, -1)), (0, 2, 1)
-            )
-            modality = _PatchedModality(
-                latent=flat_latents,
-                sigma=mx.full((batch_size,), float(sigma_value), dtype=latents_dtype),
-                timesteps=sigma * video_timesteps_mask,
+            modality, target_token_count = _combined_video_modality(
+                latents=latents,
+                channels=channels,
                 positions=positions,
-                context=text_embeddings,
-                context_mask=None,
-                enabled=True,
+                sigma_value=float(sigma_value),
+                timesteps_mask=video_timesteps_mask,
+                text_embeddings=text_embeddings,
                 positional_embeddings=precomputed_rope,
+                reference_tokens=reference_tokens,
+                reference_positions=reference_positions,
+                reference_timesteps_mask=reference_timesteps_mask,
+                reference_attention_mask=reference_attention_mask,
+                latents_dtype=latents_dtype,
             )
             audio_flat = mx.transpose(audio_latents, (0, 2, 1, 3))
             audio_flat = mx.reshape(
@@ -502,6 +583,7 @@ def _denoise_distilled_audio_video(
                 raise RuntimeError(
                     "LTX transformer returned empty video/audio velocities for an enabled AV step"
                 )
+            velocity = velocity[:, :target_token_count, :]
             velocity = mx.reshape(
                 mx.transpose(velocity, (0, 2, 1)),
                 (batch_size, channels, frames, latent_h, latent_w),
@@ -522,17 +604,19 @@ def _denoise_distilled_audio_video(
                 negative_text_embeddings is not None
                 and negative_audio_embeddings is not None
             ):
-                negative_modality = _PatchedModality(
-                    latent=flat_latents,
-                    sigma=mx.full(
-                        (batch_size,), float(sigma_value), dtype=latents_dtype
-                    ),
-                    timesteps=sigma * video_timesteps_mask,
+                negative_modality, _ = _combined_video_modality(
+                    latents=latents,
+                    channels=channels,
                     positions=positions,
-                    context=negative_text_embeddings,
-                    context_mask=None,
-                    enabled=True,
+                    sigma_value=float(sigma_value),
+                    timesteps_mask=video_timesteps_mask,
+                    text_embeddings=negative_text_embeddings,
                     positional_embeddings=precomputed_rope,
+                    reference_tokens=reference_tokens,
+                    reference_positions=reference_positions,
+                    reference_timesteps_mask=reference_timesteps_mask,
+                    reference_attention_mask=reference_attention_mask,
+                    latents_dtype=latents_dtype,
                 )
                 negative_audio_modality = _PatchedModality(
                     latent=audio_flat,
@@ -576,6 +660,7 @@ def _denoise_distilled_audio_video(
                     raise RuntimeError(
                         "LTX transformer returned empty negative video/audio velocities for an enabled AV step"
                     )
+                negative_velocity = negative_velocity[:, :target_token_count, :]
                 negative_velocity = mx.reshape(
                     mx.transpose(negative_velocity, (0, 2, 1)),
                     (batch_size, channels, frames, latent_h, latent_w),
@@ -599,19 +684,25 @@ def _denoise_distilled_audio_video(
             denoised = _guided_prediction(
                 denoised,
                 negative_denoised,
-                scale=_VIDEO_CFG_SCALE if cfg_enabled else 1.0,
-                rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+                scale=video_cfg_scale if cfg_enabled else 1.0,
+                rescale_scale=guidance_rescale_scale if cfg_enabled else 0.0,
             )
             if not freeze_audio:
                 audio_denoised = _guided_prediction(
                     audio_denoised,
                     negative_audio_denoised,
-                    scale=_AUDIO_CFG_SCALE if cfg_enabled else 1.0,
-                    rescale_scale=_GUIDANCE_RESCALE_SCALE if cfg_enabled else 0.0,
+                    scale=audio_cfg_scale if cfg_enabled else 1.0,
+                    rescale_scale=guidance_rescale_scale if cfg_enabled else 0.0,
                 )
             if state is not None:
                 denoised = imports.apply_denoise_mask(
                     denoised, state.clean_latent, state.denoise_mask
+                )
+            if audio_state is not None and not freeze_audio:
+                audio_denoised = imports.apply_denoise_mask(
+                    audio_denoised,
+                    audio_state.clean_latent,
+                    audio_state.denoise_mask,
                 )
             if float(sigma_next_value) == 0.0:
                 latents = denoised.astype(latents_dtype)

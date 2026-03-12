@@ -24,6 +24,8 @@ Then use:
 
 - [checklist.md](/Users/numman/Repos/mlxr/docs/family-bringup/checklist.md)
 - [template.md](/Users/numman/Repos/mlxr/docs/family-bringup/template.md)
+- [evaluation-framework.md](/Users/numman/Repos/mlxr/docs/family-bringup/evaluation-framework.md) when deciding whether a base model, adapter, or quality claim is actually proven
+- [debugging-decision-tree.md](/Users/numman/Repos/mlxr/docs/family-bringup/debugging-decision-tree.md) when the family runs but the result is wrong, unstable, or mismatched between probe and CLI/runtime paths
 
 ## Default Sequence
 

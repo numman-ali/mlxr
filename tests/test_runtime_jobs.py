@@ -18,6 +18,7 @@ from tests.runtime_test_support import (
     patched_inline_job_process_context,
     patched_ltx_prompt_encoder,
     patched_ltx_video_generator,
+    patched_silent_exit_job_process_context,
     register_local_ltx_model,
     response_model,
     wait_for_job_terminal_state,
@@ -42,6 +43,41 @@ def first_artifact_id(job_record: dict[str, object]) -> str:
 
 
 class RuntimeJobTests(unittest.TestCase):
+    def test_job_fails_when_worker_exits_without_terminal_message(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(root)
+            state = make_state(root)
+            with (
+                patched_silent_exit_job_process_context(),
+                TestClient(create_app(state)) as client,
+            ):
+                register_local_ltx_model(client, source_dir)
+
+                submit = client.post(
+                    "/v1/jobs",
+                    json={
+                        "model_id": "ltx-2.3-fast-local",
+                        "task": "video.generate",
+                        "inputs": {"prompt": "camera fly-through"},
+                        "params": {
+                            "width": VALID_WIDTH,
+                            "height": VALID_HEIGHT,
+                            "num_frames": VALID_NUM_FRAMES,
+                        },
+                        "output": {"artifact_format": "mp4"},
+                    },
+                )
+                self.assertEqual(submit.status_code, 200, submit.text)
+                job_id = response_model(submit, JobSubmitResult).job_id
+
+                terminal = wait_for_job_terminal_state(client, job_id)
+                self.assertEqual(terminal["state"], "failed")
+                self.assertEqual(
+                    terminal["error"],
+                    "Worker exited before reaching a terminal state (exitcode=0)",
+                )
+
     def test_job_submit_persists_events_and_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

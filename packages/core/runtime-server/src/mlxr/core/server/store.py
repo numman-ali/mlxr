@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from mlxr.core.runtime import RuntimeHome
@@ -24,6 +25,23 @@ class InputStore:
         payload_path = self.payload_path(record)
         payload_path.parent.mkdir(parents=True, exist_ok=True)
         payload_path.write_bytes(payload)
+        return self.persist(record)
+
+    def save_stream(
+        self, record: InputHandleRecord, chunks: Iterable[bytes]
+    ) -> InputHandleRecord:
+        payload_path = self.payload_path(record)
+        payload_path.parent.mkdir(parents=True, exist_ok=True)
+        size_bytes = 0
+        with payload_path.open("wb") as handle:
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                handle.write(chunk)
+                size_bytes += len(chunk)
+        return self.persist(record.model_copy(update={"size_bytes": size_bytes}))
+
+    def persist(self, record: InputHandleRecord) -> InputHandleRecord:
         write_json_atomic(
             self.runtime_home.input_handle_manifest_path(record.handle_id), record
         )

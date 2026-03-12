@@ -41,28 +41,42 @@ Use this with:
 ## B. Official pipeline rows
 
 - [x] `DistilledPipeline` is represented in repo truth.
-- [ ] `TI2VidTwoStagesPipeline` is implemented on the owned engine.
-- [ ] `TI2VidTwoStagesHQPipeline` is implemented on the owned engine.
-- [ ] `TI2VidOneStagePipeline` is implemented on the owned engine.
-- [ ] `ICLoraPipeline` semantics are implemented.
-- [ ] `KeyframeInterpolationPipeline` semantics are implemented.
+- [~] `TI2VidTwoStagesPipeline` is implemented on the owned engine, but not yet
+  validated or promoted.
+- [~] `TI2VidTwoStagesHQPipeline` is implemented on the owned engine, but not
+  yet validated or promoted.
+- [~] `TI2VidOneStagePipeline` is implemented on the owned engine, but not yet
+  validated or promoted.
+- [~] `ICLoraPipeline` semantics are implemented, but not yet validated or
+  promoted.
+- [~] `KeyframeInterpolationPipeline` semantics are implemented, but not yet
+  validated or promoted.
 - [~] `A2VidPipelineTwoStage` is represented by a narrower
   `video.condition.audio` preserved-reference slice, now quality-promoted for
   current dog and anime conditioned rows.
-- [ ] `RetakePipeline` semantics are implemented.
+- [~] `RetakePipeline` semantics are implemented, but not yet validated or
+  promoted.
 
 ## C. Asset and checkpoint contract
 
 - [x] Distilled checkpoint support is real.
-- [ ] Dev checkpoint support is real.
+- [~] Dev checkpoint support is real for the current one-stage lane; the dev
+  artifact contract no longer requires the x2 upsampler.
 - [x] Gemma text encoder support is real.
 - [x] x2 spatial upsampler support is real.
 - [ ] x1.5 spatial upsampler support is implemented.
 - [ ] Temporal upscaler support is implemented.
-- [ ] Distilled LoRA is modeled as a required internal asset for standard/HQ.
-- [ ] Standard/HQ rows fail closed when distilled LoRA is absent.
+- [x] Distilled LoRA is modeled explicitly as the internal asset contract for
+  standard/HQ rows.
+- [~] Standard/HQ rows fail closed when distilled LoRA is absent; standard
+  two-stage now does, while HQ is still not implemented.
 - [ ] User-facing LoRA refs remain rejected until real LoRA-control rows exist.
-- [ ] IC-LoRA asset family is modeled explicitly.
+- [~] IC-LoRA asset family is modeled explicitly through the current fast-path
+  LoRA input contract, but not yet validated or promoted.
+- [x] Motion-track IC-LoRA is either supported explicitly or documented as a
+  control-variant extension on the existing `video.condition.video` row.
+- [x] `LTX-2.3-fp8` is either supported explicitly or documented as a dev
+  artifact/runtime variant rather than a new task.
 - [ ] Camera-control LoRAs are either mapped explicitly or documented as out of
   scope.
 
@@ -89,10 +103,11 @@ Use this with:
 ## E. Scheduler and sampler substrate
 
 - [x] Distilled fixed-sigma path is real.
-- [ ] Owned non-distilled scheduler exists.
-- [ ] Token-count-aware schedule logic is implemented.
-- [ ] Standard guided Euler loop is implemented for the full checkpoint family.
-- [ ] HQ `res_2s` loop is implemented.
+- [x] Owned non-distilled scheduler exists.
+- [x] Token-count-aware schedule logic is implemented.
+- [~] Standard guided Euler loop is implemented for the current one-stage full
+  checkpoint family.
+- [~] HQ `res_2s` loop is implemented.
 - [ ] HQ per-step noise keys evolve correctly.
 - [ ] Gradient-estimation Euler is either implemented or explicitly deferred.
 - [ ] Skip-step logic is either implemented or explicitly deferred.
@@ -101,7 +116,8 @@ Use this with:
 
 - [x] Distilled path truthfully remains guidance-light compared with upstream
   non-distilled rows.
-- [ ] Full non-distilled CFG guidance is implemented.
+- [~] Full non-distilled CFG guidance is implemented for the current one-stage
+  row.
 - [ ] STG substrate is implemented.
 - [ ] STG is wired through a real request contract before promotion.
 - [ ] Modality isolation guidance is implemented.
@@ -113,12 +129,20 @@ Use this with:
 
 - [x] Distilled text-to-video is promoted.
 - [x] Distilled image-to-video is promoted.
-- [ ] Standard two-stage text-to-video is implemented.
-- [ ] Standard two-stage image-to-video is implemented.
-- [ ] HQ text-to-video is implemented and explicitly selectable.
-- [ ] HQ image-to-video is implemented and explicitly selectable.
-- [ ] One-stage text-to-video is implemented.
-- [ ] One-stage image-to-video is implemented.
+- [~] Standard two-stage text-to-video is implemented.
+- [~] Standard two-stage image-to-video is implemented.
+- [~] HQ text-to-video is implemented and explicitly selectable.
+- [~] HQ image-to-video is implemented and explicitly selectable.
+- [~] One-stage text-to-video is implemented.
+- [~] One-stage image-to-video is implemented.
+- [~] Standard two-stage now has a first meaningful `6s / 768x448 / 145f`
+  runtime receipt, but it is still not quality-promoted.
+- [~] HQ two-stage now has a first meaningful `6s / 768x448 / 145f` runtime
+  receipt, but it is still not quality-promoted.
+- [~] One-stage now has a first meaningful `6s / 768x448 / 145f` runtime
+  receipt, but it is still far from promotion quality.
+- [~] Retake now has a first meaningful `6s / 768x448 / 145f` runtime receipt,
+  but the edit semantics are still not strong enough for promotion.
 
 ## H. Audio modes
 
@@ -135,21 +159,31 @@ Use this with:
 ## I. Conditioning and control modes
 
 - [x] Single-image latent-replacement conditioning exists.
-- [ ] Keyframe-style additive image conditioning is implemented.
-- [ ] Multiple image conditioning is implemented and validated.
-- [ ] Reference-video conditioning is implemented.
+- [~] Keyframe-style additive image conditioning is implemented.
+- [x] Multiple image conditioning is implemented and validated.
+- [~] Reference-video conditioning is implemented.
 - [ ] Combined text + image + audio conditioning is promoted truthfully.
 - [ ] Combined-input support is mapped explicitly rather than described as vague
   “ingredients.”
-- [ ] Start/end-frame semantics are either mapped to official interpolation /
-  retake rows or documented as unsupported.
+- [x] Start/end-frame semantics are documented honestly: the current first/last
+  frame story is a keyed-image bridge on `video.condition.image`, while
+  official interpolation and retake remain separate future rows.
 
 ## J. Editing and advanced official rows
 
-- [ ] Keyframe interpolation is implemented.
-- [ ] Retake is implemented.
-- [ ] IC-LoRA video-to-video control is implemented.
-- [ ] Strong-control image/video semantics are validated.
+- [~] Keyframe interpolation is implemented.
+- [~] Retake is implemented.
+- [~] IC-LoRA video-to-video control is implemented.
+- [~] Motion-track control is now accepted as a distinct IC-LoRA control
+  variant on the same product surface, but it is still unvalidated.
+- [~] Union-control now has a first meaningful `6s / 768x448 / 145f` match
+  receipt on `video.condition.video`.
+- [~] Motion-track control now has a first meaningful `6s / 768x448 / 145f`
+  receipt, but it is still weaker than union-control.
+- [~] Interpolation now has a first meaningful `6s / 768x448 / 145f` receipt,
+  but keyframe adherence is still too weak for promotion.
+- [ ] Strong-control image/video semantics are validated broadly enough to
+  promote beyond the current union-control slice.
 
 ## K. Prompt and workflow layer
 
@@ -203,11 +237,12 @@ The next critical gates, in order, are:
    substrate
 3. [ ] decide processor policy explicitly for the shared core MLX model
    substrate
-4. [ ] land standard two-stage on the dev checkpoint with required distilled
+4. [~] land standard two-stage on the dev checkpoint with required distilled
    LoRA
-5. [ ] land HQ as explicit opt-in
-6. [ ] strengthen `video.condition.audio`
-7. [ ] implement `video.condition.video`
-8. [ ] implement interpolation and retake
+5. [~] land HQ as explicit opt-in
+6. [x] strengthen `video.condition.audio`
+7. [~] implement `video.condition.video`
+8. [~] implement interpolation
+9. [ ] validate and promote retake
 9. [ ] replace the current best-available showcase pack once the stronger rows
    are real

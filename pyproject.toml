@@ -3,7 +3,10 @@ default-groups = ["dev"]
 
 [tool.uv.workspace]
 members = [
+    "packages/families/flux2",
     "packages/families/ltx",
+    "packages/families/qwen-image",
+    "packages/families/z-image",
     "packages/clients/runtime-cli",
     "packages/core/runtime-mlx-models",
     "packages/core/runtime-core",
@@ -17,6 +20,9 @@ mlx-runtime-cli = { workspace = true }
 mlx-runtime-core = { workspace = true }
 mlx-runtime-mlx-models = { workspace = true }
 mlx-runtime-family-ltx = { workspace = true }
+mlx-runtime-family-flux2 = { workspace = true }
+mlx-runtime-family-qwen-image = { workspace = true }
+mlx-runtime-family-z-image = { workspace = true }
 mlx-runtime-schemas = { workspace = true }
 mlx-runtime-server = { workspace = true }
 mlx-runtime-workflows = { workspace = true }
@@ -30,6 +36,9 @@ dev = [
     "mlx-runtime-core",
     "mlx-runtime-mlx-models",
     "mlx-runtime-family-ltx",
+    "mlx-runtime-family-flux2",
+    "mlx-runtime-family-qwen-image",
+    "mlx-runtime-family-z-image",
     "mlx-runtime-schemas",
     "mlx-runtime-server",
     "mlx-runtime-workflows",

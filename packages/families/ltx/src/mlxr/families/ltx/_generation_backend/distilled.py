@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeGuard
 
@@ -15,7 +15,10 @@ from ..generation import (
     AudioConditioningInput,
     ConditioningInput,
     GeneratedVideo,
+    LoraInput,
+    RetakeOptions,
     VideoGenerator,
+    VideoReferenceInput,
 )
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import (
@@ -38,7 +41,11 @@ from .debug import (
     _emit_debug_frame_snapshot,
     _latent_stats,
 )
+from .ic_lora import generate_ic_lora
+from .interpolate import generate_interpolation
+from .one_stage import generate_one_stage
 from .outputs import _decode_to_uint8_frames
+from .retake import generate_retake
 from .runtime_helpers import (
     _apply_conditionings_to_stage,
     _decode_audio_waveform,
@@ -60,6 +67,8 @@ from .sampling import (
     _denoise_distilled_audio_video,
     _denoise_distilled_video_only,
 )
+from .two_stage import generate_two_stage
+from .two_stage_hq import generate_two_stage_hq
 from .types import (
     MLXArray,
     _AudioDecoderLike,
@@ -112,11 +121,22 @@ def _require_audio_latents(audio_latents: MLXArray | None) -> MLXArray:
     return audio_latents
 
 
+def _require_retake_options(retake_options: RetakeOptions | None) -> RetakeOptions:
+    if retake_options is None:
+        raise ValueError("LTX retake requires retake options")
+    return retake_options
+
+
 @dataclass(slots=True)
 class LTXDistilledVideoGenerator(VideoGenerator):
     checkpoint_path: Path
-    spatial_upsampler_path: Path
+    spatial_upsampler_path: Path | None
+    distilled_lora_path: Path | None = None
     guidance_mode: DistilledGuidanceMode = "positive_only"
+    control_variant: str | None = None
+    conditioning_attention_strength: float = 1.0
+    hq_stage_1_distilled_lora_strength: float = 0.25
+    hq_stage_2_distilled_lora_strength: float = 0.5
     _audio_enabled: bool = True
     _reference_imports: _ReferenceImports | None = None
     _checkpoint_reader: CheckpointReader | None = None
@@ -131,6 +151,10 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     _vocoder: _VocoderLike | None = None
     _audio_output_sample_rate: int | None = None
     _audio_backend: str | None = None
+    _transformer_lora_cache: dict[
+        tuple[tuple[str, float], ...],
+        _AudioVideoTransformer | _VideoTransformer,
+    ] = field(default_factory=dict)
 
     _imports = _imports
     _ensure_transformer = _ensure_transformer
@@ -141,6 +165,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     _encode_audio_conditioning = _encode_audio_conditioning
     _ensure_audio_stack = _ensure_audio_stack
     _decode_audio_waveform = _decode_audio_waveform
+    _ensure_vae_statistics = _ensure_vae_statistics
     _prepare_conditionings = _prepare_conditionings
     _apply_conditionings_to_stage = _apply_conditionings_to_stage
     _decode_video = _decode_video
@@ -150,14 +175,129 @@ class LTXDistilledVideoGenerator(VideoGenerator):
         self,
         *,
         prompt_context: PromptEncodingResult,
+        task: str = "video.generate",
         conditioning_inputs: tuple[ConditioningInput, ...],
+        video_inputs: tuple[VideoReferenceInput, ...] = (),
+        lora_inputs: tuple[LoraInput, ...] = (),
         audio_conditioning: AudioConditioningInput | None = None,
+        retake_options: RetakeOptions | None = None,
+        control_variant: str | None = None,
+        conditioning_attention_strength: float | None = None,
+        pipeline_variant: str = "distilled_two_stage",
+        num_inference_steps: int | None = None,
+        guidance_scale: float | None = None,
         width: int,
         height: int,
         num_frames: int,
         fps: int,
         seed: int | None = None,
     ) -> GeneratedVideo:
+        if task == "video.retake":
+            return generate_retake(
+                self,
+                prompt_context=prompt_context,
+                video_inputs=video_inputs,
+                retake_options=_require_retake_options(retake_options),
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                seed=seed,
+            )
+        if task == "video.condition.video":
+            if pipeline_variant != "distilled_two_stage":
+                raise ValueError(
+                    "LTX video.condition.video currently requires pipeline_variant 'distilled_two_stage'"
+                )
+            return generate_ic_lora(
+                self,
+                prompt_context=prompt_context,
+                conditioning_inputs=conditioning_inputs,
+                video_inputs=video_inputs,
+                lora_inputs=lora_inputs,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            )
+        if task == "video.interpolate":
+            if pipeline_variant != "two_stage":
+                raise ValueError(
+                    "LTX video.interpolate currently requires pipeline_variant 'two_stage'"
+                )
+            return generate_interpolation(
+                self,
+                prompt_context=prompt_context,
+                conditioning_inputs=conditioning_inputs,
+                audio_conditioning=audio_conditioning,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            )
+        if video_inputs:
+            raise ValueError(
+                f"LTX runtime does not support video inputs for task '{task}' yet"
+            )
+        if lora_inputs:
+            raise ValueError(
+                f"LTX runtime does not support LoRA inputs for task '{task}' yet"
+            )
+        if retake_options is not None:
+            raise ValueError(
+                f"LTX runtime does not support retake options for task '{task}' yet"
+            )
+        if pipeline_variant == "one_stage":
+            return generate_one_stage(
+                self,
+                prompt_context=prompt_context,
+                conditioning_inputs=conditioning_inputs,
+                audio_conditioning=audio_conditioning,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            )
+        if pipeline_variant == "two_stage":
+            return generate_two_stage(
+                self,
+                prompt_context=prompt_context,
+                conditioning_inputs=conditioning_inputs,
+                audio_conditioning=audio_conditioning,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            )
+        if pipeline_variant == "two_stage_hq":
+            return generate_two_stage_hq(
+                self,
+                prompt_context=prompt_context,
+                conditioning_inputs=conditioning_inputs,
+                audio_conditioning=audio_conditioning,
+                width=width,
+                height=height,
+                num_frames=num_frames,
+                fps=fps,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+            )
+        if pipeline_variant != "distilled_two_stage":
+            raise ValueError(
+                f"LTX runtime does not support pipeline variant '{pipeline_variant}' "
+                "for the current loaded checkpoint"
+            )
         if width < 32 or height < 32:
             raise ValueError("LTX generation requires width and height >= 32")
         if num_frames < 1:
@@ -641,6 +781,7 @@ class LTXDistilledVideoGenerator(VideoGenerator):
     def close(self) -> None:
         self._release_checkpoint_reader()
         self._transformer = None
+        self._transformer_lora_cache.clear()
         self._vae_statistics = None
         self._vae_decoder = None
         self._vae_encoder = None

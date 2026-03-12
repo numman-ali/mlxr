@@ -98,6 +98,8 @@ The Hugging Face provider path must support:
 - explicit remote-code policy
 - reuse of provider cache semantics where possible
 
+See also [Model acquisition and cache](model-acquisition-and-cache.md) for the product-side install and cache direction layered above this provider contract.
+
 The runtime should prefer immutable references to provider-managed cache entries rather than copying everything into a private source cache tree.
 
 Current scaffold notes:

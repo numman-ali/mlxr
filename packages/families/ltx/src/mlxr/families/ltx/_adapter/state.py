@@ -9,7 +9,10 @@ from ..generation import (
     AudioConditioningInput,
     ConditioningInput,
     GeneratedVideo,
+    LoraInput,
+    RetakeOptions,
     VideoGenerator,
+    VideoReferenceInput,
 )
 from ..prompt_encoding import PromptEncoder, PromptEncodingResult
 
@@ -31,5 +34,8 @@ class LoadedLTXRuntimeState:
     prompt_context: PromptEncodingResult | None = None
     video_generator: VideoGenerator | None = None
     conditioning_inputs: tuple[ConditioningInput, ...] = ()
+    video_inputs: tuple[VideoReferenceInput, ...] = ()
+    lora_inputs: tuple[LoraInput, ...] = ()
     audio_conditioning: AudioConditioningInput | None = None
+    retake_options: RetakeOptions | None = None
     generated_video: GeneratedVideo | None = None

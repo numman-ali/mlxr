@@ -27,7 +27,13 @@ from mlxr.core.schemas import (
 from mlxr.core.server.registry import default_runtime_registry
 from mlxr.core.server.settings import ServerSettings
 from mlxr.core.server.state import RuntimeState
-from mlxr.families.ltx.generation import AudioConditioningInput, GeneratedVideo
+from mlxr.families.ltx.generation import (
+    AudioConditioningInput,
+    GeneratedVideo,
+    LoraInput,
+    RetakeOptions,
+    VideoReferenceInput,
+)
 from mlxr.families.ltx.prompt_encoding import PromptEncodingResult
 from PIL import Image
 from pydantic import BaseModel
@@ -38,7 +44,9 @@ os.environ.setdefault(
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 LTX_CHECKPOINT_FILENAME = "ltx-2.3-22b-distilled.safetensors"
+LTX_DEV_CHECKPOINT_FILENAME = "ltx-2.3-22b-dev.safetensors"
 LTX_SPATIAL_UPSAMPLER_FILENAME = "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+LTX_DISTILLED_LORA_FILENAME = "ltx-2.3-22b-distilled-lora-384.safetensors"
 LTX_TEXT_ENCODER_DIRNAME = "gemma-3-12b-it-qat-q4_0-unquantized"
 
 
@@ -50,38 +58,64 @@ def make_state(tmp_path: Path, settings: ServerSettings | None = None) -> Runtim
     )
 
 
-def make_local_bundle(root: Path, *, directory_name: str = "ltx-bundle") -> Path:
+def make_local_bundle(
+    root: Path,
+    *,
+    directory_name: str = "ltx-bundle",
+    checkpoint_filename: str = LTX_CHECKPOINT_FILENAME,
+    include_spatial_upsampler: bool = True,
+    include_distilled_lora: bool = False,
+) -> Path:
     source_dir = root / directory_name
     source_dir.mkdir()
-    (source_dir / LTX_CHECKPOINT_FILENAME).write_text("bundle", encoding="utf-8")
-    (source_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
-        "upsampler", encoding="utf-8"
-    )
+    (source_dir / checkpoint_filename).write_text("bundle", encoding="utf-8")
+    if include_spatial_upsampler:
+        (source_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
+            "upsampler", encoding="utf-8"
+        )
+    if include_distilled_lora:
+        (source_dir / LTX_DISTILLED_LORA_FILENAME).write_text(
+            "distilled-lora", encoding="utf-8"
+        )
     text_encoder_dir = source_dir / LTX_TEXT_ENCODER_DIRNAME
     _write_fake_text_encoder(text_encoder_dir)
     return source_dir
 
 
-def make_split_local_ltx_sources(root: Path) -> dict[str, Path]:
+def make_split_local_ltx_sources(
+    root: Path,
+    *,
+    checkpoint_filename: str = LTX_CHECKPOINT_FILENAME,
+    include_spatial_upsampler: bool = True,
+    include_distilled_lora: bool = False,
+) -> dict[str, Path]:
     checkpoint_dir = root / "ltx-checkpoint-source"
     checkpoint_dir.mkdir()
-    (checkpoint_dir / LTX_CHECKPOINT_FILENAME).write_text("bundle", encoding="utf-8")
-
-    upsampler_dir = root / "ltx-upsampler-source"
-    upsampler_dir.mkdir()
-    (upsampler_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
-        "upsampler", encoding="utf-8"
-    )
+    (checkpoint_dir / checkpoint_filename).write_text("bundle", encoding="utf-8")
 
     text_encoder_dir = root / "ltx-text-encoder-source"
     text_encoder_dir.mkdir()
     _write_fake_text_encoder(text_encoder_dir)
 
-    return {
+    sources = {
         "checkpoint": checkpoint_dir,
-        "spatial_upsampler": upsampler_dir,
         "text_encoder": text_encoder_dir,
     }
+    if include_spatial_upsampler:
+        upsampler_dir = root / "ltx-upsampler-source"
+        upsampler_dir.mkdir()
+        (upsampler_dir / LTX_SPATIAL_UPSAMPLER_FILENAME).write_text(
+            "upsampler", encoding="utf-8"
+        )
+        sources["spatial_upsampler"] = upsampler_dir
+    if include_distilled_lora:
+        distilled_lora_dir = root / "ltx-distilled-lora-source"
+        distilled_lora_dir.mkdir()
+        (distilled_lora_dir / LTX_DISTILLED_LORA_FILENAME).write_text(
+            "distilled-lora", encoding="utf-8"
+        )
+        sources["distilled_lora"] = distilled_lora_dir
+    return sources
 
 
 def _write_fake_text_encoder(text_encoder_dir: Path) -> None:
@@ -132,13 +166,14 @@ def import_input_handle(
     *,
     headers: dict[str, str] | None = None,
     media_type: str = "image/png",
+    filename: str = "conditioning.png",
 ) -> str:
     response = client.post(
         "/v1/inputs/import",
         json={
             "content_base64": base64.b64encode(payload).decode("ascii"),
             "media_type": media_type,
-            "filename": "conditioning.png",
+            "filename": filename,
         },
         headers=headers,
     )
@@ -275,6 +310,8 @@ class FakeVideoGenerator:
         self.backend = backend
         self.include_audio = include_audio
         self.guidance_mode = "positive_only"
+        self.control_variant: str | None = None
+        self.conditioning_attention_strength: float | None = None
         self.calls: list[dict[str, object]] = []
         self.closed = False
 
@@ -282,8 +319,17 @@ class FakeVideoGenerator:
         self,
         *,
         prompt_context: PromptEncodingResult,
+        task: str = "video.generate",
         conditioning_inputs: tuple[object, ...],
+        video_inputs: tuple[VideoReferenceInput, ...] = (),
+        lora_inputs: tuple[LoraInput, ...] = (),
         audio_conditioning: AudioConditioningInput | None = None,
+        retake_options: RetakeOptions | None = None,
+        control_variant: str | None = None,
+        conditioning_attention_strength: float | None = None,
+        pipeline_variant: str = "distilled_two_stage",
+        num_inference_steps: int | None = None,
+        guidance_scale: float | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -293,16 +339,49 @@ class FakeVideoGenerator:
         self.calls.append(
             {
                 "prompt": prompt_context.prompt_text,
+                "task": task,
                 "width": width,
                 "height": height,
                 "num_frames": num_frames,
                 "fps": fps,
                 "seed": seed,
                 "conditioning_count": len(conditioning_inputs),
+                "video_input_count": len(video_inputs),
+                "lora_input_count": len(lora_inputs),
+                "conditioning_frame_indices": [
+                    getattr(item, "frame_index", None) for item in conditioning_inputs
+                ],
+                "conditioning_strengths": [
+                    getattr(item, "strength", None) for item in conditioning_inputs
+                ],
+                "lora_strengths": [item.strength for item in lora_inputs],
+                "retake_options": (
+                    None
+                    if retake_options is None
+                    else {
+                        "start_time_seconds": retake_options.start_time_seconds,
+                        "end_time_seconds": retake_options.end_time_seconds,
+                        "regenerate_video": retake_options.regenerate_video,
+                        "regenerate_audio": retake_options.regenerate_audio,
+                    }
+                ),
                 "audio_conditioned": audio_conditioning is not None,
+                "pipeline_variant": pipeline_variant,
+                "num_inference_steps": num_inference_steps,
+                "guidance_scale": guidance_scale,
                 "negative_prompt_present": prompt_context.negative_prompt_text
                 is not None,
                 "guidance_mode": self.guidance_mode,
+                "control_variant": (
+                    control_variant
+                    if control_variant is not None
+                    else self.control_variant
+                ),
+                "conditioning_attention_strength": (
+                    conditioning_attention_strength
+                    if conditioning_attention_strength is not None
+                    else self.conditioning_attention_strength
+                ),
             }
         )
         effective_seed = 0 if seed is None else seed
@@ -340,7 +419,7 @@ class FakeVideoGenerator:
             audio_waveform=audio_waveform,
             audio_sample_rate=audio_sample_rate,
             metadata={
-                "pipeline_kind": "distilled_two_stage",
+                "pipeline_kind": pipeline_variant,
                 "stage1_duration_ms": 12.5,
                 "upsample_duration_ms": 3.25,
                 "stage2_duration_ms": 9.75,
@@ -395,6 +474,12 @@ class ThreadManagedProcess:
     def terminate(self) -> None:
         return None
 
+    @property
+    def exitcode(self) -> int | None:
+        if self._thread.is_alive():
+            return None
+        return 0
+
 
 class ThreadProcessContext:
     def Queue(self) -> ThreadMessageQueue:
@@ -406,6 +491,19 @@ class ThreadProcessContext:
         kwargs: dict[str, object],
     ) -> ThreadManagedProcess:
         return ThreadManagedProcess(target=target, kwargs=kwargs)
+
+
+class SilentExitProcessContext:
+    def Queue(self) -> ThreadMessageQueue:
+        return ThreadMessageQueue()
+
+    def Process(
+        self,
+        target: object,
+        kwargs: dict[str, object],
+    ) -> ThreadManagedProcess:
+        del target, kwargs
+        return ThreadManagedProcess(target=lambda: None, kwargs={})
 
 
 @contextmanager
@@ -448,9 +546,10 @@ def patched_ltx_video_generator(
 
     def factory(
         checkpoint_path: Path,
-        spatial_upsampler_path: Path,
+        spatial_upsampler_path: Path | None,
+        distilled_lora_path: Path | None,
     ) -> FakeVideoGenerator:
-        del checkpoint_path, spatial_upsampler_path
+        del checkpoint_path, spatial_upsampler_path, distilled_lora_path
         generator = FakeVideoGenerator(
             backend=backend,
             include_audio=include_audio,
@@ -470,5 +569,17 @@ def patched_inline_job_process_context() -> Iterator[None]:
         jobs_module,
         "_job_process_context",
         return_value=ThreadProcessContext(),
+    ):
+        yield
+
+
+@contextmanager
+def patched_silent_exit_job_process_context() -> Iterator[None]:
+    from mlxr.core.server import jobs as jobs_module
+
+    with patch.object(
+        jobs_module,
+        "_job_process_context",
+        return_value=SilentExitProcessContext(),
     ):
         yield

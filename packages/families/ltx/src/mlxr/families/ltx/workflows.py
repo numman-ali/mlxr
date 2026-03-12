@@ -10,7 +10,12 @@ from mlxr.core.schemas import (
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
 
-from .family_options import family_extensions
+from .family_options import (
+    conditioning_attention_strength_from_extensions,
+    control_variant_from_extensions,
+    family_extensions,
+    workflow_variant_from_extensions,
+)
 
 
 class LTXWorkflowStrategy(FamilyWorkflowStrategy):
@@ -34,12 +39,25 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 f"The current LTX workflow strategy does not support {unsupported} references yet"
             )
 
-        task = _selected_task(by_kind)
+        if intent.task is None and by_kind.get("video"):
+            raise ValueError(
+                "LTX workflows with video references currently require an explicit task"
+            )
+        task = intent.task or _selected_task(by_kind)
         if task not in capability.tasks:
             raise ValueError(
                 f"Model '{context.model.model_id}' does not support workflow task '{task}'"
             )
-        pipeline_variant = _pipeline_variant(capability)
+        if by_kind.get("lora") and task != "video.condition.video":
+            raise ValueError(
+                "LTX LoRA references are currently only supported for video.condition.video workflows"
+            )
+        pipeline_variant = workflow_variant_from_extensions(
+            intent.extensions.get("ltx"),
+            supported_variants=tuple(_pipeline_variants(capability)),
+            default=_default_pipeline_variant(capability, task),
+        )
+        _validate_task_pipeline_variant(task, pipeline_variant)
         selected_profile = _selected_profile(capability, task)
 
         return WorkflowPlan(
@@ -87,7 +105,14 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 f"Model '{context.model.model_id}' does not support task '{plan.selected_task}'"
             )
         inputs: dict[str, object] = {"prompt": plan.resolved_prompt}
-        if plan.selected_task in {"video.condition.image", "video.condition.audio"}:
+        if intent.negative_prompt is not None:
+            inputs["negative_prompt"] = intent.negative_prompt
+        if plan.selected_task in {
+            "video.condition.image",
+            "video.condition.audio",
+            "video.condition.video",
+            "video.interpolate",
+        }:
             images: list[dict[str, object]] = []
             for reference in intent.references:
                 if reference.kind != "image":
@@ -117,12 +142,102 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                     }
                 )
             if not images:
-                if plan.selected_task == "video.condition.image":
+                if plan.selected_task in {
+                    "video.condition.image",
+                    "video.interpolate",
+                }:
                     raise ValueError(
-                        "Image-conditioned workflow execution requires at least one bound image reference"
+                        f"{plan.selected_task} requires at least one bound image reference"
                     )
             else:
+                if plan.selected_task == "video.interpolate":
+                    if len(images) < 2:
+                        raise ValueError(
+                            "video.interpolate requires at least two bound image references"
+                        )
+                    if len({image["frame_index"] for image in images}) < 2:
+                        raise ValueError(
+                            "video.interpolate requires image references at at least two distinct frame indices"
+                        )
                 inputs["images"] = images
+
+        if plan.selected_task in {"video.condition.video", "video.retake"}:
+            videos: list[dict[str, object]] = []
+            for reference in intent.references:
+                if reference.kind != "video":
+                    continue
+                if reference.input_handle is None:
+                    raise ValueError(
+                        f"{plan.selected_task} workflow execution requires bound video input handles"
+                    )
+                strength = reference.metadata.get("strength", 1.0)
+                if not isinstance(strength, (int, float)):
+                    raise ValueError("Workflow video strength must be numeric")
+                strength_value = float(strength)
+                if not (0.0 <= strength_value <= 1.0):
+                    raise ValueError(
+                        "Workflow video strength must be between 0.0 and 1.0"
+                    )
+                videos.append(
+                    {
+                        "input_handle": reference.input_handle,
+                        "strength": strength_value,
+                    }
+                )
+            if plan.selected_task == "video.condition.video":
+                if not videos:
+                    raise ValueError(
+                        "video.condition.video requires at least one bound video reference"
+                    )
+            elif len(videos) != 1:
+                raise ValueError(
+                    "video.retake requires exactly one bound source video reference"
+                )
+            if videos:
+                inputs["videos"] = videos
+
+        if plan.selected_task == "video.condition.video":
+            loras: list[dict[str, object]] = []
+            for reference in intent.references:
+                if reference.kind != "lora":
+                    continue
+                if reference.input_handle is None:
+                    raise ValueError(
+                        "video.condition.video workflow execution requires bound LoRA input handles"
+                    )
+                strength = reference.metadata.get("strength", 1.0)
+                if not isinstance(strength, (int, float)):
+                    raise ValueError("Workflow LoRA strength must be numeric")
+                strength_value = float(strength)
+                if strength_value <= 0.0:
+                    raise ValueError("Workflow LoRA strength must be greater than 0.0")
+                loras.append(
+                    {
+                        "input_handle": reference.input_handle,
+                        "strength": strength_value,
+                    }
+                )
+            if len(loras) != 1:
+                raise ValueError(
+                    "video.condition.video requires exactly one bound LoRA reference"
+                )
+            inputs["loras"] = loras
+
+        lora_references = [
+            _lora_reference_payload(reference)
+            for reference in intent.references
+            if reference.kind == "lora"
+        ]
+        if lora_references and plan.selected_task != "video.condition.video":
+            raise ValueError(
+                "LTX LoRA references are only valid for video.condition.video workflows"
+            )
+        if plan.selected_task == "video.condition.video":
+            if len(lora_references) != 1:
+                raise ValueError(
+                    "video.condition.video requires exactly one bound LoRA reference"
+                )
+            inputs["loras"] = lora_references
 
         if plan.selected_task == "video.condition.audio":
             audio_references = [
@@ -163,8 +278,51 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
                 "max_duration_seconds": max_duration_value,
             }
 
+        if plan.selected_task == "video.retake":
+            start_seconds = intent.params.get("window_start_seconds")
+            end_seconds = intent.params.get("window_end_seconds")
+            if not isinstance(start_seconds, (int, float)):
+                raise ValueError(
+                    "video.retake requires numeric params.window_start_seconds"
+                )
+            if not isinstance(end_seconds, (int, float)):
+                raise ValueError(
+                    "video.retake requires numeric params.window_end_seconds"
+                )
+            if float(start_seconds) < 0.0:
+                raise ValueError(
+                    "video.retake params.window_start_seconds must be >= 0.0"
+                )
+            if float(end_seconds) <= float(start_seconds):
+                raise ValueError(
+                    "video.retake params.window_end_seconds must be greater than params.window_start_seconds"
+                )
+            regenerate_video = intent.params.get("regenerate_video", True)
+            regenerate_audio = intent.params.get("regenerate_audio", True)
+            if not isinstance(regenerate_video, bool):
+                raise ValueError(
+                    "video.retake params.regenerate_video must be boolean when provided"
+                )
+            if not isinstance(regenerate_audio, bool):
+                raise ValueError(
+                    "video.retake params.regenerate_audio must be boolean when provided"
+                )
+
         extensions = dict(intent.extensions)
         ltx_extensions = dict(family_extensions(extensions.get("ltx")))
+        control_variant = control_variant_from_extensions(ltx_extensions)
+        conditioning_attention_strength = (
+            conditioning_attention_strength_from_extensions(ltx_extensions)
+        )
+        if (
+            control_variant is not None or conditioning_attention_strength is not None
+        ) and plan.selected_task != "video.condition.video":
+            raise ValueError(
+                "LTX control_variant and conditioning_attention_strength are only valid "
+                "for video.condition.video workflows"
+            )
+        if plan.selected_task == "video.condition.video" and control_variant is None:
+            ltx_extensions["control_variant"] = "ic_lora"
         ltx_extensions.update(
             {
                 "workflow_variant": plan.pipeline_variant,
@@ -204,14 +362,23 @@ def _selected_profile(capability: CapabilityDescriptor, task: str) -> str | None
     return None
 
 
-def _pipeline_variant(capability: CapabilityDescriptor) -> str | None:
+def _default_pipeline_variant(
+    capability: CapabilityDescriptor, task: str
+) -> str | None:
+    variants = _pipeline_variants(capability)
+    if task == "video.interpolate" and "two_stage" in variants:
+        return "two_stage"
+    if variants:
+        return variants[0]
+    return None
+
+
+def _pipeline_variants(capability: CapabilityDescriptor) -> list[str]:
     implemented_surface = capability.metadata.get("implemented_surface", {})
     variants = implemented_surface.get("pipeline_variants", [])
     if isinstance(variants, list) and variants:
-        first = variants[0]
-        if isinstance(first, str):
-            return first
-    return None
+        return [variant for variant in variants if isinstance(variant, str)]
+    return []
 
 
 def _supported_reference_kinds(capability: CapabilityDescriptor) -> list[str]:
@@ -227,5 +394,34 @@ def _selected_task(by_kind: dict[str, list[WorkflowReference]]) -> str:
     if by_kind.get("audio"):
         return "video.condition.audio"
     if by_kind.get("image"):
+        # Multiple image refs still ride the existing image-conditioned row for now.
+        # Official keyframe interpolation is a separate future pipeline with
+        # different token-level conditioning semantics.
         return "video.condition.image"
     return "video.generate"
+
+
+def _validate_task_pipeline_variant(task: str, pipeline_variant: str | None) -> None:
+    if task == "video.condition.video" and pipeline_variant != "distilled_two_stage":
+        raise ValueError(
+            "LTX video.condition.video currently requires workflow variant 'distilled_two_stage'"
+        )
+    if task == "video.interpolate" and pipeline_variant != "two_stage":
+        raise ValueError(
+            "LTX video.interpolate currently requires workflow variant 'two_stage'"
+        )
+
+
+def _lora_reference_payload(reference: WorkflowReference) -> dict[str, object]:
+    if reference.input_handle is None:
+        raise ValueError("LTX LoRA execution requires bound input handles")
+    strength = reference.metadata.get("strength", 1.0)
+    if not isinstance(strength, (int, float)):
+        raise ValueError("Workflow LoRA strength must be numeric")
+    strength_value = float(strength)
+    if strength_value <= 0.0:
+        raise ValueError("Workflow LoRA strength must be greater than 0.0")
+    return {
+        "input_handle": reference.input_handle,
+        "strength": strength_value,
+    }

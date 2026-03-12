@@ -22,21 +22,38 @@ Already true:
 - the natural-audio dog scene is now green on the stronger Gemini video-plus-audio review bar
 - the promoted runtime path now passes caller-authored prompts through verbatim instead of composing prompt text in the workflow layer
 - conditioned-audio validation is stronger than text-only audio steering
+- the official upstream `LTX-2` pipeline canon and the official
+  `ltx-desktop` product surface are both now important planning inputs
 
 Not yet true:
 
 - text-first natural-audio realism is not broadly solved
 - `video.condition.audio` is now quality-promoted on the current dog and anime conditioned rows, but broader conditioned-scene coverage is still not solved
-- `video.condition.video`, interpolation, retake, one-stage, HQ, and LoRA rows are still open
+- `video.condition.video` as the official `ICLoraPipeline`
+  reference-video row is now implemented, but still unvalidated
+- interpolation, retake, one-stage, HQ, and LoRA rows are now implemented on
+  the owned runtime, but still unvalidated or unpromoted
 - the workflow layer is still planning, not full core-owned orchestration
+- the desktop compatibility adapter does not exist yet
+- the first image-family slot is now claimed by `Z-Image`, but broader
+  editing-capable image-family coverage through `Qwen-Image` is still open
+- owned `FLUX.2` `klein-4b` / `klein-9b` prompt-only generate and
+  single-reference edit are now real, but multi-reference quality promotion,
+  base rows, `dev`, LoRA loading, quantized execution, and prompt upsampling
+  remain open
 
 ## Immediate next tasks
 
-- [ ] Decide whether the next product push is:
-  - broader natural-audio realism on text-first AV
-  - or the next capability row, `video.condition.video`
-- [ ] Keep the current best-available pack truthful; do not replace it until a new pack clears the same review bar
-- [ ] Do not claim that text-only no-music prompting is generally solved from one scene-level win alone
+- [ ] Keep the current best-available pack truthful; do not replace it until a
+  new pack clears the same review bar
+- [ ] Do not claim that text-only no-music prompting is generally solved from
+  one scene-level win alone
+- [ ] Keep the capability docs aligned to the official `LTX-2` and
+  `ltx-desktop` references whenever a row name could be ambiguous
+- [ ] Decide whether the next primary implementation track is:
+  - standard two-stage / HQ quality recovery
+  - the first truthful desktop compatibility adapter slice
+  - or the broader image-family tranche with `Qwen-Image` and `FLUX.2`
 
 ## LTX product-quality tasks
 
@@ -65,14 +82,15 @@ Not yet true:
 
 ### C. Implement the next capability rows
 
-- [ ] `video.condition.video`
-- [ ] `video.interpolate`
-- [ ] `video.retake`
-- [ ] one-stage T2V
-- [ ] one-stage I2V
-- [ ] full two-stage / HQ T2V
-- [ ] full two-stage / HQ I2V
-- [ ] IC-LoRA
+- [ ] validate and promote `video.condition.video` as the official
+  `ICLoraPipeline` reference-video row
+- [ ] validate and promote `video.interpolate`
+- [ ] validate and promote `video.retake`
+- [ ] validate and promote one-stage T2V
+- [ ] validate and promote one-stage I2V
+- [ ] validate and promote full two-stage / HQ T2V
+- [ ] validate and promote full two-stage / HQ I2V
+- [ ] validate and promote IC-LoRA
 - [ ] distilled LoRA
 - [ ] STG and prompt enhancement as second-ring controls
 
@@ -93,6 +111,46 @@ Not yet true:
 - [ ] Promote the workflow layer from “planning” toward real core-owned orchestration only when the worker actually interprets stage graphs
 - [ ] Keep docs aligned with that implementation truth at every step
 - [ ] Add the next validating family after the LTX capability surface is broader, so the workflow layer stops being “LTX plus abstractions”
+
+### C. Desktop adapter track
+
+- [ ] Implement `packages/adapters/ltx-desktop/` as a thin compatibility layer
+  over the shared runtime
+- [ ] Preserve the current desktop backend contract for:
+  - `/api/generate`
+  - `/api/generate/cancel`
+  - `/api/generation/progress`
+  - local `video_path` completion responses
+- [ ] Keep raw filesystem paths confined to the trusted desktop adapter seam;
+  do not leak them back into the generic runtime HTTP contract
+- [ ] Cover the first adapter slice with fast T2V and fast I2V before claiming
+  broader desktop support
+- [ ] Add explicit docs for which official desktop features are locally covered
+  versus still API-only or unsupported
+
+## Image-family track
+
+- [x] Land `Z-Image` as the first explicit image family for `MLXR`
+- [ ] Bring in an editing-capable image family so `MLXR` can generate related
+  stills and edited keyframes without stretching LTX to solve that alone
+- [ ] Treat `Qwen-Image-2512` plus `Qwen-Image-Edit-2511` as the primary
+  editing-capable candidate unless a stronger Apple-Silicon fit appears
+- [x] Treat `FLUX.2-klein-9b` as the primary FLUX row, with `4b` as the
+  lighter sibling and `dev` as the high-end quality or editing row
+- [x] Land owned `FLUX.2-klein-4b` / `klein-9b` `image.generate`
+- [x] Land owned `FLUX.2-klein-4b` / `klein-9b` single-reference `image.edit`
+- [ ] Fix and promote owned `FLUX.2` multi-reference `image.edit`
+- [ ] Land owned `FLUX.2-klein-base-*` execution
+- [ ] Land owned `FLUX.2-dev` execution
+- [ ] Land owned `FLUX.2` LoRA loading and prompt-upsampling policy only when
+  the shared/product seams are ready
+- [ ] Keep the first image-family contract honest:
+  - text-to-image first
+  - runtime-managed `png` / `jpg` outputs
+  - no editing or ControlNet-style claims until they are real
+- [ ] Use the image-family tranche to support both:
+  - Phase C cross-family validation
+  - desktop image-to-video preparation workflows
 
 ## Typing and code-hygiene tasks
 
@@ -132,19 +190,24 @@ Not yet true:
 
 ## Recommended execution order
 
-1. Choose between broader natural-audio realism or `video.condition.video` as the next primary track.
-2. Complete that track at safe rung with Gemini-backed review.
-3. Update the capability matrix and showcase docs.
-4. Commit from green.
-5. Repeat for the next capability row.
+1. Lock the official capability and host-contract docs to current upstream
+   truth.
+2. Choose one primary implementation track:
+   `two_stage` / desktop adapter / `Z-Image`.
+3. Complete that track at the smallest truthful slice.
+4. Update the capability and host docs in the same tranche.
+5. Commit from green.
 
 ## Current recommendation
 
-The highest-leverage next step is:
+The highest-leverage implementation decision is now broader than the earlier
+"natural audio versus `video.condition.video`" fork.
 
-- either broaden the natural-audio win beyond the dog scene
-- or, if we want a cleaner capability step, implement the first truthful `video.condition.video` slice
+If the goal is:
 
-If the goal is immediate product strength, broaden the natural-audio win first.
-
-If the goal is capability surface coverage, start `video.condition.video` next.
+- highest-quality `LTX` parity, the next real target is standard two-stage on
+  the `dev` checkpoint
+- fastest host-surface value, the next real target is the first thin
+  `ltx-desktop` adapter slice for fast T2V and I2V
+- strongest platform validation, the next real target is the first image-family
+  tranche, with `Z-Image` now the leading explicit candidate

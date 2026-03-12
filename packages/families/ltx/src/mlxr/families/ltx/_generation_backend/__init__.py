@@ -20,21 +20,24 @@ from .types import _RuntimeModelConfig
 def create_video_generator(
     *,
     checkpoint_path: Path,
-    spatial_upsampler_path: Path,
+    spatial_upsampler_path: Path | None,
+    distilled_lora_path: Path | None,
     audio_enabled: bool = True,
 ) -> VideoGenerator:
-    if can_use_reference_backend(
+    if spatial_upsampler_path is not None and can_use_reference_backend(
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
     ):
         return LTXDistilledVideoGenerator(
             checkpoint_path=checkpoint_path,
             spatial_upsampler_path=spatial_upsampler_path,
+            distilled_lora_path=distilled_lora_path,
             _audio_enabled=audio_enabled,
         )
     return LTXPreviewVideoGenerator(
         checkpoint_path=checkpoint_path,
         spatial_upsampler_path=spatial_upsampler_path,
+        distilled_lora_path=distilled_lora_path,
     )
 
 

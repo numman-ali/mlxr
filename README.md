@@ -47,6 +47,7 @@ These items remain provisional until the benchmark matrix and cross-family valid
 - [Capability schema](docs/capability-schema.md)
 - [Benchmark matrix](docs/benchmark-matrix.md)
 - [Provider and provenance model](docs/provider-and-provenance-model.md)
+- [Model acquisition and cache](docs/model-acquisition-and-cache.md)
 - [Operations and packaging](docs/operations-and-packaging.md)
 
 ## MLXR Product And LTX Track
@@ -70,6 +71,13 @@ These items remain provisional until the benchmark matrix and cross-family valid
 - [Multimodal inference engine](docs/research/17-multimodal-inference-engine.md)
 - [LTX reference map](docs/research/18-ltx-reference-map.md)
 - [LTX compatibility checklist](docs/research/19-ltx-compatibility-checklist.md)
+- [Z-Image family candidate](docs/research/20-z-image-family-candidate.md)
+- [Qwen-Image family candidate](docs/research/21-qwen-image-family-candidate.md)
+- [FLUX.2 family candidate](docs/research/22-flux2-family-candidate.md)
+- [FLUX.2 capability matrix](docs/research/23-flux2-capability-matrix.md)
+- [Qwen edit and showcase TODO](docs/research/24-qwen-edit-and-showcase-todo.md)
+- [LTX capability closure plan](docs/research/25-ltx-capability-closure-plan.md)
+- [Qwen-Image capability matrix](docs/research/26-qwen-image-capability-matrix.md)
 
 ## ADRs
 

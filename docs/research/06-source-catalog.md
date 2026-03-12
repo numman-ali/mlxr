@@ -1,6 +1,6 @@
 # Source Catalog
 
-Last refreshed: 2026-03-06
+Last refreshed: 2026-03-10
 
 This catalog records the sources that actually shaped the rewrite. “Official” means highest-authority upstream source. It does not mean part of this repository.
 
@@ -35,12 +35,15 @@ This catalog records the sources that actually shaped the rewrite. “Official�
 
 | Source | Type | Last verified | Freshness risk | What it proves | Action relevance |
 | --- | --- | --- | --- | --- | --- |
-| `Lightricks/LTX-2` local clone `9e8a28e` | official repo | 2026-03-06 | high | current official LTX runtime repo and pipeline surface | product track |
-| `Lightricks/LTX-2.3` model card and files | official model source | 2026-03-06 | high | current weights, license, and “Diffusers coming soon” status | provider, policy, artifacts |
-| `Lightricks/ltx-desktop` local clone `32589e6` | official repo | 2026-03-06 | high | current desktop macOS gap and direct-path assumptions | desktop adapter |
+| `Lightricks/LTX-2` local clone `9e8a28e` | official repo | 2026-03-09 | high | current official LTX runtime repo and pipeline surface | product track |
+| `Lightricks/LTX-2.3` model card and files | official model source | 2026-03-09 | high | current weights, license, and “Diffusers coming soon” status | provider, policy, artifacts |
+| `Lightricks/ltx-desktop` local clone `32589e6` | official repo | 2026-03-09 | high | current desktop macOS gap, API-only Darwin policy, and direct-path assumptions | desktop adapter |
 | `Lightricks/ComfyUI-LTXVideo` local clone `82bd963` | official repo | 2026-03-06 | high | advanced Comfy node pack, not baseline access layer | Comfy strategy |
 | ComfyUI LTX docs and current releases | official docs and repo | 2026-03-06 | high | LTX is now in core and current releases carry LTX fixes | refresh stale assumptions |
 | `Lightricks/LTX-Video` | official legacy repo | 2026-03-06 | medium | legacy line is still visible and needs explicit separation | documentation clarity |
+| `Tongyi-MAI/Z-Image` local clone `26f23ed` | official repo | 2026-03-09 | high | current official Z-Image family surface, variants, and diffusers support signal | first image-family candidate, desktop image-generation pressure |
+| `QwenLM/Qwen-Image` local clone `6b5e1f5` | official repo | 2026-03-10 | high | current Qwen image-generation and edit-family surface, prompt-enhancement sidecars, and 2512 or Edit-2511 checkpoint pressure | next editing-capable image family candidate |
+| `black-forest-labs/flux2` local clone `60116b5` | official repo | 2026-03-10 | high | current FLUX.2 generation and multi-reference editing family, klein or dev split, and prompt-upsampling pressure | second image-family candidate and editing benchmark pressure |
 
 ## Apple And Security Sources
 

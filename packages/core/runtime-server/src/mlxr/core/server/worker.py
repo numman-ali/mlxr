@@ -10,6 +10,7 @@ import mlx.core as mx
 from mlxr.core.runtime import (
     ExecutionProfile,
     ExecutionStage,
+    LoadedModelHandle,
     PortableArtifact,
     RuntimeHome,
 )
@@ -33,6 +34,30 @@ class MessageQueue(Protocol):
     def put(self, item: WorkerMessage) -> None: ...
 
     def get_nowait(self) -> WorkerMessage: ...
+
+
+def _stage_ids_for_capability(loaded: LoadedModelHandle) -> tuple[str, ...]:
+    raw_stage_ids = loaded.capability.metadata.get("stage_ids")
+    if isinstance(raw_stage_ids, list):
+        stage_ids = tuple(
+            stage_id for stage_id in raw_stage_ids if isinstance(stage_id, str)
+        )
+        if stage_ids:
+            return stage_ids
+    return (
+        "prompt_encode",
+        "condition_inputs",
+        "generate",
+        "encode_output",
+    )
+
+
+def _phase_for_stage(stage_id: str) -> str:
+    if stage_id == "encode_output":
+        return "streaming_output"
+    if stage_id in {"prompt_encode", "condition_inputs"}:
+        return "preparing"
+    return "running"
 
 
 def run_job_worker(
@@ -86,12 +111,7 @@ def run_job_worker(
         )
 
         resolved_inputs = _resolve_inputs(request.inputs, input_store)
-        stage_ids = (
-            "prompt_encode",
-            "condition_inputs",
-            "generate",
-            "encode_output",
-        )
+        stage_ids = _stage_ids_for_capability(loaded)
         total_stages = len(stage_ids)
         created_artifacts = 0
         artifact_id = f"out_{job_id}"
@@ -111,9 +131,7 @@ def run_job_worker(
                 event_queue.put({"type": "worker_exit"})
                 return
 
-            phase = "streaming_output" if stage_id == "encode_output" else "running"
-            if stage_id in {"prompt_encode", "condition_inputs"}:
-                phase = "preparing"
+            phase = _phase_for_stage(stage_id)
             emit_phase_event(
                 event_queue,
                 job_id=job_id,
@@ -124,37 +142,49 @@ def run_job_worker(
 
             stage_started = time.perf_counter()
             stage_memory_before = _begin_memory_measurement()
+            stage_params: dict[str, object] = {
+                "task": request.task,
+                "job_id": job_id,
+                "artifact_format": artifact_format,
+                "artifact_id": artifact_id,
+                "output_dir": str(
+                    runtime_home.output_artifact_dir(job_id, artifact_id)
+                ),
+                "storage_key": runtime_home.output_artifact_storage_key(
+                    job_id,
+                    artifact_id,
+                    f"{artifact_id}.{artifact_format}",
+                ),
+                "resolved_inputs": resolved_inputs,
+                "family_extensions": _family_extensions(
+                    model.family, request.extensions
+                ),
+                "simulate_delay_seconds": request.extensions.get(
+                    "simulate_delay_seconds", 0.05
+                ),
+            }
+            for param_name in (
+                "width",
+                "height",
+                "num_inference_steps",
+                "guidance_scale",
+                "num_frames",
+                "fps",
+                "seed",
+                "window_start_seconds",
+                "window_end_seconds",
+                "regenerate_video",
+                "regenerate_audio",
+            ):
+                param_value = request.params.get(param_name)
+                if param_value is not None:
+                    stage_params[param_name] = param_value
             result = family.run_stage(
                 loaded,
                 ExecutionStage(
                     stage_id=stage_id,
                     inputs=request.inputs,
-                    params={
-                        "task": request.task,
-                        "job_id": job_id,
-                        "artifact_format": artifact_format,
-                        "artifact_id": artifact_id,
-                        "output_dir": str(
-                            runtime_home.output_artifact_dir(job_id, artifact_id)
-                        ),
-                        "storage_key": runtime_home.output_artifact_storage_key(
-                            job_id,
-                            artifact_id,
-                            f"{artifact_id}.{artifact_format}",
-                        ),
-                        "resolved_inputs": resolved_inputs,
-                        "width": request.params.get("width"),
-                        "height": request.params.get("height"),
-                        "num_frames": request.params.get("num_frames"),
-                        "fps": request.params.get("fps"),
-                        "seed": request.params.get("seed"),
-                        "family_extensions": _family_extensions(
-                            model.family, request.extensions
-                        ),
-                        "simulate_delay_seconds": request.extensions.get(
-                            "simulate_delay_seconds", 0.05
-                        ),
-                    },
+                    params=stage_params,
                 ),
             )
             emit_metrics_event(
@@ -330,18 +360,20 @@ def _resolve_inputs(
     inputs: dict[str, object], input_store: InputStore
 ) -> dict[str, object]:
     resolved_images: list[dict[str, object]] = []
+    resolved_videos: list[dict[str, object]] = []
     resolved_audio: dict[str, object] | None = None
+    resolved_loras: list[dict[str, object]] = []
     raw_images = inputs.get("images")
     if raw_images is not None:
         if not isinstance(raw_images, list):
-            raise ValueError("LTX image conditioning inputs must be a list")
+            raise ValueError("Image conditioning inputs must be a list")
         for item in raw_images:
             if not isinstance(item, dict):
-                raise ValueError("LTX image conditioning entries must be objects")
+                raise ValueError("Image conditioning entries must be objects")
             handle_id = item.get("input_handle")
             if not isinstance(handle_id, str) or not handle_id:
                 raise ValueError(
-                    "LTX image conditioning requires non-empty input_handle values"
+                    "Image conditioning requires non-empty input_handle values"
                 )
             record = input_store.get(handle_id)
             if record is None:
@@ -358,13 +390,39 @@ def _resolve_inputs(
                 }
             )
 
+    raw_videos = inputs.get("videos")
+    if raw_videos is not None:
+        if not isinstance(raw_videos, list):
+            raise ValueError("Video conditioning inputs must be a list")
+        for item in raw_videos:
+            if not isinstance(item, dict):
+                raise ValueError("Video conditioning entries must be objects")
+            handle_id = item.get("input_handle")
+            if not isinstance(handle_id, str) or not handle_id:
+                raise ValueError(
+                    "Video conditioning requires non-empty input_handle values"
+                )
+            record = input_store.get(handle_id)
+            if record is None:
+                raise ValueError(f"Unknown input handle '{handle_id}'")
+            payload_path = input_store.payload_path(record)
+            resolved_videos.append(
+                {
+                    "input_handle": handle_id,
+                    "payload_path": str(payload_path),
+                    "media_type": record.media_type,
+                    "filename": record.filename,
+                    "strength": item.get("strength", 1.0),
+                }
+            )
+
     raw_audio = inputs.get("audio")
     if raw_audio is not None:
         if not isinstance(raw_audio, dict):
-            raise ValueError("LTX audio conditioning input must be an object")
+            raise ValueError("Audio conditioning input must be an object")
         handle_id = raw_audio.get("input_handle")
         if not isinstance(handle_id, str) or not handle_id:
-            raise ValueError("LTX audio conditioning requires a non-empty input_handle")
+            raise ValueError("Audio conditioning requires a non-empty input_handle")
         record = input_store.get(handle_id)
         if record is None:
             raise ValueError(f"Unknown input handle '{handle_id}'")
@@ -378,7 +436,36 @@ def _resolve_inputs(
             "max_duration_seconds": raw_audio.get("max_duration_seconds"),
         }
 
-    return {"images": resolved_images, "audio": resolved_audio}
+    raw_loras = inputs.get("loras")
+    if raw_loras is not None:
+        if not isinstance(raw_loras, list):
+            raise ValueError("LoRA inputs must be a list")
+        for item in raw_loras:
+            if not isinstance(item, dict):
+                raise ValueError("LoRA entries must be objects")
+            handle_id = item.get("input_handle")
+            if not isinstance(handle_id, str) or not handle_id:
+                raise ValueError("LoRA inputs require a non-empty input_handle")
+            record = input_store.get(handle_id)
+            if record is None:
+                raise ValueError(f"Unknown input handle '{handle_id}'")
+            payload_path = input_store.payload_path(record)
+            resolved_loras.append(
+                {
+                    "input_handle": handle_id,
+                    "payload_path": str(payload_path),
+                    "media_type": record.media_type,
+                    "filename": record.filename,
+                    "strength": item.get("strength", 1.0),
+                }
+            )
+
+    return {
+        "images": resolved_images,
+        "videos": resolved_videos,
+        "audio": resolved_audio,
+        "loras": resolved_loras,
+    }
 
 
 def _begin_memory_measurement() -> MemorySnapshot:

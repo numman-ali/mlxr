@@ -75,3 +75,12 @@ def _validate_reference_media_type(kind: str, record: InputHandleRecord) -> None
         raise ValueError(
             f"Workflow video reference '{record.handle_id}' must use a video media type"
         )
+    if kind == "lora":
+        filename = record.filename or ""
+        if media_type == "application/x-safetensors" or filename.endswith(
+            ".safetensors"
+        ):
+            return
+        raise ValueError(
+            f"Workflow LoRA reference '{record.handle_id}' must use a safetensors payload"
+        )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mlxr.core.runtime import (
@@ -27,20 +28,65 @@ if TYPE_CHECKING:
 
 def inspect_source(self: LTXFamilyAdapter, source: ResolvedSource) -> FamilyInspection:
     role_candidates = self._role_candidates(source)
+    file_paths = {record.path for record in source.files}
+    if self._checkpoint_filename in file_paths:
+        variant = "fast"
+    elif self._dev_checkpoint_filename in file_paths:
+        variant = "dev"
+    else:
+        variant = "fast"
+    dev_two_stage_ready = (
+        variant == "dev"
+        and self._spatial_upsampler_filename in file_paths
+        and self._distilled_lora_filename in file_paths
+    )
+    required_roles = (
+        ("checkpoint", "spatial_upsampler", "text_encoder")
+        if variant == "fast"
+        else ("checkpoint", "text_encoder")
+    )
+    implemented_tasks = (
+        [
+            "video.generate",
+            "video.condition.image",
+            "video.condition.video",
+            "video.condition.audio",
+            "video.retake",
+        ]
+        if variant == "fast"
+        else (
+            [
+                "video.generate",
+                "video.condition.image",
+                "video.interpolate",
+                "video.retake",
+            ]
+            if dev_two_stage_ready
+            else ["video.generate", "video.condition.image", "video.retake"]
+        )
+    )
+    if variant == "fast":
+        pipeline_variants = ["distilled_two_stage"]
+    elif dev_two_stage_ready:
+        pipeline_variants = ["one_stage", "two_stage", "two_stage_hq"]
+    else:
+        pipeline_variants = ["one_stage"]
     return FamilyInspection(
         family=self.family_id,
-        variant="fast",
-        tasks=("video.generate", "video.condition.image", "video.condition.audio"),
+        variant=variant,
+        tasks=tuple(implemented_tasks),
         scheduler_class="media_video_dit",
         metadata={
             "source_provider": source.provider,
-            "required_source_roles": list(self._required_roles),
+            "required_source_roles": list(required_roles),
             "role_candidates": role_candidates,
             "bundle_ready": "bundle" in role_candidates,
-            "implemented_tasks": [
-                "video.generate",
-                "video.condition.image",
-                "video.condition.audio",
+            "implemented_tasks": implemented_tasks,
+            "implemented_pipeline_variants": pipeline_variants,
+            "checkpoint_variants": [
+                filename.removesuffix(".safetensors")
+                for filename in self._checkpoint_filenames
+                if filename in file_paths
             ],
             "upstream_tasks": [
                 "video.generate",
@@ -59,12 +105,14 @@ def fetch_policy_for_conversion(
 ) -> FetchPolicy:
     del source
     allow_patterns: tuple[str, ...]
-    if role not in (*self._required_roles, "bundle"):
+    if role not in (*self._required_roles, *self._optional_roles, "bundle"):
         raise ValueError(f"LTX does not support conversion role '{role}'")
     if role == "checkpoint":
-        allow_patterns = (self._checkpoint_filename, "*.json")
+        allow_patterns = (*self._checkpoint_filenames, "*.json")
     elif role == "spatial_upsampler":
         allow_patterns = (self._spatial_upsampler_filename, "*.json")
+    elif role == "distilled_lora":
+        allow_patterns = (self._distilled_lora_filename, "*.json")
     elif role == "text_encoder":
         allow_patterns = (
             "*.json",
@@ -75,8 +123,9 @@ def fetch_policy_for_conversion(
         )
     else:
         allow_patterns = (
-            self._checkpoint_filename,
+            *self._checkpoint_filenames,
             self._spatial_upsampler_filename,
+            self._distilled_lora_filename,
             "*.json",
             "*.safetensors",
             "*.txt",
@@ -100,16 +149,84 @@ def convert(
     plan: ConversionPlan,
 ) -> PortableArtifact:
     prepared = self._prepare_components(sources)
+    checkpoint_variant = _checkpoint_variant(self, prepared["checkpoint"].source_path)
+    required_roles = (
+        ("checkpoint", "spatial_upsampler", "text_encoder")
+        if checkpoint_variant == "fast"
+        else ("checkpoint", "text_encoder")
+    )
+    implemented_tasks = (
+        [
+            "video.generate",
+            "video.condition.image",
+            "video.condition.video",
+            "video.condition.audio",
+            "video.retake",
+        ]
+        if checkpoint_variant == "fast"
+        else (
+            [
+                "video.generate",
+                "video.condition.image",
+                "video.interpolate",
+                "video.retake",
+            ]
+            if {"spatial_upsampler", "distilled_lora"} <= set(prepared)
+            else ["video.generate", "video.condition.image", "video.retake"]
+        )
+    )
+    if checkpoint_variant == "fast":
+        pipeline_variants = ["distilled_two_stage"]
+    elif {"spatial_upsampler", "distilled_lora"} <= set(prepared):
+        pipeline_variants = ["one_stage", "two_stage", "two_stage_hq"]
+    else:
+        pipeline_variants = ["one_stage"]
+    conditioning = (
+        {"image": True, "video": True, "audio": True, "lora": True}
+        if checkpoint_variant == "fast"
+        else {"image": True, "video": True, "audio": False, "lora": False}
+    )
     component_records, payload_items = self._artifact_components(prepared)
     artifact_digest = self._artifact_digest(component_records, plan)
     primary_provenance = prepared["checkpoint"].provenance
     policy = self._combined_policy(prepared)
+    dependencies: dict[str, dict[str, object]] = {
+        "checkpoint": {
+            "required": True,
+            "role": "checkpoint",
+            "kind": "file",
+        },
+        "text_encoder": {
+            "required": True,
+            "role": "text_encoder",
+            "kind": "directory",
+            "mode": "strict-local",
+        },
+        "media_encode": {"required": True, "policy": "runtime-managed"},
+    }
+    if checkpoint_variant == "fast":
+        dependencies["spatial_upsampler"] = {
+            "required": True,
+            "role": "spatial_upsampler",
+            "kind": "file",
+        }
+    else:
+        dependencies["spatial_upsampler"] = {
+            "required": False,
+            "role": "spatial_upsampler",
+            "kind": "file",
+        }
+        dependencies["distilled_lora"] = {
+            "required": False,
+            "role": "distilled_lora",
+            "kind": "file",
+        }
     capability = CapabilityDescriptor(
         model_id=plan.model_id,
         artifact_digest=artifact_digest,
         family=self.family_id,
-        family_variant="fast",
-        tasks=["video.generate", "video.condition.image", "video.condition.audio"],
+        family_variant=checkpoint_variant,
+        tasks=implemented_tasks,
         modalities_in=["text", "image", "audio"],
         modalities_out=["video", "audio"],
         constraints={
@@ -117,12 +234,8 @@ def convert(
             "height": {"multiple_of": 32},
             "num_frames": {"formula": "8n+1"},
         },
-        conditioning={"image": True, "video": False, "audio": True, "lora": False},
-        profiles_by_task={
-            "video.generate": ["bf16"],
-            "video.condition.image": ["bf16"],
-            "video.condition.audio": ["bf16"],
-        },
+        conditioning=conditioning,
+        profiles_by_task={task: ["bf16"] for task in implemented_tasks},
         streaming={
             "progress_events": True,
             "partial_artifacts": False,
@@ -141,39 +254,26 @@ def convert(
                 notes="Reduced profiles only; benchmark-gated",
             ),
         ],
-        dependencies={
-            "checkpoint": {
-                "required": True,
-                "role": "checkpoint",
-                "kind": "file",
-            },
-            "spatial_upsampler": {
-                "required": True,
-                "role": "spatial_upsampler",
-                "kind": "file",
-            },
-            "text_encoder": {
-                "required": True,
-                "role": "text_encoder",
-                "kind": "directory",
-                "mode": "strict-local",
-            },
-            "media_encode": {"required": True, "policy": "runtime-managed"},
-        },
+        dependencies=dependencies,
         policy=policy,
         extensions_schema=ExtensionSchemaDescriptor(namespace="ltx", version="1"),
         metadata={
             "artifact_layout": "componentized_payload",
             "precision": plan.precision,
+            "checkpoint_variant": checkpoint_variant,
             "primary_component_role": "checkpoint",
             "source_count": len(sources),
+            "stage_ids": [
+                "prompt_encode",
+                "condition_inputs",
+                "generate",
+                "encode_output",
+            ],
             "implemented_surface": {
                 "tasks": [
-                    "video.generate",
-                    "video.condition.image",
-                    "video.condition.audio",
+                    *implemented_tasks,
                 ],
-                "pipeline_variants": ["distilled_two_stage"],
+                "pipeline_variants": pipeline_variants,
                 "artifact_formats": ["mp4", "wav"],
                 "audio_output_modes": ["muxed_mp4", "wav"],
             },
@@ -195,6 +295,7 @@ def convert(
                 "control_variants": [
                     "ic_lora",
                     "union_ic_lora",
+                    "motion_track_control",
                     "distilled_lora",
                 ],
             },
@@ -205,7 +306,7 @@ def convert(
         model_id=plan.model_id,
         artifact_digest=artifact_digest,
         family=self.family_id,
-        family_variant="fast",
+        family_variant=checkpoint_variant,
         format_version="0.2.0",
         weight_format="source_packaged_fastpath_assets",
         storage_key=f"ltx/{plan.model_id}/{artifact_digest}",
@@ -214,8 +315,9 @@ def convert(
         components=component_records,
         metadata={
             "artifact_layout": "componentized_payload",
+            "checkpoint_variant": checkpoint_variant,
             "primary_component_role": "checkpoint",
-            "required_source_roles": list(self._required_roles),
+            "required_source_roles": list(required_roles),
             "source_count": len(sources),
         },
     )
@@ -269,3 +371,13 @@ def capabilities(
     self: LTXFamilyAdapter, artifact: PortableArtifact
 ) -> CapabilityDescriptor:
     return artifact.record.capability
+
+
+def _checkpoint_variant(self: LTXFamilyAdapter, checkpoint_path: Path) -> str:
+    if checkpoint_path.name == self._checkpoint_filename:
+        return "fast"
+    if checkpoint_path.name == self._dev_checkpoint_filename:
+        return "dev"
+    raise ValueError(
+        f"LTX checkpoint '{checkpoint_path.name}' does not match a known checkpoint variant"
+    )

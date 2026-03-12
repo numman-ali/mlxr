@@ -191,6 +191,7 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not move hotspots into native code before profiling evidence exists.
 - Do not let compatibility facades become the de facto core API.
 - Do not let model-family bridges silently default or reshape through critical config or weight mismatches; fail closed when the checkpoint contract is uncertain.
+- Do not introduce or depend on external family-execution bridge libraries for runtime support. New family execution paths must be built on owned `MLXR` code plus official `MLX` and core shared libraries, using upstream model contracts rather than third-party runtime implementations as the implementation template.
 - Do not treat pipeline completion as visual correctness on model-family bring-up; promote claims only after stage-local and human-visible validation.
 - Do not use file-level validation bypasses such as `# mypy: ignore-errors` as a shortcut. If typing is broken, fix the typing, narrow the seam, add the needed stubs or protocols, or delete the dead code.
 - Do not hide validation debt behind broad suppressions. Per-line ignores must be rare, specific, and justified by a real upstream typing gap, not by local convenience.

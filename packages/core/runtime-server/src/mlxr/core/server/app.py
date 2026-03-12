@@ -349,6 +349,49 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
         )
         return record
 
+    @app.post("/v1/inputs/import-file", response_model=InputHandleRecord)
+    async def import_input_file(
+        request: Request,
+        filename: str,
+        media_type: str | None = None,
+        role: str | None = None,
+    ) -> InputHandleRecord:
+        guard_mutation(request)
+        handle_id = f"inp_{uuid.uuid4().hex}"
+        record = InputHandleRecord(
+            handle_id=handle_id,
+            media_type=media_type,
+            role=role,
+            filename=filename or f"{handle_id}.bin",
+            storage_key=runtime.runtime_home.input_storage_key(
+                handle_id, filename or f"{handle_id}.bin"
+            ),
+            created_at=datetime.now(timezone.utc),
+        )
+        payload_path = runtime.input_store.payload_path(record)
+        payload_path.parent.mkdir(parents=True, exist_ok=True)
+        size_bytes = 0
+        try:
+            with payload_path.open("wb") as handle:
+                async for chunk in request.stream():
+                    if not chunk:
+                        continue
+                    handle.write(chunk)
+                    size_bytes += len(chunk)
+            saved = runtime.input_store.persist(
+                record.model_copy(update={"size_bytes": size_bytes})
+            )
+        except Exception:
+            payload_path.unlink(missing_ok=True)
+            raise
+        logger.info(
+            "Input imported from streamed payload handle_id=%s media_type=%s size_bytes=%s",
+            saved.handle_id,
+            saved.media_type,
+            saved.size_bytes,
+        )
+        return saved
+
     @app.get("/v1/inputs", response_model=list[InputHandleRecord])
     def list_inputs() -> list[InputHandleRecord]:
         return runtime.input_store.list_records()

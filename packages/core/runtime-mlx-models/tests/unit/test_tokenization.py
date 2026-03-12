@@ -20,6 +20,8 @@ class _FakeHFTokenizer:
         self.pad_token: str | None = None
         self.eos_token: str | None = "</s>"
         self.last_prompt: str | None = None
+        self.last_messages: list[dict[str, str]] | None = None
+        self.last_enable_thinking: bool | None = None
 
     def __call__(
         self,
@@ -46,6 +48,19 @@ class _FakeHFTokenizer:
         del skip_special_tokens
         return ",".join(str(token) for token in token_ids)
 
+    def apply_chat_template(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        tokenize: bool,
+        add_generation_prompt: bool,
+        enable_thinking: bool | None = None,
+    ) -> str:
+        del tokenize, add_generation_prompt
+        self.last_messages = messages
+        self.last_enable_thinking = enable_thinking
+        return f"formatted::{messages[0]['content']}"
+
 
 class TokenizationTests(unittest.TestCase):
     def test_transformers_wrapper_encodes_and_decodes(self) -> None:
@@ -56,7 +71,7 @@ class TokenizationTests(unittest.TestCase):
         self.assertEqual(encoded.input_ids.shape, (1, 4))
         self.assertEqual(encoded.attention_mask.shape, (1, 4))
         self.assertEqual(tokenizer.decode_tokens([1, 2, 3]), "1,2,3")
-        self.assertEqual(fake.last_prompt, "hello")
+        self.assertEqual(fake.last_prompt, "  hello  ")
 
     def test_load_local_text_tokenizer_sets_left_padding_and_pad_token(self) -> None:
         fake_tokenizer = _FakeHFTokenizer()
@@ -84,6 +99,23 @@ class TokenizationTests(unittest.TestCase):
                     "Tokenizer must define pad_token or eos_token",
                 ):
                     load_local_text_tokenizer(Path(tmp_dir), model_max_length=64)
+
+    def test_transformers_wrapper_formats_chat_prompt(self) -> None:
+        fake = _FakeHFTokenizer()
+        tokenizer = TransformersTextTokenizer(fake)
+
+        formatted = tokenizer.format_chat_prompt(
+            "  describe a red fox  ",
+            add_generation_prompt=True,
+            enable_thinking=True,
+        )
+
+        self.assertEqual(formatted, "formatted::describe a red fox")
+        self.assertEqual(
+            fake.last_messages,
+            [{"role": "user", "content": "describe a red fox"}],
+        )
+        self.assertTrue(fake.last_enable_thinking)
 
 
 if __name__ == "__main__":

@@ -81,6 +81,31 @@ Current repo implication:
 - internal intent splitting is allowed, but the default UI should not expose a
   compulsory audio-prompt and video-prompt split
 
+### Desktop compatibility contract
+
+Authoritative references:
+
+- `references/official/ltx-desktop/backend/_routes/generation.py`
+- `references/official/ltx-desktop/backend/api_types.py`
+- `references/official/ltx-desktop/frontend/hooks/use-generation.ts`
+- `references/official/ltx-desktop/backend/runtime_config/runtime_policy.py`
+
+Use these for:
+
+- the current desktop backend HTTP contract
+- snake_case versus camelCase response-shape expectations
+- trusted-local path expectations at the host seam
+- the current Darwin API-only policy the runtime is meant to replace
+
+Current repo implication:
+
+- `packages/adapters/ltx-desktop/` should preserve desktop compatibility as a
+  thin host adapter
+- desktop path-passing should remain a host-local compatibility seam, not the
+  generic runtime HTTP contract
+- local desktop support should be described separately from the broader `LTX`
+  capability backlog
+
 ### Scheduler and sigma schedules
 
 Authoritative references:
@@ -175,6 +200,10 @@ Current repo implication:
   row
 - start/end frame support should map truthfully to interpolation, retake, or
   keyframe semantics instead of being invented as a vague extra feature
+- `video.condition.video` should be treated as the official `ICLoraPipeline`
+  reference-video row
+- `video.retake` should be treated as the separate official `RetakePipeline`
+  row
 
 ### Asset contract
 

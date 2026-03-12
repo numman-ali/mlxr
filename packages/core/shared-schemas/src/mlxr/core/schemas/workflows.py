@@ -34,6 +34,8 @@ class WorkflowIntent(BaseModel):
 
     model_id: str
     prompt: str
+    task: str | None = None
+    negative_prompt: str | None = None
     references: list[WorkflowReference] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)
     output: JobOutputPolicy = Field(default_factory=JobOutputPolicy)

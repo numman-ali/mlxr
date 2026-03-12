@@ -104,6 +104,24 @@ Platform implication:
 
 The current desktop product still forces API generations on Darwin. That is the clearest product gap this runtime is meant to close.
 
+### `backend/_routes/generation.py` and `backend/api_types.py`
+
+The current desktop backend compatibility surface is explicit and small:
+
+- `POST /api/generate`
+- `POST /api/generate/cancel`
+- `GET /api/generation/progress`
+- `GenerateVideoResponse.status` plus `video_path`
+- `GenerationProgressResponse` with camelCase `currentStep` and `totalSteps`
+
+Platform implication:
+
+- a truthful `ltx-desktop` adapter can stay thin if it preserves this contract
+- the adapter must translate desktop-local file paths into runtime input
+  handles and translate runtime output artifacts back into a local
+  `video_path`
+- progress translation is part of the product contract, not optional polish
+
 ### `backend/services/fast_video_pipeline/fast_video_pipeline.py`
 
 The current local pipeline protocol is path-based:
@@ -142,6 +160,25 @@ Platform implication:
 - the shared runtime should own pipeline lifecycle and admission logic
 - the desktop adapter should stop being the scheduler
 
+### `frontend/hooks/use-generation.ts`
+
+Current desktop behavior:
+
+- the renderer posts one synchronous `/api/generate` request
+- progress is polled separately from `/api/generation/progress`
+- image and audio inputs are passed as trusted local file paths
+- the UI expects a final `video_path` string and then converts that path into a
+  `file://` URL locally
+
+Platform implication:
+
+- the first desktop adapter target is compatibility with this product shell,
+  not re-designing the desktop request contract first
+- `MLXR` should treat this as a host-adapter translation problem, not as a
+  reason to leak raw paths into the generic runtime HTTP API
+- desktop compatibility needs explicit response-shape tests, not just manual UI
+  smoke checks
+
 ### `backend/runtime_config/model_download_specs.py`
 
 Current behavior:
@@ -152,6 +189,19 @@ Current behavior:
 Platform implication:
 
 - provider and provenance logic should absorb this into a general source model instead of leaving it as desktop-local policy
+
+### `backend/_routes/image_gen.py` and `README.md`
+
+The current official desktop product also includes a separate image-generation
+surface backed by `Z Image Turbo` in API mode.
+
+Platform implication:
+
+- desktop support pressure is no longer only "make LTX video generation local"
+- the first honest image-family candidate for the platform should now be
+  evaluated against both the benchmark matrix and the desktop product surface
+- `Z-Image` is now a better first-class image-family reference than leaving the
+  image slot as an abstract "some diffusion model later"
 
 ## Current First-Slice Runtime Artifact Shape
 
@@ -215,6 +265,14 @@ Official upstream currently treats:
 - `TI2VidOneStagePipeline` as educational
 - `ICLoraPipeline`, `KeyframeInterpolationPipeline`,
   `A2VidPipelineTwoStage`, and `RetakePipeline` as current control/editing rows
+
+The most important naming consequence for `MLXR` is:
+
+- `video.condition.video` should map to the official `ICLoraPipeline`
+  reference-video row
+- `video.retake` should map to the official `RetakePipeline` row
+- those are separate backlog items and should not be blurred together under a
+  vague "video-to-video" label
 
 So the repo should not speak as if “distilled” already covers the whole LTX
 family, or as if recommended/HQ work is just profile scaling. It is a real

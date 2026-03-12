@@ -11,9 +11,20 @@ from mlxr.core.schemas import ArtifactHandle
 
 from ..family_options import (
     DistilledGuidanceMode,
+    conditioning_attention_strength_from_extensions,
+    control_variant_from_extensions,
     distilled_guidance_mode_from_extensions,
+    hq_stage_1_distilled_lora_strength_from_extensions,
+    hq_stage_2_distilled_lora_strength_from_extensions,
 )
-from ..generation import AudioConditioningInput, ConditioningInput, VideoGenerator
+from ..generation import (
+    AudioConditioningInput,
+    ConditioningInput,
+    LoraInput,
+    RetakeOptions,
+    VideoGenerator,
+    VideoReferenceInput,
+)
 from ..prompt_encoding import PromptEncoder
 from .state import LoadedLTXRuntimeState
 
@@ -90,23 +101,50 @@ def run_stage(
         )
     if stage.stage_id == "condition_inputs":
         prepared_inputs = self._prepared_conditioning_inputs(stage)
+        prepared_videos = self._prepared_video_inputs(stage)
+        prepared_loras = self._prepared_lora_inputs(stage)
         audio_conditioning = self._prepared_audio_conditioning_input(stage)
+        retake_options = self._retake_options(stage)
         if runtime_state is None:
             return StageResult(
                 metrics={
                     "stage": stage.stage_id,
                     "status": "placeholder",
                     "conditioning_count": len(prepared_inputs),
+                    "video_input_count": len(prepared_videos),
+                    "lora_input_count": len(prepared_loras),
                     "audio_conditioned": audio_conditioning is not None,
+                    "retake_enabled": retake_options is not None,
                 }
             )
         runtime_state.conditioning_inputs = prepared_inputs
+        runtime_state.video_inputs = prepared_videos
+        runtime_state.lora_inputs = prepared_loras
         runtime_state.audio_conditioning = audio_conditioning
+        runtime_state.retake_options = retake_options
         task = self._stage_task(stage)
         if task == "video.condition.image" and not prepared_inputs:
             raise ValueError(
                 "video.condition.image requires at least one resolved conditioning image"
             )
+        if task == "video.condition.video":
+            if len(prepared_videos) != 1:
+                raise ValueError(
+                    "video.condition.video requires exactly one resolved reference video"
+                )
+            if len(prepared_loras) != 1:
+                raise ValueError(
+                    "video.condition.video requires exactly one resolved LoRA input"
+                )
+        if task == "video.retake":
+            if len(prepared_videos) != 1:
+                raise ValueError(
+                    "video.retake requires exactly one resolved source video"
+                )
+            if retake_options is None:
+                raise ValueError(
+                    "video.retake requires retake timing options in params"
+                )
         if task == "video.condition.audio" and audio_conditioning is None:
             raise ValueError(
                 "video.condition.audio requires one resolved conditioning audio input"
@@ -116,17 +154,23 @@ def run_stage(
                 "stage": stage.stage_id,
                 "status": (
                     "prepared"
-                    if prepared_inputs or audio_conditioning is not None
+                    if prepared_inputs
+                    or audio_conditioning is not None
+                    or prepared_videos
+                    or prepared_loras
                     else "skipped"
                 ),
                 "conditioning_count": len(prepared_inputs),
                 "frame_indices": [item.frame_index for item in prepared_inputs],
+                "video_input_count": len(prepared_videos),
+                "lora_input_count": len(prepared_loras),
                 "audio_conditioned": audio_conditioning is not None,
                 "audio_handle_id": (
                     audio_conditioning.handle_id
                     if audio_conditioning is not None
                     else None
                 ),
+                "retake_enabled": retake_options is not None,
             }
         )
     if stage.stage_id == "generate":
@@ -152,11 +196,32 @@ def run_stage(
         _apply_family_stage_options(
             generator,
             distilled_guidance_mode=self._distilled_guidance_mode(stage),
+            hq_stage_1_distilled_lora_strength=self._hq_stage_1_distilled_lora_strength(
+                stage
+            ),
+            hq_stage_2_distilled_lora_strength=self._hq_stage_2_distilled_lora_strength(
+                stage
+            ),
+            control_variant=self._control_variant(stage),
+            conditioning_attention_strength=self._conditioning_attention_strength(
+                stage
+            ),
         )
         generated_video = generator.generate(
             prompt_context=runtime_state.prompt_context,
+            task=self._stage_task(stage),
             conditioning_inputs=runtime_state.conditioning_inputs,
+            video_inputs=runtime_state.video_inputs,
+            lora_inputs=runtime_state.lora_inputs,
             audio_conditioning=runtime_state.audio_conditioning,
+            retake_options=runtime_state.retake_options,
+            control_variant=self._control_variant(stage),
+            conditioning_attention_strength=self._conditioning_attention_strength(
+                stage
+            ),
+            pipeline_variant=self._pipeline_variant(stage),
+            num_inference_steps=self._num_inference_steps(stage),
+            guidance_scale=self._guidance_scale(stage),
             width=self._stage_dimension(stage.params.get("width"), name="width"),
             height=self._stage_dimension(stage.params.get("height"), name="height"),
             num_frames=self._num_frames(stage),
@@ -259,7 +324,10 @@ def unload(self: LTXFamilyAdapter, loaded: LoadedModelHandle) -> None:
             runtime_state.video_generator = None
         runtime_state.prompt_context = None
         runtime_state.conditioning_inputs = ()
+        runtime_state.video_inputs = ()
+        runtime_state.lora_inputs = ()
         runtime_state.audio_conditioning = None
+        runtime_state.retake_options = None
         runtime_state.generated_video = None
         loaded.metadata.pop(self._runtime_state_key, None)
     return None
@@ -291,9 +359,12 @@ def _video_generator(
 ) -> VideoGenerator:
     if runtime_state.video_generator is None:
         adapter_module = import_module("mlxr.families.ltx.adapter")
+        spatial_upsampler_path = runtime_state.component_paths.get("spatial_upsampler")
+        distilled_lora_path = runtime_state.component_paths.get("distilled_lora")
         runtime_state.video_generator = adapter_module.create_video_generator(
             checkpoint_path=runtime_state.component_paths["checkpoint"],
-            spatial_upsampler_path=runtime_state.component_paths["spatial_upsampler"],
+            spatial_upsampler_path=spatial_upsampler_path,
+            distilled_lora_path=distilled_lora_path,
         )
     return runtime_state.video_generator
 
@@ -413,6 +484,127 @@ def _prepared_audio_conditioning_input(
     )
 
 
+def _prepared_video_inputs(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> tuple[VideoReferenceInput, ...]:
+    resolved_inputs = stage.params.get("resolved_inputs")
+    if resolved_inputs is None:
+        return ()
+    if not isinstance(resolved_inputs, dict):
+        raise ValueError("LTX stage params.resolved_inputs must be an object")
+    raw_videos = resolved_inputs.get("videos", [])
+    if not isinstance(raw_videos, list):
+        raise ValueError("LTX resolved video inputs must be a list")
+
+    prepared: list[VideoReferenceInput] = []
+    for entry in raw_videos:
+        if not isinstance(entry, dict):
+            raise ValueError("LTX resolved video entries must be objects")
+        handle_id = self._require_str(entry.get("input_handle"), "input_handle")
+        payload_path = Path(
+            self._require_str(entry.get("payload_path"), "payload_path")
+        )
+        if not payload_path.is_file():
+            raise ValueError(
+                f"LTX resolved video payload '{payload_path}' does not exist"
+            )
+        strength = entry.get("strength", 1.0)
+        if not isinstance(strength, (int, float)):
+            raise ValueError("LTX video strength must be numeric")
+        strength_value = float(strength)
+        if not 0.0 <= strength_value <= 1.0:
+            raise ValueError("LTX video strength must be between 0.0 and 1.0")
+        media_type = entry.get("media_type")
+        filename = entry.get("filename")
+        prepared.append(
+            VideoReferenceInput(
+                handle_id=handle_id,
+                payload_path=payload_path,
+                strength=strength_value,
+                media_type=media_type if isinstance(media_type, str) else None,
+                filename=filename if isinstance(filename, str) else None,
+            )
+        )
+    return tuple(prepared)
+
+
+def _prepared_lora_inputs(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> tuple[LoraInput, ...]:
+    resolved_inputs = stage.params.get("resolved_inputs")
+    if resolved_inputs is None:
+        return ()
+    if not isinstance(resolved_inputs, dict):
+        raise ValueError("LTX stage params.resolved_inputs must be an object")
+    raw_loras = resolved_inputs.get("loras", [])
+    if not isinstance(raw_loras, list):
+        raise ValueError("LTX resolved LoRA inputs must be a list")
+
+    prepared: list[LoraInput] = []
+    for entry in raw_loras:
+        if not isinstance(entry, dict):
+            raise ValueError("LTX resolved LoRA entries must be objects")
+        handle_id = self._require_str(entry.get("input_handle"), "input_handle")
+        payload_path = Path(
+            self._require_str(entry.get("payload_path"), "payload_path")
+        )
+        if not payload_path.is_file():
+            raise ValueError(
+                f"LTX resolved LoRA payload '{payload_path}' does not exist"
+            )
+        strength = entry.get("strength", 1.0)
+        if not isinstance(strength, (int, float)):
+            raise ValueError("LTX LoRA strength must be numeric")
+        strength_value = float(strength)
+        if strength_value <= 0.0:
+            raise ValueError("LTX LoRA strength must be greater than 0.0")
+        media_type = entry.get("media_type")
+        filename = entry.get("filename")
+        prepared.append(
+            LoraInput(
+                handle_id=handle_id,
+                payload_path=payload_path,
+                strength=strength_value,
+                media_type=media_type if isinstance(media_type, str) else None,
+                filename=filename if isinstance(filename, str) else None,
+            )
+        )
+    return tuple(prepared)
+
+
+def _retake_options(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> RetakeOptions | None:
+    if self._stage_task(stage) != "video.retake":
+        return None
+    start_time_seconds = stage.params.get("window_start_seconds")
+    end_time_seconds = stage.params.get("window_end_seconds")
+    if not isinstance(start_time_seconds, (int, float)):
+        raise ValueError("LTX retake requires numeric params.window_start_seconds")
+    if not isinstance(end_time_seconds, (int, float)):
+        raise ValueError("LTX retake requires numeric params.window_end_seconds")
+    start_value = float(start_time_seconds)
+    end_value = float(end_time_seconds)
+    if start_value < 0.0:
+        raise ValueError("LTX retake window_start_seconds must be >= 0.0")
+    if end_value <= start_value:
+        raise ValueError(
+            "LTX retake window_end_seconds must be greater than window_start_seconds"
+        )
+    regenerate_video = stage.params.get("regenerate_video", True)
+    regenerate_audio = stage.params.get("regenerate_audio", True)
+    if not isinstance(regenerate_video, bool):
+        raise ValueError("LTX retake regenerate_video must be boolean when provided")
+    if not isinstance(regenerate_audio, bool):
+        raise ValueError("LTX retake regenerate_audio must be boolean when provided")
+    return RetakeOptions(
+        start_time_seconds=start_value,
+        end_time_seconds=end_value,
+        regenerate_video=regenerate_video,
+        regenerate_audio=regenerate_audio,
+    )
+
+
 def _stage_dimension(self: LTXFamilyAdapter, value: object, *, name: str) -> int:
     if value is None:
         return 768 if name == "width" else 512
@@ -448,6 +640,24 @@ def _seed(self: LTXFamilyAdapter, stage: ExecutionStage) -> int | None:
     return value
 
 
+def _num_inference_steps(self: LTXFamilyAdapter, stage: ExecutionStage) -> int | None:
+    value = stage.params.get("num_inference_steps")
+    if value is None:
+        return None
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError("LTX num_inference_steps must be a positive integer")
+    return value
+
+
+def _guidance_scale(self: LTXFamilyAdapter, stage: ExecutionStage) -> float | None:
+    value = stage.params.get("guidance_scale")
+    if value is None:
+        return None
+    if not isinstance(value, (int, float)) or float(value) < 0.0:
+        raise ValueError("LTX guidance_scale must be numeric and >= 0.0")
+    return float(value)
+
+
 def _distilled_guidance_mode(
     self: LTXFamilyAdapter, stage: ExecutionStage
 ) -> DistilledGuidanceMode:
@@ -456,11 +666,49 @@ def _distilled_guidance_mode(
     )
 
 
+def _hq_stage_1_distilled_lora_strength(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> float:
+    return hq_stage_1_distilled_lora_strength_from_extensions(
+        stage.params.get("family_extensions")
+    )
+
+
+def _hq_stage_2_distilled_lora_strength(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> float:
+    return hq_stage_2_distilled_lora_strength_from_extensions(
+        stage.params.get("family_extensions")
+    )
+
+
+def _control_variant(self: LTXFamilyAdapter, stage: ExecutionStage) -> str | None:
+    return control_variant_from_extensions(stage.params.get("family_extensions"))
+
+
+def _conditioning_attention_strength(
+    self: LTXFamilyAdapter, stage: ExecutionStage
+) -> float:
+    value = conditioning_attention_strength_from_extensions(
+        stage.params.get("family_extensions")
+    )
+    return 1.0 if value is None else value
+
+
 def _stage_task(self: LTXFamilyAdapter, stage: ExecutionStage) -> str:
     value = stage.params.get("task")
     if isinstance(value, str) and value:
         return value
     return "video.generate"
+
+
+def _pipeline_variant(self: LTXFamilyAdapter, stage: ExecutionStage) -> str:
+    family_extensions = stage.params.get("family_extensions")
+    if isinstance(family_extensions, dict):
+        raw_variant = family_extensions.get("workflow_variant")
+        if isinstance(raw_variant, str) and raw_variant:
+            return raw_variant
+    return "distilled_two_stage"
 
 
 def _negative_prompt_text(
@@ -478,7 +726,33 @@ def _negative_prompt_text(
 
 
 def _apply_family_stage_options(
-    generator: VideoGenerator, *, distilled_guidance_mode: DistilledGuidanceMode
+    generator: VideoGenerator,
+    *,
+    distilled_guidance_mode: DistilledGuidanceMode,
+    hq_stage_1_distilled_lora_strength: float,
+    hq_stage_2_distilled_lora_strength: float,
+    control_variant: str | None,
+    conditioning_attention_strength: float | None,
 ) -> None:
     if hasattr(generator, "guidance_mode"):
         setattr(generator, "guidance_mode", distilled_guidance_mode)
+    if hasattr(generator, "hq_stage_1_distilled_lora_strength"):
+        setattr(
+            generator,
+            "hq_stage_1_distilled_lora_strength",
+            hq_stage_1_distilled_lora_strength,
+        )
+    if hasattr(generator, "hq_stage_2_distilled_lora_strength"):
+        setattr(
+            generator,
+            "hq_stage_2_distilled_lora_strength",
+            hq_stage_2_distilled_lora_strength,
+        )
+    if hasattr(generator, "control_variant"):
+        setattr(generator, "control_variant", control_variant)
+    if hasattr(generator, "conditioning_attention_strength"):
+        setattr(
+            generator,
+            "conditioning_attention_strength",
+            conditioning_attention_strength,
+        )

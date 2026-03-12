@@ -43,6 +43,14 @@ class TextTokenizer(Protocol):
         skip_special_tokens: bool = True,
     ) -> str: ...
 
+    def format_chat_prompt(
+        self,
+        prompt: str,
+        *,
+        add_generation_prompt: bool = True,
+        enable_thinking: bool | None = None,
+    ) -> str: ...
+
 
 def _require_numpy_array(
     value: object,
@@ -92,9 +100,8 @@ class TransformersTextTokenizer:
         truncation: bool = True,
         padding: str = "max_length",
     ) -> EncodedText:
-        normalized_prompt = prompt.strip()
         encoded = self._tokenizer(
-            normalized_prompt,
+            prompt,
             return_tensors="np",
             max_length=max_length,
             truncation=truncation,
@@ -122,6 +129,30 @@ class TransformersTextTokenizer:
                 skip_special_tokens=skip_special_tokens,
             )
         )
+
+    def format_chat_prompt(
+        self,
+        prompt: str,
+        *,
+        add_generation_prompt: bool = True,
+        enable_thinking: bool | None = None,
+    ) -> str:
+        apply_chat_template = getattr(self._tokenizer, "apply_chat_template", None)
+        if not callable(apply_chat_template):
+            raise ValueError("Tokenizer does not provide apply_chat_template")
+        template_kwargs: dict[str, object] = {
+            "tokenize": False,
+            "add_generation_prompt": add_generation_prompt,
+        }
+        if enable_thinking is not None:
+            template_kwargs["enable_thinking"] = enable_thinking
+        formatted = apply_chat_template(
+            [{"role": "user", "content": prompt.strip()}],
+            **template_kwargs,
+        )
+        if not isinstance(formatted, str):
+            raise RuntimeError("Tokenizer apply_chat_template did not return a string")
+        return formatted
 
 
 def load_local_text_tokenizer(

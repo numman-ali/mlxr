@@ -11,7 +11,10 @@ from ..generation import (
     AudioConditioningInput,
     ConditioningInput,
     GeneratedVideo,
+    LoraInput,
+    RetakeOptions,
     VideoGenerator,
+    VideoReferenceInput,
 )
 from ..prompt_encoding import PromptEncodingResult
 from .conditioning import (
@@ -24,14 +27,24 @@ from .conditioning import (
 @dataclass(slots=True)
 class LTXPreviewVideoGenerator(VideoGenerator):
     checkpoint_path: Path
-    spatial_upsampler_path: Path
+    spatial_upsampler_path: Path | None
+    distilled_lora_path: Path | None
 
     def generate(
         self,
         *,
         prompt_context: PromptEncodingResult,
+        task: str = "video.generate",
         conditioning_inputs: tuple[ConditioningInput, ...],
+        video_inputs: tuple[VideoReferenceInput, ...] = (),
+        lora_inputs: tuple[LoraInput, ...] = (),
         audio_conditioning: AudioConditioningInput | None = None,
+        retake_options: RetakeOptions | None = None,
+        control_variant: str | None = None,
+        conditioning_attention_strength: float | None = None,
+        pipeline_variant: str = "distilled_two_stage",
+        num_inference_steps: int | None = None,
+        guidance_scale: float | None = None,
         width: int,
         height: int,
         num_frames: int,
@@ -61,7 +74,18 @@ class LTXPreviewVideoGenerator(VideoGenerator):
                 height=height,
                 num_frames=num_frames,
             )
-        del audio_conditioning
+        del (
+            audio_conditioning,
+            conditioning_attention_strength,
+            control_variant,
+            guidance_scale,
+            num_inference_steps,
+            pipeline_variant,
+            retake_options,
+            task,
+            video_inputs,
+            lora_inputs,
+        )
         frames_uint8 = np.asarray((mx.clip(frames, 0.0, 1.0) * 255.0).astype(mx.uint8))
         return GeneratedVideo(
             frames=frames_uint8,

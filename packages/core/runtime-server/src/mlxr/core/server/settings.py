@@ -27,6 +27,7 @@ class ServerSettings:
     http_bearer_token: str | None = None
     allowed_origins: tuple[str, ...] = ()
     uds_path: str | None = None
+    job_execution_mode: str = "spawn"
 
     @classmethod
     def from_env(cls) -> "ServerSettings":
@@ -39,12 +40,18 @@ class ServerSettings:
             http_bearer_token=os.environ.get("MLX_RUNTIME_HTTP_TOKEN"),
             allowed_origins=_split_csv(os.environ.get("MLX_RUNTIME_ALLOWED_ORIGINS")),
             uds_path=os.environ.get("MLX_RUNTIME_UDS_PATH"),
+            job_execution_mode=os.environ.get("MLX_RUNTIME_JOB_EXECUTION_MODE", "spawn"),
         )
 
     def validate_startup(self) -> None:
         if self.http_enabled and not self.http_bearer_token:
             raise RuntimeError(
                 "MLX_RUNTIME_HTTP_TOKEN is required when loopback HTTP is enabled"
+            )
+        normalized_mode = self.job_execution_mode.strip().lower()
+        if normalized_mode not in {"spawn", "thread"}:
+            raise RuntimeError(
+                "MLX_RUNTIME_JOB_EXECUTION_MODE must be 'spawn' or 'thread'"
             )
 
     def origin_allowed(self, origin: str) -> bool:

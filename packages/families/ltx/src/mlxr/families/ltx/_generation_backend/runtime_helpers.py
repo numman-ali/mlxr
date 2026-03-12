@@ -32,6 +32,7 @@ from .config import (
     _runtime_model_config,
 )
 from .debug import _looks_like_metal_oom
+from .lora import apply_lora_deltas
 from .model_config import LTXModelConfig, LTXModelType
 from .outputs import _audio_waveform_to_numpy
 from .primitives import (
@@ -334,6 +335,67 @@ def _ensure_transformer(
     if self._transformer is not None:
         return self._transformer
 
+    transformer = _build_transformer(
+        self,
+        imports=imports,
+        runtime_config=runtime_config,
+        prompt_context=prompt_context,
+        lora_paths=(),
+        lora_scales=(),
+    )
+    self._transformer = transformer
+    return transformer
+
+
+def _ensure_transformer_with_loras(
+    self: _RuntimeHelperHost,
+    imports: _ReferenceImports,
+    runtime_config: _RuntimeModelConfig,
+    prompt_context: PromptEncodingResult,
+    *,
+    lora_paths: tuple[Path, ...],
+    lora_scales: tuple[float, ...],
+) -> _AudioVideoTransformer | _VideoTransformer:
+    if not lora_paths:
+        return _ensure_transformer(self, imports, runtime_config, prompt_context)
+    cache = self._transformer_lora_cache
+    cache_key = tuple(
+        (str(path), scale) for path, scale in zip(lora_paths, lora_scales, strict=True)
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    transformer = _build_transformer(
+        self,
+        imports=imports,
+        runtime_config=runtime_config,
+        prompt_context=prompt_context,
+        lora_paths=lora_paths,
+        lora_scales=lora_scales,
+    )
+    cache[cache_key] = transformer
+    return transformer
+
+
+def _release_transformers(self: _RuntimeHelperHost) -> None:
+    # Two-stage rows must drop both the base transformer and any LoRA-specialized
+    # variants before the next stage loads, otherwise MLX can hold multiple 22B
+    # transformers resident at once and push the worker into a hard kill.
+    self._transformer = None
+    self._transformer_lora_cache.clear()
+    mx.clear_cache()
+
+
+def _build_transformer(
+    self: _RuntimeHelperHost,
+    *,
+    imports: _ReferenceImports,
+    runtime_config: _RuntimeModelConfig,
+    prompt_context: PromptEncodingResult,
+    lora_paths: tuple[Path, ...],
+    lora_scales: tuple[float, ...],
+) -> _AudioVideoTransformer | _VideoTransformer:
+
     audio_enabled = bool(getattr(self, "_audio_enabled", True))
     config_dict: dict[str, object] = {
         "model_type": (
@@ -373,13 +435,20 @@ def _ensure_transformer(
     config.apply_gated_attention = runtime_config.apply_gated_attention
     config.cross_attention_adaln = runtime_config.cross_attention_adaln
     config.caption_proj_before_connector = prompt_context.caption_proj_before_connector
+    weights_override = _ensure_checkpoint_reader(self).load_prefixes(
+        ("model.diffusion_model.",)
+    )
+    if lora_paths:
+        weights_override = apply_lora_deltas(
+            weights_override,
+            lora_paths=lora_paths,
+            lora_scales=lora_scales,
+        )
     transformer: _AudioVideoTransformer | _VideoTransformer = LTXModel.from_pretrained(
         self.checkpoint_path,
         config=config,
         strict=True,
-        weights_override=_ensure_checkpoint_reader(self).load_prefixes(
-            ("model.diffusion_model.",)
-        ),
+        weights_override=weights_override,
     )
     if runtime_config.apply_gated_attention:
         first_block = transformer.transformer_blocks[0]
@@ -445,7 +514,6 @@ def _ensure_transformer(
                 )
     mx.eval(transformer.parameters())
     _release_checkpoint_reader(self)
-    self._transformer = transformer
     return transformer
 
 
@@ -491,7 +559,12 @@ def _ensure_vae_encoder(
 def _ensure_upsampler(
     self: _RuntimeHelperHost, imports: _ReferenceImports
 ) -> _UpsamplerLike:
+    del imports
     if self._upsampler is None:
+        if self.spatial_upsampler_path is None:
+            raise RuntimeError(
+                "LTX x2 spatial upsampler is required for this pipeline variant, but the current artifact does not include it"
+            )
         upsampler = _load_configured_upsampler(
             self.spatial_upsampler_path,
         )
@@ -718,6 +791,7 @@ def _prepare_conditionings(
     latent_frames: int,
     padded_shape: _PaddedShape,
     model_dtype: mx.Dtype,
+    replace_first_frame_latent: bool = True,
 ) -> _ConditioningPlan:
     if not conditioning_inputs:
         return _ConditioningPlan(stage1=(), stage2=())
@@ -750,23 +824,20 @@ def _prepare_conditionings(
             height=padded_shape.internal_height,
             dtype=model_dtype,
         )
+        conditioning_class = (
+            imports.latent_condition_class
+            if replace_first_frame_latent and resolved_index == 0
+            else imports.keyframe_condition_class
+        )
         stage1_conditionings.append(
-            (
-                imports.latent_condition_class
-                if resolved_index == 0
-                else imports.keyframe_condition_class
-            )(
+            conditioning_class(
                 latent=stage1_latent,
                 frame_idx=resolved_index,
                 strength=float(conditioning_input.strength),
             )
         )
         stage2_conditionings.append(
-            (
-                imports.latent_condition_class
-                if resolved_index == 0
-                else imports.keyframe_condition_class
-            )(
+            conditioning_class(
                 latent=stage2_latent,
                 frame_idx=resolved_index,
                 strength=float(conditioning_input.strength),

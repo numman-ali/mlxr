@@ -25,7 +25,20 @@ def _package_test_dirs() -> list[Path]:
 
 def _load_module_from_path(path: Path) -> ModuleType:
     relative = path.relative_to(REPO_ROOT).with_suffix("")
-    module_name = "__mlxr_tests__." + "_".join(relative.parts)
+    module_name = "__mlxr_tests__." + ".".join(relative.parts)
+    if "__mlxr_tests__" not in sys.modules:
+        # Build a synthetic package tree so package-local tests can keep
+        # sibling helper imports like `from ._fixtures import ...`.
+        root_package = ModuleType("__mlxr_tests__")
+        root_package.__path__ = [str(REPO_ROOT)]
+        sys.modules["__mlxr_tests__"] = root_package
+    for depth in range(1, len(relative.parts)):
+        package_name = "__mlxr_tests__." + ".".join(relative.parts[:depth])
+        if package_name not in sys.modules:
+            package = ModuleType(package_name)
+            package_dir = REPO_ROOT.joinpath(*relative.parts[:depth])
+            package.__path__ = [str(package_dir)]
+            sys.modules[package_name] = package
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Unable to create import spec for {path}")

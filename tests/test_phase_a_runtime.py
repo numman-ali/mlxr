@@ -37,6 +37,7 @@ from pydantic import ValidationError
 
 from tests.runtime_test_support import (
     LTX_CHECKPOINT_FILENAME,
+    LTX_DEV_CHECKPOINT_FILENAME,
     LTX_SPATIAL_UPSAMPLER_FILENAME,
     LTX_TEXT_ENCODER_DIRNAME,
     make_local_bundle,
@@ -242,6 +243,28 @@ class PhaseARuntimeTests(unittest.TestCase):
                 {record.path for record in dir_resolved.files}, {"a.txt", "b.txt"}
             )
 
+    def test_local_provider_preserves_extra_locator_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            directory = root / "bundle"
+            directory.mkdir()
+            (directory / "a.txt").write_text("a", encoding="utf-8")
+
+            provider = LocalFileProviderAdapter()
+            resolved = provider.resolve(
+                SourceRef(
+                    provider="local",
+                    locator={
+                        "path": str(directory),
+                        "variant": "flux.2-klein-9b",
+                        "license": "test-license",
+                    },
+                )
+            )
+
+            self.assertEqual(resolved.locator["variant"], "flux.2-klein-9b")
+            self.assertEqual(resolved.locator["path"], str(directory.resolve()))
+
     def test_source_registration_is_idempotent_and_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -358,7 +381,9 @@ class PhaseARuntimeTests(unittest.TestCase):
                 [
                     "video.generate",
                     "video.condition.image",
+                    "video.condition.video",
                     "video.condition.audio",
+                    "video.retake",
                 ],
             )
             self.assertEqual(
@@ -582,6 +607,174 @@ class PhaseARuntimeTests(unittest.TestCase):
                     fetch_policy.options["strict_local_text_encoding"]
                     for fetch_policy in provider.fetch_calls
                 )
+            )
+
+    def test_convert_supports_dev_checkpoint_without_spatial_upsampler(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(
+                root,
+                directory_name="ltx-dev-bundle",
+                checkpoint_filename=LTX_DEV_CHECKPOINT_FILENAME,
+                include_spatial_upsampler=False,
+                include_distilled_lora=True,
+            )
+
+            state = make_state(root)
+            client = TestClient(create_app(state))
+
+            register_response = client.post(
+                "/v1/sources/register",
+                json={
+                    "provider": "local",
+                    "locator": {"path": str(source_dir)},
+                    "family_hint": "ltx",
+                },
+            )
+            self.assertEqual(register_response.status_code, 200)
+            source_id = register_response.json()["source_id"]
+
+            convert_response = client.post(
+                "/v1/artifacts/convert",
+                json={"source_id": source_id, "model_id": "ltx-2.3-dev-local"},
+            )
+            self.assertEqual(convert_response.status_code, 200, convert_response.text)
+            body = convert_response.json()
+            components = {
+                component["role"]: component
+                for component in body["artifact"]["components"]
+            }
+            self.assertEqual(
+                set(components),
+                {"checkpoint", "text_encoder", "distilled_lora"},
+            )
+            self.assertEqual(
+                body["artifact"]["family_variant"],
+                "dev",
+            )
+            self.assertEqual(
+                body["artifact"]["capability"]["tasks"],
+                ["video.generate", "video.condition.image", "video.retake"],
+            )
+            self.assertEqual(
+                body["artifact"]["capability"]["metadata"]["implemented_surface"][
+                    "pipeline_variants"
+                ],
+                ["one_stage"],
+            )
+            self.assertFalse(
+                body["artifact"]["capability"]["dependencies"]["spatial_upsampler"][
+                    "required"
+                ]
+            )
+            self.assertFalse(
+                body["artifact"]["capability"]["dependencies"]["distilled_lora"][
+                    "required"
+                ]
+            )
+            self.assertEqual(
+                body["artifact"]["metadata"]["required_source_roles"],
+                ["checkpoint", "text_encoder"],
+            )
+
+    def test_convert_supports_dev_split_sources_without_spatial_upsampler(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dirs = make_split_local_ltx_sources(
+                root,
+                checkpoint_filename=LTX_DEV_CHECKPOINT_FILENAME,
+                include_spatial_upsampler=False,
+                include_distilled_lora=True,
+            )
+
+            state = make_state(root)
+            client = TestClient(create_app(state))
+            source_ids: dict[str, str] = {}
+            for role, source_dir in source_dirs.items():
+                response = client.post(
+                    "/v1/sources/register",
+                    json={
+                        "provider": "local",
+                        "locator": {"path": str(source_dir)},
+                        "family_hint": "ltx",
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                source_ids[role] = response.json()["source_id"]
+
+            convert_response = client.post(
+                "/v1/artifacts/convert",
+                json={
+                    "source_bindings": {
+                        "checkpoint": source_ids["checkpoint"],
+                        "text_encoder": source_ids["text_encoder"],
+                        "distilled_lora": source_ids["distilled_lora"],
+                    },
+                    "family": "ltx",
+                    "model_id": "ltx-2.3-dev-split",
+                },
+            )
+            self.assertEqual(convert_response.status_code, 200, convert_response.text)
+            components = {
+                component["role"]: component
+                for component in convert_response.json()["artifact"]["components"]
+            }
+            self.assertEqual(
+                set(components),
+                {"checkpoint", "text_encoder", "distilled_lora"},
+            )
+
+    def test_convert_dev_bundle_with_optional_two_stage_assets_advertises_two_stage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            source_dir = make_local_bundle(
+                root,
+                directory_name="ltx-dev-two-stage-bundle",
+                checkpoint_filename=LTX_DEV_CHECKPOINT_FILENAME,
+                include_spatial_upsampler=True,
+                include_distilled_lora=True,
+            )
+
+            state = make_state(root)
+            client = TestClient(create_app(state))
+
+            register_response = client.post(
+                "/v1/sources/register",
+                json={
+                    "provider": "local",
+                    "locator": {"path": str(source_dir)},
+                    "family_hint": "ltx",
+                },
+            )
+            self.assertEqual(register_response.status_code, 200)
+            source_id = register_response.json()["source_id"]
+
+            convert_response = client.post(
+                "/v1/artifacts/convert",
+                json={"source_id": source_id, "model_id": "ltx-2.3-dev-two-stage"},
+            )
+            self.assertEqual(convert_response.status_code, 200, convert_response.text)
+            body = convert_response.json()
+            self.assertEqual(
+                body["artifact"]["capability"]["metadata"]["implemented_surface"][
+                    "pipeline_variants"
+                ],
+                ["one_stage", "two_stage", "two_stage_hq"],
+            )
+            self.assertEqual(
+                body["artifact"]["capability"]["tasks"],
+                [
+                    "video.generate",
+                    "video.condition.image",
+                    "video.interpolate",
+                    "video.retake",
+                ],
+            )
+            self.assertEqual(
+                set(component["role"] for component in body["artifact"]["components"]),
+                {"checkpoint", "spatial_upsampler", "text_encoder", "distilled_lora"},
             )
 
     def test_convert_supports_multi_source_bindings(self) -> None:

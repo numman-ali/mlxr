@@ -21,21 +21,26 @@ if TYPE_CHECKING:
 def _role_candidates(self: LTXFamilyAdapter, source: ResolvedSource) -> list[str]:
     file_paths = {record.path for record in source.files}
     candidates: list[str] = []
-    if self._checkpoint_filename in file_paths:
+    checkpoint_variant = _checkpoint_variant_for_file_paths(self, file_paths)
+    if checkpoint_variant is not None:
         candidates.append("checkpoint")
     if self._spatial_upsampler_filename in file_paths:
         candidates.append("spatial_upsampler")
+    if self._distilled_lora_filename in file_paths:
+        candidates.append("distilled_lora")
     if self._looks_like_text_encoder_snapshot(file_paths):
         candidates.append("text_encoder")
-    if (
-        self._checkpoint_filename in file_paths
+    text_encoder_ready = any(
+        path.startswith(f"{self._text_encoder_dirname}/")
+        or path == self._text_encoder_dirname
+        for path in file_paths
+    )
+    bundle_ready = (
+        checkpoint_variant == "fast"
         and self._spatial_upsampler_filename in file_paths
-        and any(
-            path.startswith(f"{self._text_encoder_dirname}/")
-            or path == self._text_encoder_dirname
-            for path in file_paths
-        )
-    ):
+        and text_encoder_ready
+    ) or (checkpoint_variant == "dev" and text_encoder_ready)
+    if bundle_ready:
         candidates.append("bundle")
     return candidates
 
@@ -47,45 +52,39 @@ def _prepare_components(
         return self._prepare_bundle_components(sources["bundle"])
 
     unexpected_roles = sorted(
-        role for role in sources if role not in self._required_roles
+        role
+        for role in sources
+        if role not in (*self._required_roles, *self._optional_roles)
     )
     if unexpected_roles:
         raise ValueError(
             f"LTX conversion does not support source roles: {', '.join(unexpected_roles)}"
         )
-    missing_roles = [role for role in self._required_roles if role not in sources]
+    checkpoint_source = sources.get("checkpoint")
+    if checkpoint_source is None:
+        raise ValueError("LTX conversion requires a checkpoint source role")
+    checkpoint_path = self._resolve_checkpoint_file(
+        checkpoint_source.materialization.local_path,
+        role="checkpoint",
+    )
+    required_roles = _required_roles_for_variant(
+        self, _checkpoint_variant_for_path(self, checkpoint_path)
+    )
+    missing_roles = [role for role in required_roles if role not in sources]
     if missing_roles:
         raise ValueError(
             f"LTX conversion requires source roles: {', '.join(missing_roles)}"
         )
 
-    checkpoint_source = sources["checkpoint"]
-    upsampler_source = sources["spatial_upsampler"]
     text_encoder_source = sources["text_encoder"]
-    return {
+    prepared: dict[str, PreparedComponent] = {
         "checkpoint": PreparedComponent(
             role="checkpoint",
             kind="file",
             source_id=checkpoint_source.source_id,
-            source_path=self._resolve_required_file(
-                checkpoint_source.materialization.local_path,
-                self._checkpoint_filename,
-                role="checkpoint",
-            ),
+            source_path=checkpoint_path,
             provenance=checkpoint_source.materialization.provenance,
             resolved_ref=checkpoint_source.materialization.provenance.resolved_ref,
-        ),
-        "spatial_upsampler": PreparedComponent(
-            role="spatial_upsampler",
-            kind="file",
-            source_id=upsampler_source.source_id,
-            source_path=self._resolve_required_file(
-                upsampler_source.materialization.local_path,
-                self._spatial_upsampler_filename,
-                role="spatial_upsampler",
-            ),
-            provenance=upsampler_source.materialization.provenance,
-            resolved_ref=upsampler_source.materialization.provenance.resolved_ref,
         ),
         "text_encoder": PreparedComponent(
             role="text_encoder",
@@ -99,6 +98,35 @@ def _prepare_components(
             resolved_ref=text_encoder_source.materialization.provenance.resolved_ref,
         ),
     }
+    upsampler_source = sources.get("spatial_upsampler")
+    if upsampler_source is not None:
+        prepared["spatial_upsampler"] = PreparedComponent(
+            role="spatial_upsampler",
+            kind="file",
+            source_id=upsampler_source.source_id,
+            source_path=self._resolve_required_file(
+                upsampler_source.materialization.local_path,
+                self._spatial_upsampler_filename,
+                role="spatial_upsampler",
+            ),
+            provenance=upsampler_source.materialization.provenance,
+            resolved_ref=upsampler_source.materialization.provenance.resolved_ref,
+        )
+    distilled_lora_source = sources.get("distilled_lora")
+    if distilled_lora_source is not None:
+        prepared["distilled_lora"] = PreparedComponent(
+            role="distilled_lora",
+            kind="file",
+            source_id=distilled_lora_source.source_id,
+            source_path=self._resolve_required_file(
+                distilled_lora_source.materialization.local_path,
+                self._distilled_lora_filename,
+                role="distilled_lora",
+            ),
+            provenance=distilled_lora_source.materialization.provenance,
+            resolved_ref=distilled_lora_source.materialization.provenance.resolved_ref,
+        )
+    return prepared
 
 
 def _prepare_bundle_components(
@@ -113,24 +141,14 @@ def _prepare_bundle_components(
     if not text_encoder_root.exists():
         raise ValueError(f"LTX bundle source is missing '{self._text_encoder_dirname}'")
     self._validate_text_encoder_dir(text_encoder_root, role="bundle")
-    return {
+    checkpoint_path = self._resolve_checkpoint_file(bundle_root, role="bundle")
+    checkpoint_variant = _checkpoint_variant_for_path(self, checkpoint_path)
+    prepared: dict[str, PreparedComponent] = {
         "checkpoint": PreparedComponent(
             role="checkpoint",
             kind="file",
             source_id=bundle_source.source_id,
-            source_path=self._resolve_required_file(
-                bundle_root, self._checkpoint_filename, role="bundle"
-            ),
-            provenance=bundle_source.materialization.provenance,
-            resolved_ref=bundle_source.materialization.provenance.resolved_ref,
-        ),
-        "spatial_upsampler": PreparedComponent(
-            role="spatial_upsampler",
-            kind="file",
-            source_id=bundle_source.source_id,
-            source_path=self._resolve_required_file(
-                bundle_root, self._spatial_upsampler_filename, role="bundle"
-            ),
+            source_path=checkpoint_path,
             provenance=bundle_source.materialization.provenance,
             resolved_ref=bundle_source.materialization.provenance.resolved_ref,
         ),
@@ -143,14 +161,58 @@ def _prepare_bundle_components(
             resolved_ref=bundle_source.materialization.provenance.resolved_ref,
         ),
     }
+    upsampler_path = bundle_root / self._spatial_upsampler_filename
+    if checkpoint_variant == "fast":
+        prepared["spatial_upsampler"] = PreparedComponent(
+            role="spatial_upsampler",
+            kind="file",
+            source_id=bundle_source.source_id,
+            source_path=self._resolve_required_file(
+                bundle_root, self._spatial_upsampler_filename, role="bundle"
+            ),
+            provenance=bundle_source.materialization.provenance,
+            resolved_ref=bundle_source.materialization.provenance.resolved_ref,
+        )
+    elif upsampler_path.is_file():
+        prepared["spatial_upsampler"] = PreparedComponent(
+            role="spatial_upsampler",
+            kind="file",
+            source_id=bundle_source.source_id,
+            source_path=upsampler_path,
+            provenance=bundle_source.materialization.provenance,
+            resolved_ref=bundle_source.materialization.provenance.resolved_ref,
+        )
+    distilled_lora_path = bundle_root / self._distilled_lora_filename
+    if distilled_lora_path.is_file():
+        prepared["distilled_lora"] = PreparedComponent(
+            role="distilled_lora",
+            kind="file",
+            source_id=bundle_source.source_id,
+            source_path=distilled_lora_path,
+            provenance=bundle_source.materialization.provenance,
+            resolved_ref=bundle_source.materialization.provenance.resolved_ref,
+        )
+    return prepared
 
 
 def _artifact_components(
     self: LTXFamilyAdapter, prepared: dict[str, PreparedComponent]
 ) -> tuple[list[PortableArtifactComponentRecord], list[ArtifactPayloadItem]]:
+    checkpoint_variant = _checkpoint_variant_for_path(
+        self, prepared["checkpoint"].source_path
+    )
     components: list[PortableArtifactComponentRecord] = []
     payload_items: list[ArtifactPayloadItem] = []
-    for role in self._required_roles:
+    required_roles = _required_roles_for_variant(self, checkpoint_variant)
+    component_roles = [
+        *required_roles,
+        *tuple(
+            role
+            for role in prepared
+            if role not in required_roles and role != "checkpoint"
+        ),
+    ]
+    for role in component_roles:
         component = prepared[role]
         if component.kind == "file":
             relative_path = Path("payload") / role / component.source_path.name
@@ -264,15 +326,49 @@ def _component_paths(
                     f"LTX artifact is missing required directory component '{component.role}'"
                 )
         component_paths[component.role] = component_path
-    missing_roles = [
-        role for role in self._required_roles if role not in component_paths
-    ]
+    checkpoint_path = component_paths.get("checkpoint")
+    if checkpoint_path is None:
+        raise ValueError("LTX artifact is missing required component role 'checkpoint'")
+    required_roles = _required_roles_for_variant(
+        self, _checkpoint_variant_for_path(self, checkpoint_path)
+    )
+    missing_roles = [role for role in required_roles if role not in component_paths]
     if missing_roles:
         raise ValueError(
             f"LTX artifact is missing required component roles: {', '.join(missing_roles)}"
         )
     self._validate_text_encoder_dir(component_paths["text_encoder"], role="artifact")
     return component_paths
+
+
+def _checkpoint_variant_for_file_paths(
+    self: LTXFamilyAdapter, file_paths: set[str]
+) -> str | None:
+    if self._checkpoint_filename in file_paths:
+        return "fast"
+    if self._dev_checkpoint_filename in file_paths:
+        return "dev"
+    return None
+
+
+def _checkpoint_variant_for_path(self: LTXFamilyAdapter, checkpoint_path: Path) -> str:
+    if checkpoint_path.name == self._checkpoint_filename:
+        return "fast"
+    if checkpoint_path.name == self._dev_checkpoint_filename:
+        return "dev"
+    raise ValueError(
+        f"LTX checkpoint '{checkpoint_path.name}' does not match a known checkpoint variant"
+    )
+
+
+def _required_roles_for_variant(
+    self: LTXFamilyAdapter, checkpoint_variant: str
+) -> tuple[str, ...]:
+    if checkpoint_variant == "fast":
+        return ("checkpoint", "spatial_upsampler", "text_encoder")
+    if checkpoint_variant == "dev":
+        return ("checkpoint", "text_encoder")
+    raise ValueError(f"Unknown LTX checkpoint variant '{checkpoint_variant}'")
 
 
 def _resolve_required_file(
@@ -290,6 +386,28 @@ def _resolve_required_file(
     if candidate.is_file():
         return candidate
     raise ValueError(f"LTX {role} source is missing '{filename}'")
+
+
+def _resolve_checkpoint_file(
+    self: LTXFamilyAdapter, local_path: Path | None, *, role: str
+) -> Path:
+    if local_path is None:
+        raise ValueError(f"LTX {role} source is missing a local materialization path")
+    if local_path.is_file():
+        if local_path.name not in self._checkpoint_filenames:
+            expected = ", ".join(self._checkpoint_filenames)
+            raise ValueError(
+                f"LTX {role} source must point to one of {expected}, got '{local_path.name}'"
+            )
+        return local_path
+
+    for filename in self._checkpoint_filenames:
+        candidate = local_path / filename
+        if candidate.is_file():
+            return candidate
+
+    expected = ", ".join(self._checkpoint_filenames)
+    raise ValueError(f"LTX {role} source is missing one of: {expected}")
 
 
 def _resolve_text_encoder_dir(

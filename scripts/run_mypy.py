@@ -9,7 +9,10 @@ PACKAGE_TARGETS = (
     "mlxr.core.runtime",
     "mlxr.core.server",
     "mlxr.core.workflows",
+    "mlxr.families.flux2",
     "mlxr.families.ltx",
+    "mlxr.families.qwen_image",
+    "mlxr.families.z_image",
     "mlxr.clients.cli",
 )
 FILE_TARGETS = ("tests", "scripts")

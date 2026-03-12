@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -14,13 +15,20 @@ from unittest.mock import patch
 import mlx.core as mx
 import numpy as np
 from mlxr.core.runtime import (
+    ConversionPlan,
+    ConversionSource,
     ExecutionProfile,
     ExecutionStage,
+    FamilyInspection,
+    FetchPolicy,
     LoadedModelHandle,
     PortableArtifact,
     RuntimeHome,
+    RuntimeRegistry,
+    StageResult,
 )
 from mlxr.core.schemas import (
+    ArtifactHandle,
     CapabilityDescriptor,
     InputHandleRecord,
     JobOutputPolicy,
@@ -35,6 +43,7 @@ from mlxr.core.schemas import (
     RuntimeEvent,
     RuntimeEventKind,
 )
+from mlxr.core.server.jobs import JobManager, JobValidationError
 from mlxr.core.server.settings import ServerSettings
 from mlxr.core.server.store import InputStore, JobStore, OutputStore
 from mlxr.core.server.worker import run_job_worker
@@ -49,6 +58,7 @@ from tests.runtime_test_support import (
     LTX_CHECKPOINT_FILENAME,
     LTX_SPATIAL_UPSAMPLER_FILENAME,
     make_png_bytes,
+    make_state,
     patched_ltx_prompt_encoder,
     patched_ltx_video_generator,
 )
@@ -139,6 +149,49 @@ class RuntimeUnitTests(unittest.TestCase):
                 ],
             ),
             storage_path=artifact_root,
+        )
+
+    def _image_portable_artifact(self, runtime_home: RuntimeHome) -> PortableArtifact:
+        artifact_storage_key = runtime_home.artifact_storage_key(
+            "z_image", "z-image-turbo-local", "sha256:image-test"
+        )
+        provenance = ProvenanceRecord(provider="local", locator={"path": "/tmp/model"})
+        return PortableArtifact(
+            record=PortableArtifactRecord(
+                model_id="z-image-turbo-local",
+                artifact_digest="sha256:image-test",
+                family="z_image",
+                family_variant="z-image-turbo",
+                format_version="0.1.0",
+                weight_format="diffusers_component_bundle",
+                storage_key=artifact_storage_key,
+                capability=CapabilityDescriptor(
+                    model_id="z-image-turbo-local",
+                    artifact_digest="sha256:image-test",
+                    family="z_image",
+                    family_variant="z-image-turbo",
+                    tasks=["image.generate"],
+                    artifacts_out=["png", "jpg"],
+                    scheduler_class="image_diffusion",
+                    constraints={
+                        "width": {"multiple_of": 16},
+                        "height": {"multiple_of": 16},
+                    },
+                    metadata={
+                        "stage_ids": [
+                            "prompt_encode",
+                            "generate",
+                            "encode_output",
+                        ]
+                    },
+                ),
+                provenance=provenance,
+            ),
+            storage_path=runtime_home.artifact_dir(
+                "z_image",
+                "z-image-turbo-local",
+                "sha256:image-test",
+            ),
         )
 
     def test_ltx_adapter_without_runtime_state_reports_placeholder_metrics(
@@ -424,6 +477,105 @@ class RuntimeUnitTests(unittest.TestCase):
             )
             self.assertEqual(result.metrics["status"], "prepared")
             self.assertEqual(result.metrics["conditioning_count"], 1)
+
+    def test_ltx_adapter_condition_inputs_prepares_retake_video_and_window(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.retake", profile="bf16"),
+            )
+            video_path = Path(tmp_dir) / "source.mp4"
+            video_path.write_bytes(b"mp4")
+
+            result = adapter.run_stage(
+                loaded,
+                ExecutionStage(
+                    stage_id="condition_inputs",
+                    inputs={"videos": [{"input_handle": "vid_1"}]},
+                    params={
+                        "task": "video.retake",
+                        "window_start_seconds": 1.25,
+                        "window_end_seconds": 2.75,
+                        "regenerate_audio": False,
+                        "resolved_inputs": {
+                            "videos": [
+                                {
+                                    "input_handle": "vid_1",
+                                    "payload_path": str(video_path),
+                                    "strength": 1.0,
+                                    "media_type": "video/mp4",
+                                    "filename": "source.mp4",
+                                }
+                            ]
+                        },
+                        "simulate_delay_seconds": 0.0,
+                    },
+                ),
+            )
+            self.assertEqual(result.metrics["status"], "prepared")
+            self.assertEqual(result.metrics["video_input_count"], 1)
+            self.assertTrue(result.metrics["retake_enabled"])
+
+    def test_ltx_adapter_condition_inputs_prepares_video_and_lora_for_ic_lora(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._artifactized_portable_artifact(runtime_home)
+            adapter = LTXFamilyAdapter()
+            loaded = adapter.load(
+                artifact,
+                ExecutionProfile(task="video.condition.video", profile="bf16"),
+            )
+            video_path = Path(tmp_dir) / "reference.mp4"
+            lora_path = Path(tmp_dir) / "control.safetensors"
+            video_path.write_bytes(b"mp4")
+            lora_path.write_bytes(b"lora")
+
+            result = adapter.run_stage(
+                loaded,
+                ExecutionStage(
+                    stage_id="condition_inputs",
+                    inputs={
+                        "videos": [{"input_handle": "vid_1"}],
+                        "loras": [{"input_handle": "lora_1"}],
+                    },
+                    params={
+                        "task": "video.condition.video",
+                        "resolved_inputs": {
+                            "videos": [
+                                {
+                                    "input_handle": "vid_1",
+                                    "payload_path": str(video_path),
+                                    "strength": 0.8,
+                                    "media_type": "video/mp4",
+                                    "filename": "reference.mp4",
+                                }
+                            ],
+                            "loras": [
+                                {
+                                    "input_handle": "lora_1",
+                                    "payload_path": str(lora_path),
+                                    "strength": 0.6,
+                                    "media_type": "application/x-safetensors",
+                                    "filename": "control.safetensors",
+                                }
+                            ],
+                        },
+                        "simulate_delay_seconds": 0.0,
+                    },
+                ),
+            )
+            self.assertEqual(result.metrics["status"], "prepared")
+            self.assertEqual(result.metrics["video_input_count"], 1)
+            self.assertEqual(result.metrics["lora_input_count"], 1)
 
     def test_ltx_adapter_generate_requires_prompt_context(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1159,6 +1311,634 @@ class RuntimeUnitTests(unittest.TestCase):
             )
             self.assertTrue(output_path.exists())
             self.assertIn(b"ftyp", output_path.read_bytes()[:32])
+
+    def test_worker_uses_capability_stage_ids_for_image_jobs(self) -> None:
+        class FakeImageFamilyAdapter:
+            family_id = "z_image"
+
+            def inspect_source(self, source: object) -> FamilyInspection:
+                del source
+                return FamilyInspection(
+                    family="z_image",
+                    tasks=("image.generate",),
+                    scheduler_class="image_diffusion",
+                )
+
+            def fetch_policy_for_conversion(
+                self, role: str, source: object
+            ) -> FetchPolicy:
+                del role, source
+                return FetchPolicy()
+
+            def convert(
+                self, sources: dict[str, ConversionSource], plan: ConversionPlan
+            ) -> PortableArtifact:
+                del sources, plan
+                raise RuntimeError("test double does not implement convert")
+
+            def load(
+                self, artifact: PortableArtifact, profile: ExecutionProfile
+            ) -> LoadedModelHandle:
+                return LoadedModelHandle(
+                    model_id=artifact.record.model_id,
+                    family=artifact.record.family,
+                    artifact_digest=artifact.record.artifact_digest,
+                    capability=artifact.record.capability,
+                    metadata={"task": profile.task},
+                )
+
+            def capabilities(self, artifact: PortableArtifact) -> CapabilityDescriptor:
+                return artifact.record.capability
+
+            def run_stage(
+                self, loaded: LoadedModelHandle, stage: ExecutionStage
+            ) -> StageResult:
+                if stage.stage_id == "prompt_encode":
+                    loaded.metadata["prompt_ready"] = True
+                    return StageResult(
+                        metrics={"stage": stage.stage_id, "status": "encoded"}
+                    )
+                if stage.stage_id == "generate":
+                    if not loaded.metadata.get("prompt_ready"):
+                        raise ValueError("prompt_encode must run before generate")
+                    loaded.metadata["image_bytes"] = make_png_bytes()
+                    return StageResult(
+                        metrics={"stage": stage.stage_id, "status": "generated"}
+                    )
+                if stage.stage_id == "encode_output":
+                    image_bytes = loaded.metadata.get("image_bytes")
+                    if not isinstance(image_bytes, bytes):
+                        raise ValueError(
+                            "generate must run before encode_output for image jobs"
+                        )
+                    artifact_id = str(stage.params["artifact_id"])
+                    artifact_format = str(stage.params["artifact_format"])
+                    output_dir = Path(str(stage.params["output_dir"]))
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    filename = f"{artifact_id}.{artifact_format}"
+                    output_path = output_dir / filename
+                    output_path.write_bytes(image_bytes)
+                    return StageResult(
+                        artifacts=[
+                            ArtifactHandle(
+                                artifact_id=artifact_id,
+                                artifact_format=artifact_format,
+                                metadata={
+                                    "filename": filename,
+                                    "media_type": "image/png",
+                                    "storage_key": str(stage.params["storage_key"]),
+                                    "size_bytes": output_path.stat().st_size,
+                                },
+                            )
+                        ],
+                        metrics={"stage": stage.stage_id, "status": "encoded"},
+                    )
+                raise ValueError(f"Unexpected stage '{stage.stage_id}'")
+
+            def unload(self, loaded: LoadedModelHandle) -> None:
+                del loaded
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runtime_home = RuntimeHome(root=Path(tmp_dir) / "runtime-home")
+            runtime_home.ensure_layout()
+            artifact = self._image_portable_artifact(runtime_home)
+            model_record = ModelRecord(
+                model_id="z-image-turbo-local",
+                family="z_image",
+                artifact=artifact.record,
+            )
+            request = JobRequest(
+                model_id="z-image-turbo-local",
+                task="image.generate",
+                inputs={"prompt": "direct worker image test"},
+                params={"width": 1024, "height": 1024, "seed": 7},
+                output=JobOutputPolicy(artifact_format="png"),
+                extensions={"simulate_delay_seconds": 0.0},
+            )
+
+            registry = RuntimeRegistry()
+            registry.register_family(FakeImageFamilyAdapter())
+            event_queue: queue.Queue[dict[str, object]] = queue.Queue()
+            command_queue: queue.Queue[dict[str, object]] = queue.Queue()
+
+            with patch(
+                "mlxr.core.server.worker.default_runtime_registry",
+                return_value=registry,
+            ):
+                run_job_worker(
+                    job_id="job_image_worker_test",
+                    request_data=request.model_dump(mode="json"),
+                    model_data=model_record.model_dump(mode="json"),
+                    runtime_home_root=str(runtime_home.root),
+                    event_queue=event_queue,
+                    command_queue=command_queue,
+                )
+
+            messages: list[dict[str, object]] = []
+            while True:
+                try:
+                    messages.append(event_queue.get_nowait())
+                except queue.Empty:
+                    break
+
+            event_payloads = [
+                message["event"]
+                for message in messages
+                if message.get("type") == "event"
+                and isinstance(message.get("event"), dict)
+            ]
+            phase_order = [
+                str(payload["data"]["stage_id"])
+                for payload in event_payloads
+                if isinstance(payload, dict)
+                and payload.get("kind") == RuntimeEventKind.JOB_PHASE_CHANGED.value
+                and isinstance(payload.get("data"), dict)
+                and isinstance(payload["data"].get("stage_id"), str)
+            ]
+            self.assertEqual(
+                phase_order,
+                [
+                    "load_model",
+                    "prompt_encode",
+                    "generate",
+                    "encode_output",
+                    "finalize",
+                ],
+            )
+            output_path = runtime_home.output_artifact_path(
+                "job_image_worker_test",
+                "out_job_image_worker_test",
+                "out_job_image_worker_test.png",
+            )
+            self.assertTrue(output_path.exists())
+            self.assertEqual(output_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+
+    def test_job_validation_uses_capability_constraints_for_image_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            capability = CapabilityDescriptor(
+                model_id="z-image-turbo-local",
+                artifact_digest="sha256:image-test",
+                family="z_image",
+                tasks=["image.generate"],
+                artifacts_out=["png", "jpg"],
+                scheduler_class="image_diffusion",
+                constraints={
+                    "width": {"multiple_of": 16},
+                    "height": {"multiple_of": 16},
+                },
+            )
+            request = JobRequest(
+                model_id="z-image-turbo-local",
+                task="image.generate",
+                inputs={"prompt": "still image"},
+                params={"width": 1024, "height": 1024},
+                output=JobOutputPolicy(artifact_format="png"),
+            )
+
+            state.job_manager._validate_request(
+                model_id="z-image-turbo-local",
+                capability=capability,
+                request=request,
+            )
+
+            with self.assertRaisesRegex(
+                JobValidationError, "width must be an integer multiple of 16"
+            ):
+                state.job_manager._validate_request(
+                    model_id="z-image-turbo-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={"params": {"width": 1025, "height": 1024}}
+                    ),
+                )
+
+    def test_job_validation_requires_image_inputs_for_image_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            capability = CapabilityDescriptor(
+                model_id="qwen-image-edit-local",
+                artifact_digest="sha256:image-edit-test",
+                family="qwen_image",
+                tasks=["image.edit"],
+                artifacts_out=["png", "jpg"],
+                scheduler_class="image_diffusion",
+            )
+            request = JobRequest(
+                model_id="qwen-image-edit-local",
+                task="image.edit",
+                inputs={"prompt": "move the same subject into a rainy alley"},
+                params={"width": 1024, "height": 1024},
+                output=JobOutputPolicy(artifact_format="png"),
+            )
+
+            with self.assertRaisesRegex(
+                JobValidationError, "image.edit requires at least one image input"
+            ):
+                state.job_manager._validate_request(
+                    model_id="qwen-image-edit-local",
+                    capability=capability,
+                    request=request,
+                )
+
+    def test_job_validation_requires_retake_window_params_and_video_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            handle = state.input_store.save(
+                InputHandleRecord(
+                    handle_id="inp_video",
+                    role="video",
+                    filename="source.mp4",
+                    media_type="video/mp4",
+                    storage_key="inputs/inp_video/source.mp4",
+                    size_bytes=3,
+                ),
+                b"mp4",
+            )
+            capability = CapabilityDescriptor(
+                model_id="ltx-2.3-fast-local",
+                artifact_digest="sha256:retake-test",
+                family="ltx",
+                tasks=["video.retake"],
+                artifacts_out=["mp4"],
+                scheduler_class="media_video_dit",
+            )
+            request = JobRequest(
+                model_id="ltx-2.3-fast-local",
+                task="video.retake",
+                inputs={
+                    "videos": [{"input_handle": handle.handle_id, "strength": 1.0}]
+                },
+                params={"window_start_seconds": 1.0, "window_end_seconds": 2.0},
+                output=JobOutputPolicy(artifact_format="mp4"),
+            )
+
+            state.job_manager._validate_request(
+                model_id="ltx-2.3-fast-local",
+                capability=capability,
+                request=request,
+            )
+
+            with self.assertRaisesRegex(
+                JobValidationError, "requires exactly one source video input"
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(update={"inputs": {}}),
+                )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "video.retake requires numeric params.window_start_seconds",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(update={"params": {}}),
+                )
+
+    def test_job_validation_requires_two_distinct_keyframes_for_interpolation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            state.input_store.save(
+                InputHandleRecord(
+                    handle_id="img_1",
+                    role="image",
+                    filename="first.png",
+                    media_type="image/png",
+                    storage_key="inputs/img_1/first.png",
+                    size_bytes=4,
+                ),
+                b"png1",
+            )
+            state.input_store.save(
+                InputHandleRecord(
+                    handle_id="img_2",
+                    role="image",
+                    filename="last.png",
+                    media_type="image/png",
+                    storage_key="inputs/img_2/last.png",
+                    size_bytes=4,
+                ),
+                b"png2",
+            )
+            capability = CapabilityDescriptor(
+                model_id="ltx-2.3-dev-local",
+                artifact_digest="sha256:interpolate-test",
+                family="ltx",
+                tasks=["video.interpolate"],
+                artifacts_out=["mp4"],
+                scheduler_class="media_video_dit",
+            )
+            request = JobRequest(
+                model_id="ltx-2.3-dev-local",
+                task="video.interpolate",
+                inputs={
+                    "images": [
+                        {"input_handle": "img_1", "frame_index": 0, "strength": 1.0},
+                        {"input_handle": "img_2", "frame_index": 8, "strength": 1.0},
+                    ]
+                },
+                params={"width": 96, "height": 64, "num_frames": 9},
+                output=JobOutputPolicy(artifact_format="mp4"),
+            )
+
+            state.job_manager._validate_request(
+                model_id="ltx-2.3-dev-local",
+                capability=capability,
+                request=request,
+            )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "video.interpolate requires at least two image inputs",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-dev-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={
+                            "inputs": {
+                                "images": [
+                                    {
+                                        "input_handle": "img_1",
+                                        "frame_index": 0,
+                                        "strength": 1.0,
+                                    }
+                                ]
+                            }
+                        }
+                    ),
+                )
+
+    def test_job_validation_requires_single_video_and_lora_for_video_condition_video(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            state.input_store.save(
+                InputHandleRecord(
+                    handle_id="vid_1",
+                    role="video",
+                    filename="reference.mp4",
+                    media_type="video/mp4",
+                    storage_key="inputs/vid_1/reference.mp4",
+                    size_bytes=3,
+                ),
+                b"mp4",
+            )
+            state.input_store.save(
+                InputHandleRecord(
+                    handle_id="lora_1",
+                    role="lora",
+                    filename="control.safetensors",
+                    media_type="application/x-safetensors",
+                    storage_key="inputs/lora_1/control.safetensors",
+                    size_bytes=4,
+                ),
+                b"lora",
+            )
+            capability = CapabilityDescriptor(
+                model_id="ltx-2.3-fast-local",
+                artifact_digest="sha256:ic-lora-test",
+                family="ltx",
+                tasks=["video.condition.video"],
+                artifacts_out=["mp4", "wav"],
+                scheduler_class="media_video_dit",
+            )
+            request = JobRequest(
+                model_id="ltx-2.3-fast-local",
+                task="video.condition.video",
+                inputs={
+                    "videos": [{"input_handle": "vid_1", "strength": 0.8}],
+                    "loras": [{"input_handle": "lora_1", "strength": 0.6}],
+                },
+                params={"width": 96, "height": 64, "num_frames": 9},
+                output=JobOutputPolicy(artifact_format="mp4"),
+            )
+
+            state.job_manager._validate_request(
+                model_id="ltx-2.3-fast-local",
+                capability=capability,
+                request=request,
+            )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "requires exactly one reference video input",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={"inputs": {"loras": request.inputs["loras"]}}
+                    ),
+                )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "requires exactly one LoRA input",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={"inputs": {"videos": request.inputs["videos"]}}
+                    ),
+                )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "requires exactly one reference video input",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={
+                            "inputs": {
+                                "videos": [
+                                    {"input_handle": "vid_1", "strength": 0.8},
+                                    {"input_handle": "vid_1", "strength": 0.8},
+                                ],
+                                "loras": request.inputs["loras"],
+                            }
+                        }
+                    ),
+                )
+
+            with self.assertRaisesRegex(
+                JobValidationError,
+                "video.condition.video currently only supports mp4 output",
+            ):
+                state.job_manager._validate_request(
+                    model_id="ltx-2.3-fast-local",
+                    capability=capability,
+                    request=request.model_copy(
+                        update={"output": JobOutputPolicy(artifact_format="wav")}
+                    ),
+                )
+
+    def test_job_manager_marks_job_failed_when_worker_exits_without_event(self) -> None:
+        class FakeEventQueue:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def get(self, timeout: float | None = None) -> dict[str, object]:
+                del timeout
+                raise queue.Empty
+
+            def close(self) -> None:
+                self.closed = True
+
+        class FakeCommandQueue:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def put(self, item: dict[str, object]) -> None:
+                del item
+
+            def close(self) -> None:
+                self.closed = True
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.join_calls = 0
+                self.terminate_calls = 0
+                self._exitcode = 1
+
+            def start(self) -> None:
+                return None
+
+            def join(self, timeout: float | None = None) -> None:
+                del timeout
+                self.join_calls += 1
+
+            def is_alive(self) -> bool:
+                return False
+
+            def terminate(self) -> None:
+                self.terminate_calls += 1
+
+            @property
+            def exitcode(self) -> int | None:
+                return self._exitcode
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            job_id = "job_worker_exit_test"
+            record = JobRecord(
+                job_id=job_id,
+                request=JobRequest(
+                    model_id="ltx-2.3-fast-local",
+                    task="video.generate",
+                    inputs={"prompt": "fox"},
+                    params={},
+                    output=JobOutputPolicy(artifact_format="mp4"),
+                ),
+                state=JobState.RUNNING,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            state.job_store.save(record)
+
+            event_queue = FakeEventQueue()
+            command_queue = FakeCommandQueue()
+            process = FakeProcess()
+
+            state.job_manager._listen_to_worker(
+                job_id,
+                event_queue,
+                command_queue,
+                process,
+            )
+
+            failed = state.job_store.get(job_id)
+            assert failed is not None
+            self.assertEqual(failed.state, JobState.FAILED)
+            self.assertEqual(
+                failed.error,
+                "Worker exited before reaching a terminal state (exitcode=1)",
+            )
+            self.assertTrue(event_queue.closed)
+            self.assertTrue(command_queue.closed)
+            self.assertGreaterEqual(process.join_calls, 1)
+            self.assertEqual(process.terminate_calls, 0)
+
+    def test_job_manager_reconciles_orphaned_nonterminal_jobs_on_startup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            job_id = "job_orphaned_restart_test"
+            state.job_store.save(
+                JobRecord(
+                    job_id=job_id,
+                    request=JobRequest(
+                        model_id="ltx-2.3-fast-local",
+                        task="video.generate",
+                        inputs={"prompt": "fox"},
+                        params={},
+                        output=JobOutputPolicy(artifact_format="mp4"),
+                    ),
+                    state=JobState.RUNNING,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+            )
+
+            JobManager(
+                catalog=state.catalog,
+                job_store=state.job_store,
+                input_store=state.input_store,
+                output_store=state.output_store,
+                settings=state.settings,
+            )
+
+            failed = state.job_store.get(job_id)
+            assert failed is not None
+            self.assertEqual(failed.state, JobState.FAILED)
+            self.assertEqual(
+                failed.error,
+                "Control-plane restarted before job reached a terminal state",
+            )
+
+    def test_job_phase_change_clears_stale_error_for_running_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state = make_state(Path(tmp_dir))
+            job_id = "job_phase_error_clear_test"
+            state.job_store.save(
+                JobRecord(
+                    job_id=job_id,
+                    request=JobRequest(
+                        model_id="ltx-2.3-fast-local",
+                        task="video.generate",
+                        inputs={"prompt": "fox"},
+                        params={},
+                        output=JobOutputPolicy(artifact_format="mp4"),
+                    ),
+                    state=JobState.ACCEPTED,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                    error="stale error",
+                )
+            )
+
+            state.job_manager._update_job_from_event(
+                RuntimeEvent(
+                    job_id=job_id,
+                    kind=RuntimeEventKind.JOB_PHASE_CHANGED,
+                    phase="running",
+                    data={"stage_id": "generate"},
+                )
+            )
+
+            updated = state.job_store.get(job_id)
+            assert updated is not None
+            self.assertEqual(updated.state, JobState.RUNNING)
+            self.assertIsNone(updated.error)
 
     def test_ltx_runtime_vae_encoder_rejects_missing_encoder_weights(self) -> None:
         from mlxr.families.ltx._generation_backend.video_stack import (

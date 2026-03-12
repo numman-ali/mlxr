@@ -442,10 +442,13 @@ class _ComputeAudioFrames(Protocol):
 
 class _RuntimeHelperHost(Protocol):
     checkpoint_path: Path
-    spatial_upsampler_path: Path
+    spatial_upsampler_path: Path | None
     _audio_enabled: bool
     _reference_imports: _ReferenceImports | None
     _checkpoint_reader: CheckpointReader | None
+    _transformer_lora_cache: dict[
+        tuple[tuple[str, float], ...], _AudioVideoTransformer | _VideoTransformer
+    ]
     _transformer: _AudioVideoTransformer | _VideoTransformer | None
     _vae_statistics: tuple[MLXArray, MLXArray] | None
     _vae_decoder: _VideoDecoderLike | None
