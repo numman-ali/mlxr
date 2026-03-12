@@ -42,6 +42,7 @@ from .generation import (
 _SUPPORTED_VARIANTS = (
     "flux.2-klein-4b",
     "flux.2-klein-9b",
+    "flux.2-klein-9b-kv",
     "flux.2-klein-base-4b",
     "flux.2-klein-base-9b",
     "flux.2-dev",
@@ -112,6 +113,7 @@ class Flux2FamilyAdapter:
                 "supported_variants": list(_SUPPORTED_VARIANTS),
                 "native_runtime_status": _NATIVE_RUNTIME_STATUS,
                 "primary_klein_variant": "flux.2-klein-9b",
+                "edit_optimized_klein_variant": "flux.2-klein-9b-kv",
             },
         )
 
@@ -196,6 +198,7 @@ class Flux2FamilyAdapter:
                 "required_components": list(_REQUIRED_COMPONENTS),
                 "supported_variants": list(_SUPPORTED_VARIANTS),
                 "native_runtime_status": _NATIVE_RUNTIME_STATUS,
+                "edit_optimized_klein_variant": "flux.2-klein-9b-kv",
             },
         )
         return PortableArtifact(record=record, payload_items=tuple(payload_items))
@@ -556,6 +559,7 @@ def _capability_descriptor(
             "native_runtime_status": _NATIVE_RUNTIME_STATUS,
             "stage_ids": ["generate", "encode_output"],
             "primary_klein_variant": "flux.2-klein-9b",
+            "edit_optimized_klein_variant": "flux.2-klein-9b-kv",
             "lighter_klein_variant": "flux.2-klein-4b",
             "high_end_variant": "flux.2-dev",
         },

@@ -26,7 +26,9 @@ from mlxr.core.schemas import (
 
 
 def _load_script_module() -> types.ModuleType:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "runtime_clone_home.py"
+    script_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "runtime_clone_home.py"
+    )
     spec = importlib.util.spec_from_file_location("runtime_clone_home", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load scripts/runtime_clone_home.py")
@@ -39,7 +41,10 @@ def _load_script_module() -> types.ModuleType:
 class RuntimeCloneHomeScriptTests(unittest.TestCase):
     def test_clone_runtime_home_reuses_existing_payloads(self) -> None:
         module = _load_script_module()
-        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as target_dir:
+        with (
+            tempfile.TemporaryDirectory() as source_dir,
+            tempfile.TemporaryDirectory() as target_dir,
+        ):
             source_runtime = RuntimeHome(Path(source_dir))
             target_runtime = RuntimeHome(Path(target_dir) / "runtime-home")
             source_runtime.ensure_layout()
@@ -149,7 +154,9 @@ class RuntimeCloneHomeScriptTests(unittest.TestCase):
             target_artifact_path = target_runtime.artifact_manifest_path(
                 artifact.family, artifact.model_id, artifact.artifact_digest
             )
-            target_source_path = target_runtime.source_manifest_path("local", "src_demo")
+            target_source_path = target_runtime.source_manifest_path(
+                "local", "src_demo"
+            )
             target_payload_path = (
                 target_runtime.artifact_dir(
                     artifact.family, artifact.model_id, artifact.artifact_digest

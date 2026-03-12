@@ -52,7 +52,12 @@ def _prepare_runtime_home(runtime_home: RuntimeHome, *, reset: bool) -> RuntimeH
 
 
 def _link_payload_items(
-    *, runtime_home: RuntimeHome, family: str, model_id: str, artifact_digest: str, payload_items
+    *,
+    runtime_home: RuntimeHome,
+    family: str,
+    model_id: str,
+    artifact_digest: str,
+    payload_items,
 ) -> None:
     artifact_root = runtime_home.artifact_dir(family, model_id, artifact_digest)
     artifact_root.mkdir(parents=True, exist_ok=True)
@@ -81,7 +86,9 @@ def main() -> int:
     locator: dict[str, str] = {"path": str(bundle_path)}
     if args.family_variant:
         locator["variant"] = str(args.family_variant)
-    source_ref = SourceRef(provider="local", locator=locator, family_hint=str(args.family))
+    source_ref = SourceRef(
+        provider="local", locator=locator, family_hint=str(args.family)
+    )
 
     resolved = provider.resolve(source_ref)
     provenance = provider.provenance(resolved)

@@ -40,7 +40,9 @@ class ServerSettings:
             http_bearer_token=os.environ.get("MLX_RUNTIME_HTTP_TOKEN"),
             allowed_origins=_split_csv(os.environ.get("MLX_RUNTIME_ALLOWED_ORIGINS")),
             uds_path=os.environ.get("MLX_RUNTIME_UDS_PATH"),
-            job_execution_mode=os.environ.get("MLX_RUNTIME_JOB_EXECUTION_MODE", "spawn"),
+            job_execution_mode=os.environ.get(
+                "MLX_RUNTIME_JOB_EXECUTION_MODE", "spawn"
+            ),
         )
 
     def validate_startup(self) -> None:

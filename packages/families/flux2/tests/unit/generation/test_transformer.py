@@ -12,6 +12,8 @@ from mlxr.families.flux2._generation_backend.transformer import (
     DoubleStreamAttention,
     DoubleStreamBlock,
     FeedForward,
+    Flux2KVCache,
+    Flux2KVLayerCache,
     Flux2Transformer2DModel,
     Modulation,
     RMSNorm,
@@ -114,6 +116,72 @@ class Flux2TransformerTests(unittest.TestCase):
 
         self.assertEqual(guided.shape, (1, 5, 8))
         self.assertEqual(unguided.shape, (1, 5, 8))
+
+    def test_kv_cache_helpers_store_and_clear(self) -> None:
+        layer_cache = Flux2KVLayerCache()
+        k_ref = mx.ones((1, 2, 3, 4), dtype=mx.float32)
+        v_ref = mx.zeros((1, 2, 3, 4), dtype=mx.float32)
+        layer_cache.store(k_ref=k_ref, v_ref=v_ref)
+
+        stored_k, stored_v = layer_cache.get()
+        self.assertEqual(stored_k.shape, (1, 2, 3, 4))
+        self.assertEqual(stored_v.shape, (1, 2, 3, 4))
+
+        cache = Flux2KVCache.create(
+            num_double_layers=1,
+            num_single_layers=1,
+            num_ref_tokens=3,
+        )
+        cache.double_block_caches[0].store(k_ref=k_ref, v_ref=v_ref)
+        cache.single_block_caches[0].store(k_ref=k_ref, v_ref=v_ref)
+        self.assertEqual(len(cache.arrays()), 4)
+        cache.clear()
+        self.assertEqual(cache.num_ref_tokens, 0)
+        with self.assertRaisesRegex(RuntimeError, "has not been populated"):
+            cache.double_block_caches[0].get()
+
+    def test_transformer_kv_extract_and_cached_paths_preserve_shapes(self) -> None:
+        transformer = Flux2Transformer2DModel(
+            tiny_transformer_config(guidance_embeds=True)
+        )
+        x = mx.random.normal((1, 4, 8), dtype=mx.float32)
+        x_ref = mx.random.normal((1, 2, 8), dtype=mx.float32)
+        ctx = mx.random.normal((1, 3, 12), dtype=mx.float32)
+        x_ids = mx.zeros((1, 4, 2), dtype=mx.int32)
+        x_ref_ids = mx.zeros((1, 2, 2), dtype=mx.int32)
+        ctx_ids = mx.zeros((1, 3, 2), dtype=mx.int32)
+
+        extracted, kv_cache = transformer.forward_kv_extract(
+            x=x,
+            x_ids=x_ids,
+            x_ref=x_ref,
+            x_ref_ids=x_ref_ids,
+            timesteps=mx.array([0.5], dtype=mx.float32),
+            ctx=ctx,
+            ctx_ids=ctx_ids,
+            guidance=mx.array([1.0], dtype=mx.float32),
+        )
+        cached = transformer.forward_kv_cached(
+            x=x,
+            x_ids=x_ids,
+            timesteps=mx.array([0.25], dtype=mx.float32),
+            ctx=ctx,
+            ctx_ids=ctx_ids,
+            guidance=mx.array([1.0], dtype=mx.float32),
+            kv_cache=kv_cache,
+        )
+
+        self.assertEqual(extracted.shape, (1, 4, 8))
+        self.assertEqual(cached.shape, (1, 4, 8))
+        self.assertEqual(kv_cache.num_ref_tokens, 2)
+        self.assertEqual(len(kv_cache.double_block_caches), 1)
+        self.assertEqual(len(kv_cache.single_block_caches), 1)
+        double_k, double_v = kv_cache.double_block_caches[0].get()
+        single_k, single_v = kv_cache.single_block_caches[0].get()
+        self.assertEqual(double_k.shape[2], 2)
+        self.assertEqual(double_v.shape[2], 2)
+        self.assertEqual(single_k.shape[2], 2)
+        self.assertEqual(single_v.shape[2], 2)
 
 
 if __name__ == "__main__":

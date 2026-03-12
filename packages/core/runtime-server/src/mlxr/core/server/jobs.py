@@ -402,9 +402,7 @@ class JobManager:
             if record is not None and record.state not in TERMINAL_STATES:
                 error_message = "Worker exited before reaching a terminal state"
                 if process.exitcode is not None:
-                    error_message = (
-                        f"{error_message} (exitcode={process.exitcode})"
-                    )
+                    error_message = f"{error_message} (exitcode={process.exitcode})"
                 failed_record = record.model_copy(
                     update={
                         "state": JobState.FAILED,
@@ -759,6 +757,4 @@ def _job_process_context(mode: str = "spawn") -> ProcessContext:
         return get_context("spawn")
     if normalized == "thread":
         return ThreadProcessContext()
-    raise RuntimeError(
-        "Unsupported job execution mode; expected 'spawn' or 'thread'"
-    )
+    raise RuntimeError("Unsupported job execution mode; expected 'spawn' or 'thread'")

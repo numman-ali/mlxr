@@ -32,7 +32,7 @@ from .loading import (
     load_local_scheduler,
 )
 from .scheduler import FlowMatchEulerDiscreteScheduler
-from .transformer import Flux2Transformer2DModel
+from .transformer import Flux2KVCache, Flux2Transformer2DModel
 
 
 def _distilled_variant(variant: str) -> bool:
@@ -41,6 +41,10 @@ def _distilled_variant(variant: str) -> bool:
 
 def _base_variant(variant: str) -> bool:
     return "klein-base" in variant
+
+
+def _kv_variant(variant: str) -> bool:
+    return variant == "flux.2-klein-9b-kv"
 
 
 @dataclass(slots=True)
@@ -123,29 +127,68 @@ class _RuntimeImageGenerator(ImageGenerator):
         )
         guidance_vector = mx.full((1,), guidance, dtype=mx.bfloat16)
         sample = latent_tokens
-        for current_timestep, next_timestep in zip(
-            timesteps[:-1],
-            timesteps[1:],
-            strict=True,
-        ):
-            timestep = mx.full((1,), current_timestep, dtype=mx.bfloat16)
-            prediction = self._predict_step(
-                sample=sample,
-                latent_ids=latent_ids,
-                prompt_embeddings=prompt_embeddings,
-                text_ids=text_ids,
-                timestep=timestep,
-                guidance=guidance,
-                guidance_vector=guidance_vector,
-                reference_tokens=reference_tokens,
-                reference_ids=reference_ids,
-            )
-            sample = self._scheduler.step(
-                sample=sample,
-                model_output=prediction.astype(sample.dtype),
-                timestep=current_timestep,
-                next_timestep=next_timestep,
-            )
+        kv_cache: Flux2KVCache | None = None
+        kv_cache_used = _kv_variant(self.variant) and reference_tokens is not None
+        try:
+            for step_index, (current_timestep, next_timestep) in enumerate(
+                zip(
+                    timesteps[:-1],
+                    timesteps[1:],
+                    strict=True,
+                )
+            ):
+                timestep = mx.full((1,), current_timestep, dtype=mx.bfloat16)
+                if (
+                    kv_cache_used
+                    and reference_tokens is not None
+                    and reference_ids is not None
+                ):
+                    if step_index == 0:
+                        prediction, kv_cache = self._transformer.forward_kv_extract(
+                            x=sample,
+                            x_ids=latent_ids,
+                            x_ref=reference_tokens,
+                            x_ref_ids=reference_ids,
+                            timesteps=timestep,
+                            ctx=prompt_embeddings,
+                            ctx_ids=text_ids,
+                            guidance=guidance_vector,
+                        )
+                    else:
+                        if kv_cache is None:
+                            raise RuntimeError(
+                                "FLUX.2 KV cache path expected a populated cache after step 0"
+                            )
+                        prediction = self._transformer.forward_kv_cached(
+                            x=sample,
+                            x_ids=latent_ids,
+                            timesteps=timestep,
+                            ctx=prompt_embeddings,
+                            ctx_ids=text_ids,
+                            guidance=guidance_vector,
+                            kv_cache=kv_cache,
+                        )
+                else:
+                    prediction = self._predict_step(
+                        sample=sample,
+                        latent_ids=latent_ids,
+                        prompt_embeddings=prompt_embeddings,
+                        text_ids=text_ids,
+                        timestep=timestep,
+                        guidance=guidance,
+                        guidance_vector=guidance_vector,
+                        reference_tokens=reference_tokens,
+                        reference_ids=reference_ids,
+                    )
+                sample = self._scheduler.step(
+                    sample=sample,
+                    model_output=prediction.astype(sample.dtype),
+                    timestep=current_timestep,
+                    next_timestep=next_timestep,
+                )
+        finally:
+            if kv_cache is not None:
+                kv_cache.clear()
 
         decoded_latents = unpack_latent_images(
             sample,
@@ -175,6 +218,14 @@ class _RuntimeImageGenerator(ImageGenerator):
                     if reference_tokens is not None
                     else 0
                 ),
+                "kv_cache_used": kv_cache_used,
+                "kv_cache_reference_count": len(image_paths) if kv_cache_used else 0,
+                "kv_cache_reference_token_count": (
+                    int(reference_tokens.shape[1])
+                    if kv_cache_used and reference_tokens is not None
+                    else 0
+                ),
+                "kv_cache_reuse_steps": max(steps - 1, 0) if kv_cache_used else 0,
             },
         )
 

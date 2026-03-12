@@ -8,6 +8,7 @@ from unittest.mock import patch
 import mlx.core as mx
 import numpy as np
 from mlxr.families.flux2._generation_backend.runtime import create_image_generator
+from mlxr.families.flux2._generation_backend.transformer import Flux2KVCache
 from mlxr.families.flux2.prompt_encoding import PromptEncodingResult
 from PIL import Image
 
@@ -65,6 +66,34 @@ class _FakeTransformer:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
 
+    def _record_call(
+        self,
+        *,
+        mode: str,
+        x: mx.array,
+        x_ids: mx.array,
+        timesteps: mx.array,
+        ctx: mx.array,
+        ctx_ids: mx.array,
+        guidance: mx.array | None,
+        reference_sequence: int = 0,
+        cached_ref_tokens: int = 0,
+    ) -> None:
+        self.calls.append(
+            {
+                "mode": mode,
+                "batch": int(x.shape[0]),
+                "sequence": int(x.shape[1]),
+                "ctx_batch": int(ctx.shape[0]),
+                "guidance_is_none": guidance is None,
+                "timestep_batch": int(timesteps.shape[0]),
+                "ctx_ids_batch": int(ctx_ids.shape[0]),
+                "x_ids_batch": int(x_ids.shape[0]),
+                "reference_sequence": reference_sequence,
+                "cached_ref_tokens": cached_ref_tokens,
+            }
+        )
+
     def __call__(
         self,
         *,
@@ -75,16 +104,67 @@ class _FakeTransformer:
         ctx_ids: mx.array,
         guidance: mx.array | None,
     ) -> mx.array:
-        self.calls.append(
-            {
-                "batch": int(x.shape[0]),
-                "sequence": int(x.shape[1]),
-                "ctx_batch": int(ctx.shape[0]),
-                "guidance_is_none": guidance is None,
-                "timestep_batch": int(timesteps.shape[0]),
-                "ctx_ids_batch": int(ctx_ids.shape[0]),
-                "x_ids_batch": int(x_ids.shape[0]),
-            }
+        self._record_call(
+            mode="standard",
+            x=x,
+            x_ids=x_ids,
+            timesteps=timesteps,
+            ctx=ctx,
+            ctx_ids=ctx_ids,
+            guidance=guidance,
+        )
+        return mx.zeros_like(x)
+
+    def forward_kv_extract(
+        self,
+        *,
+        x: mx.array,
+        x_ids: mx.array,
+        x_ref: mx.array,
+        x_ref_ids: mx.array,
+        timesteps: mx.array,
+        ctx: mx.array,
+        ctx_ids: mx.array,
+        guidance: mx.array | None,
+        ref_fixed_timestep: float = 0.0,
+    ) -> tuple[mx.array, Flux2KVCache]:
+        del x_ref_ids, ref_fixed_timestep
+        self._record_call(
+            mode="extract",
+            x=x,
+            x_ids=x_ids,
+            timesteps=timesteps,
+            ctx=ctx,
+            ctx_ids=ctx_ids,
+            guidance=guidance,
+            reference_sequence=int(x_ref.shape[1]),
+        )
+        return mx.zeros_like(x), Flux2KVCache.create(
+            num_double_layers=1,
+            num_single_layers=1,
+            num_ref_tokens=int(x_ref.shape[1]),
+        )
+
+    def forward_kv_cached(
+        self,
+        *,
+        x: mx.array,
+        x_ids: mx.array,
+        timesteps: mx.array,
+        ctx: mx.array,
+        ctx_ids: mx.array,
+        guidance: mx.array | None,
+        kv_cache: Flux2KVCache,
+    ) -> mx.array:
+        self._record_call(
+            mode="cached",
+            x=x,
+            x_ids=x_ids,
+            timesteps=timesteps,
+            ctx=ctx,
+            ctx_ids=ctx_ids,
+            guidance=guidance,
+            cached_ref_tokens=kv_cache.num_ref_tokens,
         )
         return mx.zeros_like(x)
 
@@ -186,6 +266,7 @@ class Flux2RuntimeTests(unittest.TestCase):
 
         self.assertEqual(generated.pixels.shape, (64, 64, 3))
         self.assertEqual(generated.metadata["conditioning_reference_count"], 0)
+        self.assertFalse(bool(generated.metadata["kv_cache_used"]))
         self.assertEqual(edited.pixels.shape, (64, 64, 3))
         self.assertEqual(edited.metadata["conditioning_reference_count"], 2)
         self.assertGreater(int(edited.metadata["conditioning_sequence_length"]), 0)
@@ -358,6 +439,114 @@ class Flux2RuntimeTests(unittest.TestCase):
                 lora_paths=(),
                 lora_scales=(),
             )
+
+    def test_kv_variant_uses_extract_then_cached_steps_for_edit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            ref_a = root / "ref_a.png"
+            ref_b = root / "ref_b.png"
+            Image.new("RGB", (64, 64), color=(12, 22, 32)).save(ref_a)
+            Image.new("RGB", (64, 64), color=(132, 42, 52)).save(ref_b)
+
+            fake_transformer = _FakeTransformer()
+            with (
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.create_prompt_encoder",
+                    return_value=_FakePromptEncoder(),
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_flux2_transformer",
+                    return_value=fake_transformer,
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_autoencoder",
+                    return_value=_FakeVAE(),
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_scheduler",
+                    return_value=_FakeScheduler(),
+                ),
+            ):
+                generator = create_image_generator(
+                    variant="flux.2-klein-9b-kv",
+                    model_root=root,
+                    task="image.edit",
+                    quantize_bits=None,
+                    lora_paths=(),
+                    lora_scales=(),
+                )
+                generated = generator.generate(
+                    prompt="blend the two reference images into a cinematic portrait",
+                    task="image.edit",
+                    width=64,
+                    height=64,
+                    num_inference_steps=4,
+                    guidance_scale=1.0,
+                    negative_prompt=None,
+                    seed=5,
+                    image_paths=(ref_a, ref_b),
+                )
+                generator.close()
+
+        self.assertTrue(bool(generated.metadata["kv_cache_used"]))
+        self.assertEqual(generated.metadata["kv_cache_reference_count"], 2)
+        self.assertGreater(int(generated.metadata["kv_cache_reference_token_count"]), 0)
+        self.assertEqual(generated.metadata["kv_cache_reuse_steps"], 3)
+        self.assertEqual(
+            [call["mode"] for call in fake_transformer.calls],
+            ["extract", "cached", "cached", "cached"],
+        )
+        self.assertGreater(int(fake_transformer.calls[0]["reference_sequence"]), 0)
+        self.assertEqual(fake_transformer.calls[1]["cached_ref_tokens"], 32)
+
+    def test_kv_variant_falls_back_to_standard_path_without_references(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            fake_transformer = _FakeTransformer()
+            with (
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.create_prompt_encoder",
+                    return_value=_FakePromptEncoder(),
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_flux2_transformer",
+                    return_value=fake_transformer,
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_autoencoder",
+                    return_value=_FakeVAE(),
+                ),
+                patch(
+                    "mlxr.families.flux2._generation_backend.runtime.load_local_scheduler",
+                    return_value=_FakeScheduler(),
+                ),
+            ):
+                generator = create_image_generator(
+                    variant="flux.2-klein-9b-kv",
+                    model_root=root,
+                    task="image.generate",
+                    quantize_bits=None,
+                    lora_paths=(),
+                    lora_scales=(),
+                )
+                generated = generator.generate(
+                    prompt="a cat holding a sign that says hello world",
+                    task="image.generate",
+                    width=64,
+                    height=64,
+                    num_inference_steps=4,
+                    guidance_scale=1.0,
+                    negative_prompt=None,
+                    seed=11,
+                    image_paths=(),
+                )
+                generator.close()
+
+        self.assertFalse(bool(generated.metadata["kv_cache_used"]))
+        self.assertEqual(
+            [call["mode"] for call in fake_transformer.calls],
+            ["standard", "standard", "standard", "standard"],
+        )
 
 
 if __name__ == "__main__":

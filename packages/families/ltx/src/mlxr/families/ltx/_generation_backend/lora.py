@@ -167,9 +167,7 @@ def read_reference_downscale_factor(lora_path: Path) -> int:
             "LTX IC-LoRA metadata reference_downscale_factor must be an integer"
         ) from exc
     if scale < 1:
-        raise ValueError(
-            "LTX IC-LoRA metadata reference_downscale_factor must be >= 1"
-        )
+        raise ValueError("LTX IC-LoRA metadata reference_downscale_factor must be >= 1")
     return scale
 
 

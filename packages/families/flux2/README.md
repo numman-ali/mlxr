@@ -12,8 +12,10 @@ Current truthful scope:
 - owned MLX execution for:
   - `flux.2-klein-4b` `image.generate`
   - `flux.2-klein-9b` `image.generate`
+  - `flux.2-klein-9b-kv` `image.generate`
   - `flux.2-klein-4b` single-reference `image.edit`
   - `flux.2-klein-9b` single-reference `image.edit`
+  - `flux.2-klein-9b-kv` reference-conditioned `image.edit`
   - `flux.2-klein-base-4b` `image.generate`
   - `flux.2-klein-base-9b` `image.generate`
   - `flux.2-klein-base-*` `image.edit`
@@ -33,6 +35,7 @@ Current recommended rows:
 
 What is intentionally not claimed yet:
 
+- promoted real-run validation receipts for `flux.2-klein-9b-kv`
 - quality-promoted multi-reference `image.edit`
 - promoted real-run validation receipts for `flux.2-klein-base-9b`
 - `flux.2-dev` runtime execution
@@ -48,6 +51,12 @@ Current runtime notes:
 - base `klein` rows now use the official unconditional-plus-prompt CFG path with
   default `50` steps and `guidance_scale=4.0`
 - `9b` is the stronger current editing default
+- `flux.2-klein-9b-kv` is now a dedicated owned variant too; it uses the same
+  no-reference distilled path for `image.generate`, and it switches to a
+  family-local MLX KV-cache path for reference-conditioned `image.edit`
+- the `9b-kv` row is implemented but not promoted yet; it still needs real
+  runtime receipts and same-machine speed evidence before it can replace
+  `flux.2-klein-9b` as the preferred edit-heavy row
 - `4b` is materially lighter and works well for prompt-only generate plus
   simpler single-reference edits
 - `flux.2-klein-base-4b` now has a real canonical `mlxr` generate receipt and a

@@ -8,7 +8,9 @@ and the matrix of what is green versus still open lives in
 
 Current recommendation:
 
-- treat `flux.2-klein-9b` as the primary klein row
+- treat `flux.2-klein-9b` as the primary general-purpose klein row
+- treat `flux.2-klein-9b-kv` as the edit-optimized klein row once it has real
+  speed and quality receipts
 - keep `flux.2-klein-4b` as the lighter sibling for faster or lower-memory
   bring-up
 - keep `flux.2-dev` as the higher-end quality or editing row
@@ -32,6 +34,7 @@ Current official open-weight rows:
 
 - `flux.2-klein-4b`
 - `flux.2-klein-9b`
+- `flux.2-klein-9b-kv`
 - `flux.2-klein-base-4b`
 - `flux.2-klein-base-9b`
 - `flux.2-dev`
@@ -52,9 +55,17 @@ Now real through the canonical `mlxr` runtime and CLI:
 - `flux.2-klein-4b`
   - `image.generate`
   - single-reference `image.edit`
+- `flux.2-klein-9b-kv`
+  - implemented for `image.generate`
+  - implemented for reference-conditioned `image.edit`
+  - first canonical `mlxr` single-reference edit smoke now exists with KV stage
+    metrics
+  - not yet promoted and not yet validated against the upstream `-kv` bundle
 
 Still open after that first owned slice:
 
+- upstream-bundle validation and same-machine speed receipts for
+  `flux.2-klein-9b-kv`
 - quality-promoted multi-reference `image.edit`
 - `flux.2-klein-base-4b`
 - `flux.2-klein-base-9b`
@@ -75,6 +86,8 @@ Deferred for the first promoted slice:
 - `dev` uses Mistral
 - guidance-distilled and CFG paths are different sampler behaviors, not just
   parameter changes
+- `flux.2-klein-9b-kv` is not a new family contract; it is the same klein `9b`
+  row plus a dedicated reference-token KV-cache execution path
 - multi-reference editing is one engine path with AE-encoded reference tokens
   rather than a separate pipeline family
 - the current owned multi-reference path is not quality-promoted yet because
@@ -94,7 +107,9 @@ Deferred for the first promoted slice:
 - `references/official/flux2/scripts/cli.py`
 - `references/official/flux2/src/flux2/util.py`
 - `references/official/flux2/src/flux2/sampling.py`
+- `references/official/flux2/docs/flux2_klein_kv_cache.md`
 - `references/official/flux2/docs/flux2_with_prompt_upsampling.md`
 - `tmp/hf-flux2-klein-4b-live/model_index.json`
 - `tmp/hf-flux2-klein-9b-live/model_index.json`
+- `tmp/hf-flux2-klein-9b-kv-meta-20260312/model_index.json`
 - `tmp/hf-flux2-dev-meta/model_index.json`

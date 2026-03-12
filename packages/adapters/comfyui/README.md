@@ -1,6 +1,9 @@
 # adapter-comfyui
 
-This package will become the thin runtime-backed adapter for ComfyUI.
+This package is the planned thin runtime-backed adapter for ComfyUI.
+
+The goal is to expose `MLXR` capabilities inside ComfyUI without duplicating
+inference logic or teaching the adapter to own runtime orchestration.
 
 The first node set should focus on:
 
@@ -8,4 +11,5 @@ The first node set should focus on:
 - fast image-to-video
 - runtime model and capability selection
 
-Advanced CUDA-centric or direct-transformer patching nodes are intentionally later work.
+Advanced CUDA-centric flows, direct transformer patching, or broader parity
+surfaces are intentionally later work.

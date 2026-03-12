@@ -82,6 +82,29 @@ class Flux2FamilyTests(unittest.TestCase):
         self.assertEqual(inspection.variant, "flux.2-klein-9b")
         self.assertEqual(inspection.tasks, ("image.generate", "image.edit"))
 
+    def test_inspect_source_recognizes_klein_kv_row(self) -> None:
+        adapter = Flux2FamilyAdapter()
+        provider = LocalFileProviderAdapter()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle_root = make_local_flux_bundle(
+                Path(tmp_dir), variant_dir_name="FLUX.2-klein-9B-kv"
+            )
+            resolved = provider.resolve(
+                SourceRef(
+                    provider="local",
+                    locator={"path": str(bundle_root)},
+                    family_hint="flux2",
+                )
+            )
+
+        inspection = adapter.inspect_source(resolved)
+
+        self.assertEqual(inspection.variant, "flux.2-klein-9b-kv")
+        self.assertEqual(
+            inspection.metadata["edit_optimized_klein_variant"],
+            "flux.2-klein-9b-kv",
+        )
+
     def test_inspect_source_honors_explicit_variant_hint(self) -> None:
         adapter = Flux2FamilyAdapter()
         provider = LocalFileProviderAdapter()
@@ -163,6 +186,44 @@ class Flux2FamilyTests(unittest.TestCase):
             ["image.generate", "image.edit"],
         )
         self.assertEqual(artifact.record.capability.artifacts_out, ["png", "jpg"])
+
+    def test_convert_preserves_klein_kv_variant_and_constraints(self) -> None:
+        adapter = Flux2FamilyAdapter()
+        provider = LocalFileProviderAdapter()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle_root = make_local_flux_bundle(
+                Path(tmp_dir), variant_dir_name="FLUX.2-klein-9B-kv"
+            )
+            source_ref = SourceRef(
+                provider="local",
+                locator={"path": str(bundle_root)},
+                family_hint="flux2",
+            )
+            resolved = provider.resolve(source_ref)
+            materialization = provider.fetch(
+                resolved, adapter.fetch_policy_for_conversion("bundle", resolved)
+            )
+            artifact = adapter.convert(
+                {
+                    "bundle": ConversionSource(
+                        role="bundle",
+                        source_id="src_bundle",
+                        source=source_ref,
+                        materialization=materialization,
+                    )
+                },
+                ConversionPlan(model_id="flux2-klein-9b-kv-local"),
+            )
+
+        self.assertEqual(artifact.record.family_variant, "flux.2-klein-9b-kv")
+        self.assertEqual(
+            artifact.record.capability.constraints["num_inference_steps"],
+            {"fixed": 4},
+        )
+        self.assertEqual(
+            artifact.record.metadata["edit_optimized_klein_variant"],
+            "flux.2-klein-9b-kv",
+        )
 
     def test_convert_rejects_incomplete_index_backed_component(self) -> None:
         adapter = Flux2FamilyAdapter()

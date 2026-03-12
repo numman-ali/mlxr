@@ -126,9 +126,7 @@ def _prepare_target_runtime_home(
     return target_runtime
 
 
-def _precision_for_model(
-    model: ModelRecord, artifact: PortableArtifactRecord
-) -> str:
+def _precision_for_model(model: ModelRecord, artifact: PortableArtifactRecord) -> str:
     if model.capability is not None:
         precision = model.capability.metadata.get("precision")
         if isinstance(precision, str) and precision:
@@ -150,7 +148,9 @@ def _refreshed_artifact_record(
     for component in selection.artifact.components:
         if component.role in role_to_source_record:
             continue
-        role_to_source_record[component.role] = selection.source_records[component.source_id]
+        role_to_source_record[component.role] = selection.source_records[
+            component.source_id
+        ]
 
     conversion_sources: dict[str, ConversionSource] = {}
     for role, source_record in role_to_source_record.items():
@@ -271,7 +271,9 @@ def _persist_model_and_artifact(
             "loaded": False,
         }
     )
-    write_json_atomic(target_runtime.model_manifest_path(model.model_id), refreshed_model)
+    write_json_atomic(
+        target_runtime.model_manifest_path(model.model_id), refreshed_model
+    )
 
 
 def clone_runtime_home(

@@ -11,6 +11,7 @@ implemented, or still fail-closed.
 | --- | --- | --- | --- | --- |
 | `flux.2-klein-4b` | yes | yes | `image.generate`, single-ref `image.edit`, multi-ref `image.edit` | Apache-2.0 |
 | `flux.2-klein-9b` | yes | yes | `image.generate`, single-ref `image.edit`, multi-ref `image.edit` | non-commercial |
+| `flux.2-klein-9b-kv` | yes | yes | `image.generate`, single-ref `image.edit`, multi-ref `image.edit` | non-commercial |
 | `flux.2-klein-base-4b` | no | no | `image.generate`, single-ref `image.edit`, multi-ref `image.edit` | Apache-2.0 |
 | `flux.2-klein-base-9b` | no | no | `image.generate`, single-ref `image.edit`, multi-ref `image.edit` | non-commercial |
 | `flux.2-dev` | no | yes | `image.generate`, single-ref `image.edit`, multi-ref `image.edit`, prompt upsampling | non-commercial |
@@ -21,10 +22,13 @@ implemented, or still fail-closed.
 | --- | --- | --- | --- | --- | --- |
 | `image.generate` | `flux.2-klein-4b` | implemented | promoted | real CLI receipt plus `mflux` comparison pack | distilled recipe only: `4` steps, `guidance_scale=1.0` |
 | `image.generate` | `flux.2-klein-9b` | implemented | promoted | real CLI receipt plus `mflux` comparison pack | stronger current default for high-quality stills |
+| `image.generate` | `flux.2-klein-9b-kv` | implemented | not promoted | unit validation only | uses the same distilled no-reference path as plain `9b`; no cache benefit without refs |
 | single-ref `image.edit` | `flux.2-klein-4b` | implemented | promoted | real CLI receipts, including simplified edit rung | more prompt-sensitive than `9b` |
 | single-ref `image.edit` | `flux.2-klein-9b` | implemented | promoted | real CLI receipt | current strongest editing row |
+| single-ref `image.edit` | `flux.2-klein-9b-kv` | implemented | not promoted | canonical runtime smoke plus unit validation | owned MLX backend now extracts ref K/V on step `0` and reuses them on later steps; the first `mlxr` smoke emitted `kv_cache_used=true`, but no upstream-bundle or speed-comparison receipt exists yet |
 | multi-ref `image.edit` | `flux.2-klein-4b` | implemented | not promoted | real CLI receipt plus Gemini mismatch review | current run collapses too strongly toward the later reference image |
 | multi-ref `image.edit` | `flux.2-klein-9b` | implemented | not promoted | real CLI receipt plus Gemini mismatch review | same collapse behavior as `4b` in the current recipe |
+| multi-ref `image.edit` | `flux.2-klein-9b-kv` | implemented | not promoted | unit validation only | same KV-cache path as single-ref editing; needs real speed and quality evidence before promotion |
 | `image.generate` | `flux.2-klein-base-4b` | implemented | promoted | real CLI receipt plus strict Gemini match review | owned runtime uses the official CFG-style unconditional+prompt branch; slower than distilled `klein` but now real |
 | `image.generate` | `flux.2-klein-base-9b` | implemented | promoted | real CLI receipt plus strict Gemini match review | strongest current owned base row, but materially slower and heavier than base 4B |
 | single-ref `image.edit` | `flux.2-klein-base-4b` | implemented | not promoted | real CLI receipts only | first preservation-heavy edit drifted compass and glove; simpler coat-only edit looks strong by eye but still needs a clean semantic review |
@@ -78,9 +82,33 @@ Current base-edit under-validation receipts:
   `tmp/manual-runs/20260310T1653Z-flux2-klein-base-4b-cli-edit-simple.png`
   manual review looks promising, but the Gemini review session did not return cleanly and is not a promotion receipt yet
 
+Current `9b-kv` implementation evidence:
+
+- canonical `mlxr` single-ref edit smoke on a temporary
+  `flux2-klein-9b-kv-local` registration that reuses the local plain `9b`
+  payload:
+  `tmp/flux2-kv-canonical-smoke-20260312T2045Z/runtime-home/jobs/job_5fd927e67fa843e3a16bf03336c9e2ce/events.jsonl`
+  with `generate` metrics showing `kv_cache_used=true`,
+  `kv_cache_reference_token_count=16`, and `kv_cache_reuse_steps=3`
+- first same-machine runtime timing comparison on that same temporary payload
+  currently shows the owned KV path is slower, not faster, on the tiny safe rung:
+  `tmp/flux2-kv-canonical-smoke-20260312T2045Z/benchmark-summary.json`
+  reports single-ref median `11.21s` for plain `9b` versus `14.50s` for
+  `9b-kv` and multi-ref `11.25s` versus `15.49s`, so the row is explicitly not
+  promotion-ready yet
+- package-local unit coverage for variant inspection, conversion, transformer KV
+  cache helpers, and runtime extract/cached step selection
+- no real `mlxr` receipt yet against the upstream `black-forest-labs/FLUX.2-klein-9b-kv`
+  bundle, so keep the row unpromoted until that evidence exists
+
 ## Current Recommendation
 
 Use `flux.2-klein-9b` as the best current FLUX row in `MLXR`.
+
+Treat `flux.2-klein-9b-kv` as the implemented but not yet promoted
+edit-optimized row. It should only replace plain `9b` as the recommended edit
+lane after real same-machine receipts prove a clear speed win without obvious
+semantic regression.
 
 Use `flux.2-klein-4b` when lighter memory and faster turnaround matter more
 than the stronger edit behavior of `9b`.
