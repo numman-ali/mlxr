@@ -6,8 +6,11 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
     "mlx-runtime-core",
+    "mlx-runtime-family-flux2",
     "mlx-runtime-family-ltx",
+    "mlx-runtime-family-qwen-image",
     "mlx-runtime-schemas",
+    "mlx-runtime-family-z-image",
     "mlx-runtime-workflows",
     "uvicorn>=0.30.0",
 ]

@@ -11,6 +11,7 @@ from mlxr.core.schemas import (
     ArtifactConversionTimingsMs,
     CapabilityDescriptor,
     FamilyInspectionResult,
+    ModelInstallResult,
     ModelRecord,
     PortableArtifactRecord,
     ProviderInspectionResult,
@@ -18,6 +19,7 @@ from mlxr.core.schemas import (
     SourceInspectionTimingsMs,
     SourceRef,
     SourceRegistrationRecord,
+    SupportedModelDescriptor,
 )
 
 from .contracts import (
@@ -36,6 +38,7 @@ from .manifests import (
 )
 from .registry import RuntimeRegistry
 from .runtime_home import RuntimeHome
+from .supported_models import SUPPORTED_MODEL_RECIPES, SupportedModelRecipe
 
 
 class RuntimeCatalogError(Exception):
@@ -233,6 +236,45 @@ class RuntimeCatalog:
             raise CatalogNotFoundError(f"Unknown model '{model_id}'")
         return record
 
+    def list_supported_models(self) -> list[SupportedModelDescriptor]:
+        installed_model_ids = {record.model_id for record in self.models.list()}
+        return [
+            recipe.to_descriptor(installed=recipe.model_id in installed_model_ids)
+            for recipe in _available_supported_model_recipes(self.registry)
+        ]
+
+    def install_supported_model(self, model_id: str) -> ModelInstallResult:
+        recipe = _supported_model_recipe(self.registry, model_id)
+        existing_model = self.models.get(model_id)
+        if existing_model is not None and existing_model.artifact is not None:
+            return ModelInstallResult(
+                status="already_installed",
+                model=existing_model,
+                supported_model=recipe.to_descriptor(installed=True),
+            )
+
+        registered_source_ids: dict[str, str] = {}
+        if recipe.source_ref is not None:
+            registered_source = self.register_source(recipe.source_ref)
+            registered_source_ids["bundle"] = registered_source.source_id
+        elif recipe.source_bindings is not None:
+            for role, source_ref in recipe.source_bindings.items():
+                registered_source = self.register_source(source_ref)
+                registered_source_ids[role] = registered_source.source_id
+        else:
+            raise CatalogValidationError(
+                f"Supported model '{model_id}' has no install recipe"
+            )
+
+        conversion_result = self.convert_artifact(
+            recipe.to_conversion_request(registered_source_ids=registered_source_ids)
+        )
+        return ModelInstallResult(
+            status="installed",
+            model=conversion_result.model,
+            supported_model=recipe.to_descriptor(installed=True),
+        )
+
     def list_capabilities(self) -> list[CapabilityDescriptor]:
         return [
             record.capability
@@ -363,3 +405,32 @@ class RuntimeCatalog:
 
 def _elapsed_ms(started_at: float) -> float:
     return round((time.perf_counter() - started_at) * 1000.0, 3)
+
+
+def _available_supported_model_recipes(
+    registry: RuntimeRegistry,
+) -> tuple[SupportedModelRecipe, ...]:
+    available: list[SupportedModelRecipe] = []
+    for recipe in SUPPORTED_MODEL_RECIPES:
+        if not registry.has_family(recipe.family):
+            continue
+        if recipe.source_ref is not None:
+            if not registry.has_provider(recipe.source_ref.provider):
+                continue
+            available.append(recipe)
+            continue
+        if recipe.source_bindings is not None and all(
+            registry.has_provider(source_ref.provider)
+            for source_ref in recipe.source_bindings.values()
+        ):
+            available.append(recipe)
+    return tuple(available)
+
+
+def _supported_model_recipe(
+    registry: RuntimeRegistry, model_id: str
+) -> SupportedModelRecipe:
+    for recipe in _available_supported_model_recipes(registry):
+        if recipe.model_id == model_id:
+            return recipe
+    raise CatalogNotFoundError(f"Unknown supported model '{model_id}'")

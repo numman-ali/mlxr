@@ -186,6 +186,22 @@ class RecordingProvider:
         raise ValueError(f"Unsupported test role '{role}'")
 
 
+class RecordingHuggingFaceProvider(RecordingProvider):
+    provider_id = "huggingface"
+
+
+def make_supported_model_state(tmp_path: Path) -> RuntimeState:
+    registry = RuntimeRegistry()
+    registry.register_provider(
+        RecordingHuggingFaceProvider(tmp_path / "provider-cache")
+    )
+    registry.register_family(LTXFamilyAdapter())
+    return RuntimeState(
+        registry=registry,
+        runtime_home=RuntimeHome(root=tmp_path / "runtime-home"),
+    )
+
+
 class PhaseARuntimeTests(unittest.TestCase):
     def test_source_id_is_deterministic(self) -> None:
         source_ref = SourceRef(
@@ -607,6 +623,56 @@ class PhaseARuntimeTests(unittest.TestCase):
                     fetch_policy.options["strict_local_text_encoding"]
                     for fetch_policy in provider.fetch_calls
                 )
+            )
+
+    def test_list_supported_models_reports_available_catalog_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            client = TestClient(create_app(make_supported_model_state(Path(tmp_dir))))
+
+            response = client.get("/v1/models/supported")
+
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(len(response.json()), 1)
+            body = response.json()[0]
+            self.assertEqual(body["model_id"], "ltx-2.3-fast-local")
+            self.assertEqual(body["display_name"], "LTX 2.3 Fast")
+            self.assertEqual(body["provider"], "huggingface")
+            self.assertEqual(body["recommendation_tier"], "recommended")
+            self.assertEqual(body["support_level"], "promoted")
+            self.assertEqual(
+                body["tasks"],
+                ["video.generate", "video.condition.image", "video.condition.audio"],
+            )
+            self.assertEqual(body["installed"], False)
+
+    def test_install_supported_model_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            client = TestClient(create_app(make_supported_model_state(Path(tmp_dir))))
+
+            install_response = client.post(
+                "/v1/models/install", json={"model_id": "ltx-2.3-fast-local"}
+            )
+            self.assertEqual(install_response.status_code, 200, install_response.text)
+            install_body = install_response.json()
+            self.assertEqual(install_body["status"], "installed")
+            self.assertEqual(install_body["model"]["model_id"], "ltx-2.3-fast-local")
+            self.assertEqual(install_body["supported_model"]["installed"], True)
+
+            supported_response = client.get("/v1/models/supported")
+            self.assertEqual(supported_response.status_code, 200)
+            self.assertEqual(supported_response.json()[0]["installed"], True)
+
+            reinstall_response = client.post(
+                "/v1/models/install", json={"model_id": "ltx-2.3-fast-local"}
+            )
+            self.assertEqual(
+                reinstall_response.status_code, 200, reinstall_response.text
+            )
+            reinstall_body = reinstall_response.json()
+            self.assertEqual(reinstall_body["status"], "already_installed")
+            self.assertEqual(
+                reinstall_body["model"]["artifact"]["capability"]["scheduler_class"],
+                "media_video_dit",
             )
 
     def test_convert_supports_dev_checkpoint_without_spatial_upsampler(self) -> None:

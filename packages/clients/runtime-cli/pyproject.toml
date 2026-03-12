@@ -1,12 +1,14 @@
 [project]
-name = "mlx-runtime-cli"
+name = "mlxr"
 version = "0.1.0"
-description = "CLI scaffold for MLXR"
+description = "Human-first local CLI for MLXR"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.0",
+    "huggingface_hub>=0.36.0",
     "mlx-runtime-core",
     "mlx-runtime-schemas",
+    "mlx-runtime-server",
     "mlx-runtime-workflows",
     "pydantic>=2.10.0",
 ]

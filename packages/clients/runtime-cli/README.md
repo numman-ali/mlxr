@@ -1,8 +1,8 @@
-# runtime-cli
+# mlxr CLI
 
-`runtime-cli` is the first-party command-line client for `MLXR`.
+`mlxr` is the first-party command-line client for `MLXR`.
 
-It is intentionally thin over the shared runtime. The CLI should expose the
+It stays intentionally thin over the shared runtime. The CLI should expose the
 runtime's real task surface without becoming a second orchestration layer or a
 family-specific dumping ground.
 
@@ -15,24 +15,46 @@ family-specific dumping ground.
 
 ## Current Real Surface
 
-The currently real entrypoint is:
+The current real entrypoints are:
 
 - `mlxr generate`
+- `mlxr serve`
+- `mlxr doctor`
+- `mlxr models list`
+- `mlxr models install`
+- `mlxr feedback`
 
-That command already supports:
+The current CLI already supports:
 
 - workflow-oriented generation requests
 - local UDS-first transport by default
+- no-args help with examples, docs, and feedback links
+- automatic startup of a reusable local daemon for runtime-backed commands
+- curated supported-model discovery and install
 - `--plan-only`
 - `--wait`
 - trusted local export of the first output artifact with `--wait --export-path`
 
+## Install And First Run
+
+Published install target:
+
+```bash
+uv tool install mlxr
+mlxr
+```
+
+Repo-local development flow:
+
+```bash
+uv sync
+uv run mlxr
+```
+
 ## Public Growth Path
 
-These command groups are intended public follow-ons:
+Still-growing command groups:
 
-- `mlxr serve`
-- `mlxr models *`
 - `mlxr jobs *`
 
 The current CLI ergonomics direction is documented in:

@@ -19,7 +19,7 @@ desktop product.
 
 - a shared runtime with source, artifact, provenance, and job models
 - a local daemon API with UDS-first transport and handle-based import or export
-- a first-party CLI thin client
+- a first-party `mlxr` CLI thin client
 - promoted LTX fast video slices
 - real Qwen-Image, FLUX.2, and Z-Image image-family slices
 - growing cross-family validation pressure
@@ -55,7 +55,7 @@ The runtime is the source of truth. Clients and adapters stay thin over it.
 | --- | --- |
 | Shared runtime | real |
 | Local daemon API | real |
-| `runtime-cli` | real |
+| `mlxr` CLI | real |
 | `ltx-desktop` adapter | planned |
 | Comfy adapter | planned |
 | First-party Mac app | planned next |
@@ -102,6 +102,36 @@ That first app is intentionally smaller than the later `MLXR Studio` vision.
 - [Open-source release checklist](docs/open-source-release-checklist.md)
 - [Open-source maintenance model](docs/open-source-maintenance.md)
 
+## CLI
+
+The current public CLI is `mlxr`.
+
+First-run flow from a published install:
+
+```bash
+uv tool install mlxr
+mlxr
+mlxr models list
+mlxr models install ltx-2.3-fast-local
+mlxr generate --model-id ltx-2.3-fast-local --prompt "golden retriever in a park" --wait --export-path out.mp4
+```
+
+Current repo-local flow:
+
+```bash
+uv sync
+uv run mlxr
+```
+
+The CLI now includes:
+
+- `mlxr generate`
+- `mlxr serve`
+- `mlxr doctor`
+- `mlxr models list`
+- `mlxr models install`
+- `mlxr feedback`
+
 ## Platform Docs
 
 - [Workflow orchestration design](docs/workflow-orchestration-design.md)
@@ -123,6 +153,7 @@ The repo uses a `uv` workspace rooted at the top-level `pyproject.toml`.
 
 ```bash
 uv sync
+uv run mlxr --help
 uv run python scripts/dev.py verify
 uv run python scripts/dev.py logs
 uv run pre-commit run --all-files

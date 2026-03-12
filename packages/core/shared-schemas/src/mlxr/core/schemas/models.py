@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -82,6 +82,38 @@ class ModelRecord(BaseModel):
     artifact: PortableArtifactRecord | None = None
     loaded: bool = False
     capability: CapabilityDescriptor | None = None
+
+
+RecommendationTier = Literal["recommended", "advanced"]
+SupportLevel = Literal["promoted", "supported"]
+ModelInstallStatus = Literal["installed", "already_installed"]
+
+
+class SupportedModelDescriptor(BaseModel):
+    model_id: str
+    display_name: str
+    family: str
+    family_variant: str | None = None
+    recommendation_tier: RecommendationTier = "recommended"
+    support_level: SupportLevel = "supported"
+    tasks: list[str] = Field(default_factory=list)
+    provider: str
+    source_summary: str
+    license: str | None = None
+    access_state: str = "unknown"
+    installed: bool = False
+    installable: bool = True
+    notes: str | None = None
+
+
+class ModelInstallRequest(BaseModel):
+    model_id: str
+
+
+class ModelInstallResult(BaseModel):
+    status: ModelInstallStatus
+    model: ModelRecord
+    supported_model: SupportedModelDescriptor
 
 
 class ArtifactConversionRequest(BaseModel):

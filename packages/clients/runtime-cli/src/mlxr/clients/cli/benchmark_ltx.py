@@ -1202,6 +1202,7 @@ def _system_memory_bytes() -> int | None:
 def _package_versions() -> dict[str, str | None]:
     package_names = (
         "mlx",
+        "mlxr",
         "mlx-runtime-cli",
         "mlx-runtime-core",
         "mlx-runtime-family-ltx",

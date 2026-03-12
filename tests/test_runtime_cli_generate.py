@@ -824,7 +824,7 @@ class RuntimeCliGenerateTests(unittest.TestCase):
             def close(self) -> None:
                 return None
 
-        with patch("mlxr.clients.cli.cli.httpx.Client", _FakeHttpxClient):
+        with patch("mlxr.clients.cli.runtime.httpx.Client", _FakeHttpxClient):
             client = RuntimeClient(
                 base_url="http://127.0.0.1:8000/",
                 uds_path=None,

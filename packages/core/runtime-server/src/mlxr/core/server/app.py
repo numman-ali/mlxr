@@ -27,6 +27,8 @@ from mlxr.core.schemas import (
     JobRecord,
     JobRequest,
     JobSubmitResult,
+    ModelInstallRequest,
+    ModelInstallResult,
     ModelRecord,
     OutputArtifactRecord,
     PortableArtifactRecord,
@@ -35,6 +37,7 @@ from mlxr.core.schemas import (
     SourceInspectionResult,
     SourceRef,
     SourceRegistrationRecord,
+    SupportedModelDescriptor,
     WorkflowIntent,
     WorkflowPlanResult,
     WorkflowRunRequest,
@@ -257,6 +260,37 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
     @app.get("/v1/models", response_model=list[ModelRecord])
     def list_models() -> list[ModelRecord]:
         return runtime.catalog.list_models()
+
+    @app.get("/v1/models/supported", response_model=list[SupportedModelDescriptor])
+    def list_supported_models() -> list[SupportedModelDescriptor]:
+        return runtime.catalog.list_supported_models()
+
+    @app.post("/v1/models/install", response_model=ModelInstallResult)
+    def install_model(
+        install_request: ModelInstallRequest, request: Request
+    ) -> ModelInstallResult:
+        guard_mutation(request)
+        try:
+            result = runtime.catalog.install_supported_model(install_request.model_id)
+            logger.info(
+                "Supported model install status=%s model_id=%s artifact_digest=%s",
+                result.status,
+                result.model.model_id,
+                (
+                    result.model.artifact.artifact_digest
+                    if result.model.artifact is not None
+                    else None
+                ),
+            )
+            return result
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except CatalogConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/v1/models/{model_id}", response_model=ModelRecord)
     def get_model(model_id: str) -> ModelRecord:

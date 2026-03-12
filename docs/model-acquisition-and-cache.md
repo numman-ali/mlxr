@@ -138,13 +138,18 @@ If a user asks for a supported model and it is already installed, `MLXR` should 
 
 If the source revision changed or the artifact format changed, `MLXR` should make the necessary refresh explicit instead of silently mutating identity.
 
-The install surface should grow toward commands like:
+The current install surface is growing toward commands like:
 
 ```text
 mlxr models install <model>
-mlxr models update <model>
 mlxr models list
-mlxr models doctor
+mlxr doctor
+```
+
+Later follow-ons should include:
+
+```text
+mlxr models update <model>
 mlxr models prune
 ```
 

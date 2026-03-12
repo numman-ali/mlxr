@@ -27,7 +27,7 @@ What is not true yet:
 | --- | --- | --- |
 | Shared runtime | real | canonical source of truth |
 | Local daemon API | real | UDS-first, handle-based |
-| `runtime-cli` | real | current first-party thin client |
+| `mlxr` CLI | real | first-party thin client with `generate`, `serve`, `doctor`, `models`, and `feedback` |
 | `ltx-desktop` adapter | planned | compatibility seam, not yet implemented |
 | Comfy adapter | planned | thin runtime-backed adapter, not yet implemented |
 | First-party Mac app | planned next | simple native client over the shared runtime |

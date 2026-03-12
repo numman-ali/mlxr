@@ -25,6 +25,7 @@ from .manifests import source_id_for_ref
 from .providers import HuggingFaceProviderAdapter, LocalFileProviderAdapter
 from .registry import RuntimeRegistry
 from .runtime_home import RuntimeHome
+from .supported_models import SUPPORTED_MODEL_RECIPES, SupportedModelRecipe
 from .tracing import TraceEvent, TraceRecorder, mlx_memory_snapshot
 
 __all__ = [
@@ -50,6 +51,8 @@ __all__ = [
     "RuntimeRegistry",
     "SourceMaterialization",
     "SourceProviderAdapter",
+    "SupportedModelRecipe",
+    "SUPPORTED_MODEL_RECIPES",
     "source_id_for_ref",
     "StageResult",
     "TraceEvent",

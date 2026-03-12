@@ -17,15 +17,20 @@ It should stay:
 What is real today:
 
 - `mlxr generate`
+- `mlxr serve`
+- `mlxr doctor`
+- `mlxr models list`
+- `mlxr models install`
+- `mlxr feedback`
 - local import of trusted image, video, audio, and LoRA inputs
+- no-args help with examples, docs, and feedback links
+- automatic startup of a reusable local daemon for runtime-backed commands
 - `--plan-only`
 - `--wait`
 - `--export-path`
 
 What is intentionally still growing:
 
-- `mlxr serve`
-- `mlxr models *`
 - `mlxr jobs *`
 - later adapter or reusable-asset flows
 
@@ -73,12 +78,15 @@ It should remain the easiest way to:
 
 ### `mlxr models *`
 
-This should become the public install and inspection surface for:
+This is now the public install and inspection surface for:
 
 - install
-- update
 - list
 - doctor
+
+It should still grow toward:
+
+- update
 - prune
 
 The app should reuse this logic rather than inventing a separate model-install
@@ -95,8 +103,8 @@ This should become the public operational surface for:
 
 ### `mlxr serve`
 
-This should become the thin service-management path for local runtime startup
-and status.
+This is now the thin service-management path for local runtime startup and
+status.
 
 ## Relationship To Other Surfaces
 
