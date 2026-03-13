@@ -1,0 +1,4 @@
+interface:
+  display_name: "Media Asset Composer"
+  short_description: "Create posters, slides, and cards"
+  default_prompt: "Use $media-asset-composer to design a poster, slide, card, or short motion asset from the materials in this project."
