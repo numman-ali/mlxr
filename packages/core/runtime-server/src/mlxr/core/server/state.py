@@ -12,9 +12,10 @@ from mlxr.core.workflows import WorkflowPlanner
 
 from .jobs import JobManager
 from .logging import configure_control_plane_logging, get_control_plane_logger
+from .model_installs import ModelInstallManager
 from .registry import default_runtime_registry, default_workflow_planner
 from .settings import ServerSettings
-from .store import InputStore, JobStore, OutputStore
+from .store import InputStore, JobStore, ModelInstallStore, OutputStore
 from .workflows import WorkflowService
 
 
@@ -28,7 +29,9 @@ class RuntimeState:
     input_store: InputStore = field(init=False)
     output_store: OutputStore = field(init=False)
     job_store: JobStore = field(init=False)
+    model_install_store: ModelInstallStore = field(init=False)
     job_manager: JobManager = field(init=False)
+    model_install_manager: ModelInstallManager = field(init=False)
     workflow_service: WorkflowService = field(init=False)
     log_path: Path = field(init=False)
 
@@ -37,12 +40,17 @@ class RuntimeState:
         self.input_store = InputStore(self.runtime_home)
         self.output_store = OutputStore(self.runtime_home)
         self.job_store = JobStore(self.runtime_home)
+        self.model_install_store = ModelInstallStore(self.runtime_home)
         self.job_manager = JobManager(
             catalog=self.catalog,
             job_store=self.job_store,
             input_store=self.input_store,
             output_store=self.output_store,
             settings=self.settings,
+        )
+        self.model_install_manager = ModelInstallManager(
+            catalog=self.catalog,
+            store=self.model_install_store,
         )
         self.workflow_service = WorkflowService(
             catalog=self.catalog,

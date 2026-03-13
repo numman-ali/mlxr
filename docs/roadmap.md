@@ -36,15 +36,23 @@ the same capability, job, provenance, and artifact model.
 
 ### 3. Simple native Mac app
 
-The first app is not `MLXR Studio`.
+The first app is not `MLXR Studio`, and it is no longer just a spec.
 
-It is a simple macOS app that:
+The current state is:
+
+- native Swift package scaffold is real
+- runtime bridge, model install, advanced import, image flows, video flows,
+  library, jobs, and settings surfaces all exist in early form
+- the next work is hardening and product polish, not architecture invention
+
+The next app tranche is:
 
 - talks to the shared runtime
 - starts or attaches to the local runtime cleanly
 - exposes real + supported image and video flows
 - keeps advanced or unpromoted rows visibly separate from recommended defaults
 - treats prompt enhancement as an optional host-side helper
+- improves preview, onboarding, validation, and release packaging
 
 ### 4. Capability closure
 

@@ -24,12 +24,15 @@ from mlxr.core.schemas import (
     CapabilityDescriptor,
     InputHandleRecord,
     InputImportRequest,
+    InstalledModelDetails,
     JobRecord,
     JobRequest,
     JobSubmitResult,
+    ModelInstallOperationRecord,
     ModelInstallRequest,
     ModelInstallResult,
     ModelRecord,
+    ModelRemoveResult,
     OutputArtifactRecord,
     PortableArtifactRecord,
     RuntimeEvent,
@@ -38,6 +41,7 @@ from mlxr.core.schemas import (
     SourceRef,
     SourceRegistrationRecord,
     SupportedModelDescriptor,
+    SupportedModelPreview,
     WorkflowIntent,
     WorkflowPlanResult,
     WorkflowRunRequest,
@@ -53,6 +57,7 @@ from .jobs import (
     JobValidationError,
 )
 from .logging import get_control_plane_logger
+from .model_installs import ModelInstallConflictError, ModelInstallNotFoundError
 from .security import enforce_mutating_request_policy
 from .state import RuntimeState
 
@@ -265,6 +270,20 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
     def list_supported_models() -> list[SupportedModelDescriptor]:
         return runtime.catalog.list_supported_models()
 
+    @app.get(
+        "/v1/models/supported/{model_id}/preview",
+        response_model=SupportedModelPreview,
+    )
+    def preview_supported_model(model_id: str) -> SupportedModelPreview:
+        try:
+            return runtime.catalog.preview_supported_model(model_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.post("/v1/models/install", response_model=ModelInstallResult)
     def install_model(
         install_request: ModelInstallRequest, request: Request
@@ -292,12 +311,110 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
         except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/v1/model-installs", response_model=ModelInstallOperationRecord)
+    def enqueue_model_install(
+        install_request: ModelInstallRequest, request: Request
+    ) -> ModelInstallOperationRecord:
+        guard_mutation(request)
+        try:
+            result = runtime.model_install_manager.enqueue(install_request.model_id)
+            logger.info(
+                "Model install enqueued operation_id=%s model_id=%s phase=%s",
+                result.operation_id,
+                result.model_id,
+                result.phase,
+            )
+            return result
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ModelInstallConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (CatalogValidationError, FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/v1/model-installs", response_model=list[ModelInstallOperationRecord])
+    def list_model_installs() -> list[ModelInstallOperationRecord]:
+        return runtime.model_install_manager.list_operations()
+
+    @app.get(
+        "/v1/model-installs/{operation_id}",
+        response_model=ModelInstallOperationRecord,
+    )
+    def get_model_install(operation_id: str) -> ModelInstallOperationRecord:
+        try:
+            return runtime.model_install_manager.get_operation(operation_id)
+        except ModelInstallNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post(
+        "/v1/model-installs/{operation_id}/cancel",
+        response_model=ModelInstallOperationRecord,
+    )
+    def cancel_model_install(
+        operation_id: str, request: Request
+    ) -> ModelInstallOperationRecord:
+        guard_mutation(request)
+        try:
+            return runtime.model_install_manager.cancel(operation_id)
+        except ModelInstallNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ModelInstallConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @app.get("/v1/models/{model_id}", response_model=ModelRecord)
     def get_model(model_id: str) -> ModelRecord:
         try:
             return runtime.catalog.get_model(model_id)
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/v1/models/{model_id}/details", response_model=InstalledModelDetails)
+    def get_model_details(model_id: str) -> InstalledModelDetails:
+        try:
+            return runtime.catalog.get_model_details(model_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except CatalogValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/v1/models/{model_id}", response_model=ModelRemoveResult)
+    def remove_model(model_id: str, request: Request) -> ModelRemoveResult:
+        guard_mutation(request)
+        if runtime.model_install_manager.has_active_operation(model_id):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Model '{model_id}' is currently installing and cannot be removed",
+            )
+        active_jobs = [
+            record.job_id
+            for record in runtime.job_store.list_records()
+            if record.request.model_id == model_id and record.state not in TERMINAL_STATES
+        ]
+        if active_jobs:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Model '{model_id}' is referenced by active job(s): "
+                    + ", ".join(active_jobs)
+                ),
+            )
+        try:
+            result = runtime.catalog.remove_model(model_id)
+            logger.info(
+                "Model removed model_id=%s artifact_digest=%s removed_source_ids=%s",
+                result.model_id,
+                result.artifact_digest,
+                result.removed_source_ids,
+            )
+            return result
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except CatalogConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except CatalogValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/workflows/plan", response_model=WorkflowPlanResult)
     def plan_workflow(intent: WorkflowIntent) -> WorkflowPlanResult:

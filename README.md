@@ -37,7 +37,7 @@
 
 It is a local-first generative runtime built for Apple Silicon: one shared runtime, many thin surfaces, explicit provenance, and support claims that stay tied to real receipts instead of hope.
 
-The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished desktop app. The next product step is a simple native Mac app over the same runtime.
+The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished polished desktop app. The first native Mac app package now exists as an early Swift client over the same runtime, with a real `Models` surface and guided install flow, and the next product step is hardening that into a released app.
 
 ## See It In Motion
 
@@ -71,12 +71,13 @@ The project is already a real runtime with a real CLI and real family slices for
 - A first-party `mlxr` CLI with `generate`, `serve`, `doctor`, `models list`, `models install`, and `feedback`.
 - Promoted `LTX` fast video slices.
 - Real `Qwen-Image`, `FLUX.2`, and `Z-Image` image-family slices.
+- An early native Mac app package under `packages/clients/mlxr-mac-app/`, including a top-level `Models` screen and runtime-backed install queue.
 - Public docs for current status, roadmap, open-source maintenance, and the first Mac app direction.
 
 What is not true yet:
 
 - A stable v1 public API.
-- A released first-party Mac app.
+- A released polished first-party Mac app.
 - Complete desktop or Comfy adapters.
 - A fully closed cross-family benchmark matrix.
 
@@ -98,6 +99,16 @@ Repo-local flow:
 uv sync
 uv run mlxr
 ```
+
+Mac app dev bundle:
+
+```bash
+uv run python scripts/dev.py mac-app
+```
+
+That is the canonical Mac app development path. It builds and launches a real
+dev `.app` bundle instead of a bare `swift run` process, which keeps the app
+targetable by macOS and Peekaboo.
 
 ## Current Best Lanes
 

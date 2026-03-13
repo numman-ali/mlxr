@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,8 +12,10 @@ from mlxr.core.schemas import (
     ArtifactConversionTimingsMs,
     CapabilityDescriptor,
     FamilyInspectionResult,
+    InstalledModelDetails,
     ModelInstallResult,
     ModelRecord,
+    ModelRemoveResult,
     PortableArtifactRecord,
     ProviderInspectionResult,
     SourceInspectionResult,
@@ -20,6 +23,8 @@ from mlxr.core.schemas import (
     SourceRef,
     SourceRegistrationRecord,
     SupportedModelDescriptor,
+    SupportedModelPreview,
+    SupportedModelSourcePreview,
 )
 
 from .contracts import (
@@ -145,7 +150,10 @@ class RuntimeCatalog:
         return record
 
     def convert_artifact(
-        self, request: ArtifactConversionRequest
+        self,
+        request: ArtifactConversionRequest,
+        *,
+        phase_callback: Callable[[str], None] | None = None,
     ) -> ArtifactConversionResult:
         started_at = time.perf_counter()
         family_id, source_records = self._resolve_conversion_sources(request)
@@ -153,6 +161,8 @@ class RuntimeCatalog:
         conversion_sources: dict[str, ConversionSource] = {}
         fetch_ms_by_role: dict[str, float] = {}
         fetch_total_started_at = time.perf_counter()
+        if phase_callback is not None:
+            phase_callback("downloading")
         for role, source_record in source_records.items():
             provider = self._provider(source_record.source.provider)
             fetch_policy = family.fetch_policy_for_conversion(
@@ -170,6 +180,8 @@ class RuntimeCatalog:
                 materialization=materialization,
             )
         fetch_total_ms = _elapsed_ms(fetch_total_started_at)
+        if phase_callback is not None:
+            phase_callback("converting")
         family_convert_started_at = time.perf_counter()
         artifact = family.convert(
             conversion_sources,
@@ -181,6 +193,8 @@ class RuntimeCatalog:
             ),
         )
         family_convert_ms = _elapsed_ms(family_convert_started_at)
+        if phase_callback is not None:
+            phase_callback("registering")
         persist_started_at = time.perf_counter()
         persisted_artifact = self._persist_artifact(artifact)
         persist_ms = _elapsed_ms(persist_started_at)
@@ -243,7 +257,84 @@ class RuntimeCatalog:
             for recipe in _available_supported_model_recipes(self.registry)
         ]
 
-    def install_supported_model(self, model_id: str) -> ModelInstallResult:
+    def preview_supported_model(self, model_id: str) -> SupportedModelPreview:
+        recipe = _supported_model_recipe(self.registry, model_id)
+        supported_model = recipe.to_descriptor(
+            installed=self.models.get(model_id) is not None
+        )
+        previews: list[SupportedModelSourcePreview] = []
+        total_source_bytes = 0
+        total_known = True
+        auth_required = False
+        auth_messages: list[str] = []
+
+        for role, source_ref in _recipe_source_refs(recipe):
+            provider = self._provider(source_ref.provider)
+            try:
+                inspection = self.inspect_source(source_ref)
+            except PermissionError:
+                auth = provider.auth_requirements(source_ref)
+                previews.append(
+                    SupportedModelSourcePreview(
+                        role=role,
+                        provider=source_ref.provider,
+                        locator=source_ref.locator,
+                        resolved_ref=source_ref.locator.get("revision"),
+                        access_state=recipe.access_state,
+                        license=recipe.license,
+                        auth_requirements=auth,
+                        remote_code_required=False,
+                        remote_code_approved=source_ref.policy.allow_remote_code,
+                    )
+                )
+                auth_required = auth_required or auth.required
+                if auth.message:
+                    auth_messages.append(auth.message)
+                total_known = False
+                continue
+
+            bytes_total = inspection.provider_inspection.bytes_total
+            if bytes_total is None:
+                total_known = False
+            else:
+                total_source_bytes += bytes_total
+            auth = inspection.resolved_source.auth_requirements
+            previews.append(
+                SupportedModelSourcePreview(
+                    role=role,
+                    provider=inspection.resolved_source.provider,
+                    locator=inspection.resolved_source.locator,
+                    resolved_ref=inspection.provenance.resolved_ref,
+                    access_state=inspection.resolved_source.access_state,
+                    license=inspection.resolved_source.license,
+                    bytes_total=bytes_total,
+                    auth_requirements=auth,
+                    remote_code_required=inspection.resolved_source.remote_code_required,
+                    remote_code_approved=bool(
+                        inspection.resolved_source.metadata.get(
+                            "remote_code_approved", False
+                        )
+                    ),
+                )
+            )
+            auth_required = auth_required or auth.required
+            if auth.message:
+                auth_messages.append(auth.message)
+
+        return SupportedModelPreview(
+            supported_model=supported_model,
+            sources=previews,
+            total_source_bytes=total_source_bytes if total_known else None,
+            auth_required=auth_required,
+            auth_message=next((message for message in auth_messages if message), None),
+        )
+
+    def install_supported_model(
+        self,
+        model_id: str,
+        *,
+        phase_callback: Callable[[str], None] | None = None,
+    ) -> ModelInstallResult:
         recipe = _supported_model_recipe(self.registry, model_id)
         existing_model = self.models.get(model_id)
         if existing_model is not None and existing_model.artifact is not None:
@@ -253,6 +344,8 @@ class RuntimeCatalog:
                 supported_model=recipe.to_descriptor(installed=True),
             )
 
+        if phase_callback is not None:
+            phase_callback("resolving")
         registered_source_ids: dict[str, str] = {}
         if recipe.source_ref is not None:
             registered_source = self.register_source(recipe.source_ref)
@@ -267,12 +360,71 @@ class RuntimeCatalog:
             )
 
         conversion_result = self.convert_artifact(
-            recipe.to_conversion_request(registered_source_ids=registered_source_ids)
+            recipe.to_conversion_request(registered_source_ids=registered_source_ids),
+            phase_callback=phase_callback,
         )
         return ModelInstallResult(
             status="installed",
             model=conversion_result.model,
             supported_model=recipe.to_descriptor(installed=True),
+        )
+
+    def get_model_details(self, model_id: str) -> InstalledModelDetails:
+        model = self.get_model(model_id)
+        artifact = model.artifact
+        if artifact is None:
+            raise CatalogValidationError(
+                f"Model '{model_id}' has no portable artifact to inspect"
+            )
+        managed_size_bytes = self._artifact_size_bytes(artifact)
+        supported_model = None
+        try:
+            supported_model = _supported_model_recipe(self.registry, model_id).to_descriptor(
+                installed=True
+            )
+        except CatalogNotFoundError:
+            supported_model = None
+        return InstalledModelDetails(
+            model=model,
+            supported_model=supported_model,
+            managed_storage_key=artifact.storage_key,
+            managed_size_bytes=managed_size_bytes,
+            referenced_source_ids=sorted(self._model_source_ids(model)),
+        )
+
+    def remove_model(self, model_id: str) -> ModelRemoveResult:
+        model = self.get_model(model_id)
+        if model.loaded:
+            raise CatalogConflictError(
+                f"Model '{model_id}' is currently loaded and cannot be removed"
+            )
+
+        referenced_source_ids = self._model_source_ids(model)
+        remaining_source_ids = {
+            source_id
+            for record in self.models.list()
+            if record.model_id != model_id
+            for source_id in self._model_source_ids(record)
+        }
+        removed_source_ids = sorted(referenced_source_ids - remaining_source_ids)
+
+        artifact_digest = None
+        removed_storage_key = None
+        if model.artifact is not None:
+            artifact_digest = model.artifact.artifact_digest
+            removed_storage_key = model.artifact.storage_key
+            self.artifacts.delete(model.artifact.artifact_digest)
+
+        self.models.delete(model_id)
+        for source_id in removed_source_ids:
+            self.sources.delete(source_id)
+
+        return ModelRemoveResult(
+            status="removed",
+            model_id=model_id,
+            artifact_digest=artifact_digest,
+            removed_source_ids=removed_source_ids,
+            removed_storage_key=removed_storage_key,
         )
 
     def list_capabilities(self) -> list[CapabilityDescriptor]:
@@ -402,9 +554,41 @@ class RuntimeCatalog:
             )
         return relative_path
 
+    def _artifact_size_bytes(self, artifact: PortableArtifactRecord) -> int | None:
+        artifact_root = self.runtime_home.artifact_dir(
+            artifact.family, artifact.model_id, artifact.artifact_digest
+        )
+        if not artifact_root.exists():
+            return None
+        return sum(
+            path.stat().st_size for path in artifact_root.rglob("*") if path.is_file()
+        )
+
+    def _model_source_ids(self, model: ModelRecord) -> set[str]:
+        artifact = model.artifact
+        if artifact is None:
+            return set()
+        return {
+            component.source_id
+            for component in artifact.components
+            if component.source_id.strip()
+        }
+
 
 def _elapsed_ms(started_at: float) -> float:
     return round((time.perf_counter() - started_at) * 1000.0, 3)
+
+
+def _recipe_source_refs(
+    recipe: SupportedModelRecipe,
+) -> tuple[tuple[str, SourceRef], ...]:
+    if recipe.source_ref is not None:
+        return (("bundle", recipe.source_ref),)
+    if recipe.source_bindings is not None:
+        return tuple(sorted(recipe.source_bindings.items()))
+    raise CatalogValidationError(
+        f"Supported model '{recipe.model_id}' has no source configuration"
+    )
 
 
 def _available_supported_model_recipes(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -62,6 +63,15 @@ class SourceManifestStore:
         ]
         return sorted(records, key=lambda record: record.source_id)
 
+    def delete(self, source_id: str) -> bool:
+        record = self.get(source_id)
+        if record is None:
+            return False
+        path = self.runtime_home.source_manifest_path(record.source.provider, source_id)
+        if path.parent.exists():
+            shutil.rmtree(path.parent)
+        return True
+
 
 class ArtifactManifestStore:
     def __init__(self, runtime_home: RuntimeHome) -> None:
@@ -90,6 +100,17 @@ class ArtifactManifestStore:
             records, key=lambda record: (record.model_id, record.artifact_digest)
         )
 
+    def delete(self, artifact_digest: str) -> bool:
+        record = self.get(artifact_digest)
+        if record is None:
+            return False
+        path = self.runtime_home.artifact_dir(
+            record.family, record.model_id, artifact_digest
+        )
+        if path.exists():
+            shutil.rmtree(path)
+        return True
+
 
 class ModelManifestStore:
     def __init__(self, runtime_home: RuntimeHome) -> None:
@@ -112,6 +133,13 @@ class ModelManifestStore:
             for path in self.runtime_home.models_dir.glob("*.json")
         ]
         return sorted(records, key=lambda record: record.model_id)
+
+    def delete(self, model_id: str) -> bool:
+        path = self.runtime_home.model_manifest_path(model_id)
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
 
 
 def source_id_for_ref(source_ref: SourceRef) -> str:

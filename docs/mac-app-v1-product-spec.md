@@ -5,6 +5,12 @@
 The first `MLXR` Mac app is a simple native macOS client over the shared
 runtime.
 
+Current implementation status:
+
+- native Swift package scaffold exists in `packages/clients/mlxr-mac-app/`
+- runtime bridge, feature shells, and early tests are real
+- polish, onboarding, packaging, and release hardening still remain
+
 It is not `MLXR Studio`.
 
 Its job is to make the current runtime accessible to non-technical Mac users
@@ -30,6 +36,21 @@ Do not build the first app as:
 - a Tauri or Electron shell with duplicated runtime logic
 - a special-case path that bypasses the shared runtime
 
+## Development Path
+
+Use a real dev `.app` bundle as the normal local workflow.
+
+The canonical repo command is:
+
+```bash
+uv run python scripts/dev.py mac-app
+```
+
+That command should stay the default because it gives the app a stable macOS
+identity, which is important for windowing, debugging, and Peekaboo-driven UI
+automation. Direct `swift run` is still useful for package-only debugging, but
+it should not be the main product-development path.
+
 ## Product Boundary
 
 The first app should expose real + supported runtime capabilities on day one.
@@ -47,9 +68,17 @@ Top-level app areas:
 
 - `Images`
 - `Video`
+- `Models`
 - `Library`
 - `Jobs`
 - `Settings`
+
+### Models
+
+- curated recommended installs
+- install queue visibility and status
+- installed model details
+- remove model from the MLXR-managed install home
 
 ### Images
 
@@ -83,7 +112,7 @@ Top-level app areas:
 
 - runtime status
 - runtime home and log discovery
-- installed model visibility once the runtime model-management surface is ready
+- advanced import and runtime diagnostics
 - prompt-helper settings
 
 ## Capability Presentation

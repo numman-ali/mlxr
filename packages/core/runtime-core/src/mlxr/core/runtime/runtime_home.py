@@ -56,6 +56,10 @@ class RuntimeHome:
     def models_dir(self) -> Path:
         return self.config_dir / "models"
 
+    @property
+    def model_installs_dir(self) -> Path:
+        return self.temp_dir / "model-installs"
+
     def ensure_layout(self) -> None:
         for directory in (
             self.config_dir,
@@ -67,6 +71,7 @@ class RuntimeHome:
             self.artifacts_portable_dir,
             self.build_cache_local_dir,
             self.models_dir,
+            self.model_installs_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
 
@@ -105,6 +110,9 @@ class RuntimeHome:
 
     def model_manifest_path(self, model_id: str) -> Path:
         return self.models_dir / f"{_safe_path_segment(model_id)}.json"
+
+    def model_install_record_path(self, operation_id: str) -> Path:
+        return self.model_installs_dir / f"{_safe_path_segment(operation_id)}.json"
 
     def input_handle_dir(self, handle_id: str) -> Path:
         return self.inputs_dir / _safe_path_segment(handle_id)

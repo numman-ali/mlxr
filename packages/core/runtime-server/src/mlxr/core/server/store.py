@@ -12,6 +12,7 @@ from mlxr.core.runtime.manifests import (
 from mlxr.core.schemas import (
     InputHandleRecord,
     JobRecord,
+    ModelInstallOperationRecord,
     OutputArtifactRecord,
     RuntimeEvent,
 )
@@ -103,6 +104,30 @@ class JobStore:
                 continue
             events.append(RuntimeEvent.model_validate_json(line))
         return events
+
+
+class ModelInstallStore:
+    def __init__(self, runtime_home: RuntimeHome) -> None:
+        self.runtime_home = runtime_home
+
+    def save(self, record: ModelInstallOperationRecord) -> ModelInstallOperationRecord:
+        write_json_atomic(
+            self.runtime_home.model_install_record_path(record.operation_id), record
+        )
+        return record
+
+    def get(self, operation_id: str) -> ModelInstallOperationRecord | None:
+        path = self.runtime_home.model_install_record_path(operation_id)
+        if not path.exists():
+            return None
+        return read_json_model(path, ModelInstallOperationRecord)
+
+    def list_records(self) -> list[ModelInstallOperationRecord]:
+        records = [
+            read_json_model(path, ModelInstallOperationRecord)
+            for path in self.runtime_home.model_installs_dir.glob("*.json")
+        ]
+        return sorted(records, key=lambda record: record.created_at)
 
 
 class OutputStore:
