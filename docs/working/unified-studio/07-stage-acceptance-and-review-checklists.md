@@ -14,7 +14,9 @@ Every stage must preserve these rules:
 - standalone audio creation is not implied or exposed
 - `swiftui-pro` review is mandatory, not optional
 
-During migration, a temporary visible `Studio` entry is allowed only if it is clearly fallback-only and does not regain a separate prompt or submit path.
+During migration, the internal `.studio` fallback seam may survive temporarily,
+but it must stay hidden from the visible rail and must not regain a separate
+prompt or submit path.
 
 ## SwiftUI-Pro Review Protocol
 
@@ -149,6 +151,7 @@ Every stage must pass:
 
 The redesign is ready for implementation or promotion only when:
 
-- the staged docs still agree with `unified-studio-screens.md` except where `00-unified-studio-master-plan.md` explicitly closes or overrides a design question
-- the staged docs still agree with the runtime-parity plan
+- the staged docs still agree with `visual-brief.md` except where
+  `00-master-plan.md` explicitly closes or overrides a design question
+- the staged docs still agree with `../mac-app-runtime-parity.md`
 - open questions have been turned into decisions or clearly deferred work

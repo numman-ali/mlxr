@@ -1,8 +1,10 @@
 # LTX Compatibility Checklist
 
+Status: canonical coverage and validation checklist for the `LTX-2.3` family surface
+
 ## Purpose
 
-This is the exhaustive working checklist for `LTX-2.3` compatibility in
+This is the canonical coverage checklist for `LTX-2.3` compatibility in
 `MLXR`.
 
 It exists to stop feature drift and memory-based planning. If a row matters for

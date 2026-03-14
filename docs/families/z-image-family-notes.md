@@ -1,18 +1,21 @@
-# Z-Image Family Candidate
+# Z-Image Family Notes
 
-Status: working research note for the first explicit image family now that the
-`Z-Image-Turbo` runtime slice is real and the base `Z-Image` row is next.
+Status: companion family note for rationale, product pressure, and bring-up context
+
+For the current repo truth by row, read
+[z-image-capability-matrix.md](./z-image-capability-matrix.md) together with
+this note.
 
 ## Purpose
 
-This note exists to turn the current vague "one image diffusion family" slot
-into a concrete candidate with official sources, real product pressure, and a
-truthful first-slice plan.
+This note exists to capture why `Z-Image` matters, how it pressures the
+platform, and what product role it should play around the canonical family
+truth.
 
 Current recommendation:
 
-- treat `Z-Image` and `Z-Image-Turbo` as the leading candidate for the first
-  `MLXR` image family
+- treat `Z-Image` and `Z-Image-Turbo` as the current prompt-first `MLXR` image
+  family
 - use that family to satisfy both the Phase C image-family validation basket
   and the official `ltx-desktop` product pressure for text-to-image support
 - keep the promoted slice narrow: prompt-only text-to-image generation first

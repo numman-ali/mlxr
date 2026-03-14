@@ -251,7 +251,7 @@ The more important current framing is this:
 - the broader official upstream product surface is larger than that slice
 - the current engine still depends on donor runtime code, so the next platform
   step is the owned-substrate migration in
-  [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
+  [ltx-owned-substrate-migration-plan.md](../working/ltx-owned-substrate-migration-plan.md)
 - the next quality target is the full `dev` checkpoint on the standard
   two-stage path
 - the next top-end quality target after that is the alternate HQ two-stage

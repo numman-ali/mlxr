@@ -3,7 +3,8 @@
 Status: non-normative visual brief — the numbered stage plans are the implementation spec
 
 This is the UI blueprint for the MLXR Mac App — a consumer-friendly local
-creative tool for image, video, and audio generation on Apple Silicon.
+creative tool for image and video creation on Apple Silicon, with
+audio-conditioned video as a supporting workflow rather than a standalone mode.
 
 Reference: Hailuo AI "Brand Story" (MiniMax, March 2025).
 There is one app. Not a phased "simple v1" then "Studio later" split.
@@ -35,7 +36,7 @@ Read each image below carefully. These are the UX patterns to follow.
 ### The floating prompt bar — video mode with start/end frame slots
 ![Prompt bar start end frame](reference-frames/07-prompt-bar-video-startend-frame.jpg)
 
-### Audio mode — waveform preview, character voice selector
+### Future-facing audio reference — not a phase-1 primary mode
 ![Audio mode](reference-frames/04-audio-mode.jpg)
 
 ### Project Manager — "The Pirate" project with assets and metadata
@@ -48,6 +49,11 @@ Read each image below carefully. These are the UX patterns to follow.
 ![Workspace with actions](reference-frames/08-workspace-with-actions.jpg)
 
 ---
+
+The audio-mode screenshot is retained as a visual reference only. It does not
+override the locked phase-1 decision in `00-master-plan.md`: `MLXR` supports
+audio-conditioned video, not standalone audio creation, so audio remains a
+video sub-workflow instead of a top-level segmented mode.
 
 ## Why the Current UX Feels Wrong
 
@@ -70,8 +76,8 @@ that looks and feels like a developer tool:
 - **Results and creation are the same pane** — the canvas shows either an
   empty state, a progress ring, or a result. You lose the result when you
   switch workflows.
-- **Studio is a destination you navigate to** — it should be the default
-  state of the app.
+- **Creation is trapped behind an internal `Studio` seam** — it should feel
+  global instead of like a special place you enter.
 - **Library is a separate place** — you leave the creation context to
   browse assets, then navigate back to use one.
 
@@ -83,7 +89,8 @@ that looks and feels like a developer tool:
 2. **You're always in a project.** Assets appear where you made them.
 3. **Switch modality, not workflow.** Video / Image — not 11 pipeline names.
 4. **Show results, not controls.** Settings hide until you need them.
-5. **Create anywhere.** The prompt bar is visible in every view, not just Studio.
+5. **Create anywhere that creation makes sense.** The prompt bar is visible on
+   `Home` and `Library`, not trapped inside `Studio`.
 6. **Local is a feature, not a limitation.** Show runtime status proudly.
 
 ---
@@ -101,7 +108,8 @@ that looks and feels like a developer tool:
 | Md |                                                          |
 |    |                                                          |
 | -- |  +----------------------------------------------------+ |
-| St |  | Prompt Bar (floating, bottom, always visible)       | |
+| St |  | Prompt Bar (floating, bottom, visible on creation   | |
+|    |  | surfaces)                                           | |
 | Ac |  +----------------------------------------------------+ |
 +----+----------------------------------------------------------+
 
@@ -146,11 +154,11 @@ This is the single most important component. It replaces the current
 
 ```text
 +-----------------------------------------------------------------------+
-| [img ref]  [+ Add]                          [Video ● | Image | Audio] |
+| [img ref]  [+ Add]                                  [Video ● | Image] |
 |                                                                       |
 |  "A pirate sailing through a storm at sunset"                         |
 |                                                                       |
-| [LTX Fast v]  [16:9]  [Standard]  [8s]   Ready ~45s     [Generate >] |
+| [LTX Fast v]  [16:9]  [Standard]  [8s]   Ready          [Generate >] |
 +-----------------------------------------------------------------------+
 ```
 
@@ -158,11 +166,11 @@ This is the single most important component. It replaces the current
 
 ```text
 +-----------------------------------------------------------------------+
-| [img ref]  [+ Add]                          [Video | Image ● | Audio] |
+| [img ref]  [+ Add]                                  [Video | Image ●] |
 |                                                                       |
 |  "A portrait of a weathered sea captain"                              |
 |                                                                       |
-| [FLUX.2 v]  [3:4]  [Standard]  [×4]      Ready ~12s     [Generate >] |
+| [FLUX.2 v]  [3:4]  [Standard]  [×4]      Ready          [Generate >] |
 +-----------------------------------------------------------------------+
 ```
 
@@ -171,14 +179,14 @@ This is the single most important component. It replaces the current
 | Component | Position | Behavior |
 |---|---|---|
 | Reference slots | Top left | Tilted card thumbnails. Click [+] to import or pick from library. Slots adapt to modality — see Reference Slots section. |
-| Modality switcher | Top right | Segmented control: Video / Image / Audio. Changes what settings and reference slots are visible. |
+| Modality switcher | Top right | Segmented control: Video / Image. Changes what settings and reference slots are visible. Audio-conditioned work remains a video sub-workflow. |
 | Prompt text field | Center | Multi-line, auto-expanding. Placeholder: "What do you want to make?" |
 | Model pill | Bottom left | Shows active model name + icon. Tap → popover with installed models for this modality. "Get more models" link to Models view. |
 | Aspect pill | Bottom left | "16:9", "1:1", "9:16", "4:3". Tap to cycle or open picker. |
 | Quality pill | Bottom left | "Draft", "Standard", "Cinema". Tap to cycle. |
 | Duration pill | Bottom left | "4s", "8s", "12s". Only visible in Video mode. Tap to cycle. |
 | Variation count | Bottom left | "×1", "×2", "×4". Only visible in Image mode. Tap to cycle. |
-| Runtime status | Bottom right | "Ready ~45s", "Generating…", "Boot". Small text, not a button. |
+| Runtime status | Bottom right | "Ready", "Generating…", "Installing model", or "Runtime unavailable". Small text, not a button. |
 | Generate button | Bottom right | Prominent, filled. Shows "Generate" or a spinner when busy. Disabled with tooltip if model not installed or references missing. |
 
 ### Prompt Helper
@@ -229,7 +237,6 @@ Most users never open this. Power users get everything they need.
 | Video (audio-conditioned) | Required audio file | Audio waveform slot |
 | Video (video-conditioned) | Required guide video | Video thumbnail slot |
 | Video (retake) | Required source video | Video thumbnail slot |
-| Audio | None (future) | — |
 
 When a user drops a reference that implies a specific workflow (e.g., drops
 an image while in Video mode), the bar auto-selects "Animate Image" and
@@ -412,9 +419,9 @@ A **project** is a named container for related creative work:
 - Shows a hero thumbnail (latest generated asset).
 - Displays counts by media type.
 
-Under the hood, a project is a thin layer over existing `RunGroupRecord`
-and `CollectionRecord` — not a new database. The existing run-group and
-collection infrastructure already tracks everything needed.
+Under the hood, a project is the user-facing name for `WorkspaceRecord`, with
+`RunGroupRecord` as the iteration unit and `CollectionRecord` staying secondary
+for later saved sets or favorites workflows.
 
 ### Browsing within a project
 
@@ -656,28 +663,15 @@ The existing domain types are well-designed and map directly:
 | `WorkflowPlanResult` | Capability adaptation (reference slots, readiness) |
 | `LibraryAsset` | Result display in canvas and library |
 | `RunGroupRecord` | Project grouping foundation |
-| `CollectionRecord` | Project container (or thin new `Project` type) |
+| `WorkspaceRecord` | Project container and durable project backing type |
 | `CatalogSnapshot` | Model picker in prompt bar |
 
 ---
 
-## Open Questions
+## Remaining Visual Question
 
-1. **Project vs Collection** — should projects be a new type, or should
-   the existing `CollectionRecord` be repurposed? Collections already have
-   names and asset associations. Adding a hero thumbnail and creation-date
-   sort might be enough.
-
-2. **Audio modality** — MLXR has `video.condition.audio` (audio-conditioned
-   video) but not standalone audio generation. Should the Audio segment in
-   the modality switcher be present but greyed out with "Coming soon", or
-   omitted entirely until the capability exists?
-
-3. **Prompt bar visibility** — should it be visible on the Models and
-   Settings screens? Probably not — those are management screens, not
-   creation contexts. The bar should appear on Home and Library only.
-
-4. **Right-edge filmstrip** — Hailuo has a vertical filmstrip on the right
+1. **Right-edge filmstrip** — Hailuo has a vertical filmstrip on the right
    edge showing all generated assets. This is useful for quick navigation
-   but takes screen width. Worth including for projects with many results,
-   or is the in-canvas grid sufficient?
+   but takes screen width. The current locked phase-1 direction keeps the
+   in-canvas grid and hero preview instead; revisit the filmstrip only if
+   later project-density testing shows a real navigation problem.

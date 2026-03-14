@@ -4,14 +4,20 @@ Status: active working checklist
 
 ## Purpose
 
-This is the concrete follow-on checklist after the first best-available text-first showcase pack.
+This is the concrete follow-on checklist after the first best-available
+text-first showcase pack.
 
-It exists so fresh sessions can keep moving without reconstructing the remaining roadmap from chat history.
+It exists so fresh sessions can keep moving without reconstructing the remaining
+roadmap from chat history.
+
+This checklist is currently LTX-heavy because the next platform pressure still
+comes from LTX capability completion, even though the repo now has real image
+family validation through `Z-Image`, `Qwen-Image`, and `FLUX.2`.
 
 Use this file together with:
 
 - `docs/families/ltx-capability-matrix.md`
-- `docs/research/13-ltx-showcase-execution-plan.md`
+- `docs/working/ltx-showcase-execution-plan.md`
 - `docs/workflow-orchestration-design.md`
 - `docs/phased-delivery-plan.md`
 

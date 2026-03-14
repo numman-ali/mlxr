@@ -21,7 +21,7 @@ Review gate:
 
 ## Stage 0: Spec Lock And Architecture Prep
 
-- [ ] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI.
+- [ ] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI where it remains non-normative inspiration.
 - [ ] Confirm all eight reference frames still support the chosen IA and interaction model.
 - [ ] Keep `00-master-plan.md` aligned with the latest locked decisions.
 - [ ] Keep `07-stage-acceptance-and-review-checklists.md` aligned with the validation and review gate.
@@ -36,7 +36,7 @@ Review gate:
 - [x] Lock the implementation order separately from the doc file order.
 - [x] Lock `WorkspaceRecord` as the project backing type and demote `CollectionRecord` to secondary organization.
 - [x] Lock creation behavior so top-level project browsing creates a new project on acceptance, while project detail appends to the open project.
-- [x] Mark `unified-studio-screens.md` as the visual brief and the stage docs as the normative implementation spec.
+- [x] Mark `visual-brief.md` as the visual brief and the stage docs as the normative implementation spec.
 
 ## Stage 1: Runtime-Led Composer Contract
 
@@ -146,7 +146,7 @@ Review gate:
 
 ## Stage 6: Cutover And Cleanup
 
-- [ ] Remove visible `Studio` from the nav when `Home` + `Library` + global composer are fully proven.
+- [x] Remove visible `Studio` from the nav. Only the internal fallback seam remains during migration.
 - [ ] Retire `StudioScreen` when its responsibilities are fully absorbed elsewhere.
 - [ ] Retire `StudioSidebarView` when workflow picking and source management move to the new surfaces.
 - [ ] Retire `StudioInspectorView` when primary creation controls live in the composer and tune popover.
@@ -200,7 +200,7 @@ Review gate:
 
 Do not call the redesign done until:
 
-- the implementation matches the design-thinking docs
+- the implementation matches the current unified-studio working docs
 - the runtime remains the only truth source for readiness and run acceptance
 - the SwiftUI-pro review is recorded for the touched stage
 - validation passes locally

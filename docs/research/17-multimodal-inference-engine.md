@@ -1,10 +1,13 @@
 # Repo-Owned Multimodal Inference Engine
 
-Status: research recommendation for the next shared execution substrate in `MLXR`.
+Status: supporting research recommendation for the next shared execution substrate in `MLXR`.
 
-This document is one part of the canonical LTX ownership set. Read it alongside:
+This document supports the owned-substrate migration and shared-core direction.
+It is not the canonical family truth map, and it is not the active migration
+checklist.
+Read it alongside:
 
-- [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
+- [ltx-owned-substrate-migration-plan.md](../working/ltx-owned-substrate-migration-plan.md)
 - [ltx-reference-map.md](../families/ltx-reference-map.md)
 - [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
 

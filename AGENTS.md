@@ -229,46 +229,46 @@ A change is not done until all of the following are true:
 
 Any new agent should read these in this order after `AGENTS.md` and `MEMORY.md`, unless the task is tiny and local:
 
-1. [README.md](/Users/numman/Repos/mlxr/README.md)
-2. [product-requirements.md](/Users/numman/Repos/mlxr/docs/product-requirements.md)
-3. [technical-design.md](/Users/numman/Repos/mlxr/docs/technical-design.md)
-4. [phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/phased-delivery-plan.md)
-5. [benchmark-matrix.md](/Users/numman/Repos/mlxr/docs/benchmark-matrix.md)
-6. [provider-and-provenance-model.md](/Users/numman/Repos/mlxr/docs/provider-and-provenance-model.md)
-7. Relevant ADRs in [docs/adr](/Users/numman/Repos/mlxr/docs/adr)
-8. Relevant research docs in [docs/research](/Users/numman/Repos/mlxr/docs/research)
+1. [README.md](README.md)
+2. [product-requirements.md](docs/product-requirements.md)
+3. [technical-design.md](docs/technical-design.md)
+4. [phased-delivery-plan.md](docs/phased-delivery-plan.md)
+5. [benchmark-matrix.md](docs/benchmark-matrix.md)
+6. [provider-and-provenance-model.md](docs/provider-and-provenance-model.md)
+7. Relevant ADRs in [docs/adr](docs/adr)
+8. Relevant research docs in [docs/research/README.md](docs/research/README.md)
 
 If the task is host-specific:
 
-- read [07-ltx-integration-seams.md](/Users/numman/Repos/mlxr/docs/research/07-ltx-integration-seams.md)
+- read [07-ltx-integration-seams.md](docs/research/07-ltx-integration-seams.md)
 
 If the task is performance-specific:
 
-- read [05-optimization-playbook.md](/Users/numman/Repos/mlxr/docs/research/05-optimization-playbook.md)
-- read [08-acceleration-techniques-survey.md](/Users/numman/Repos/mlxr/docs/research/08-acceleration-techniques-survey.md)
-- read [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md)
+- read [05-optimization-playbook.md](docs/research/05-optimization-playbook.md)
+- read [08-acceleration-techniques-survey.md](docs/research/08-acceleration-techniques-survey.md)
+- read [09-open-questions-and-validation-plan.md](docs/research/09-open-questions-and-validation-plan.md)
 
 If the task is family-bring-up-specific:
 
-- read [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
-- read [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md)
+- read [workflow-orchestration-design.md](docs/workflow-orchestration-design.md)
+- read [docs/family-bringup/README.md](docs/family-bringup/README.md)
 - use the repo-owned `.agents/skills/family-bringup/` workflow
 
 If the task is LTX-fidelity-specific:
 
-- read [10-ltx-fidelity-debug-playbook.md](/Users/numman/Repos/mlxr/docs/research/10-ltx-fidelity-debug-playbook.md)
+- read [10-ltx-fidelity-debug-playbook.md](docs/research/10-ltx-fidelity-debug-playbook.md)
 - use the repo-owned `.agents/skills/ltx-fidelity-debugging/` workflow
 
 If the task is LTX-capability-specific:
 
-- read [ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/families/ltx-capability-matrix.md)
-- read [12-ltx-prompting-guide.md](/Users/numman/Repos/mlxr/docs/research/12-ltx-prompting-guide.md) when text-first prompt quality or showcase work is in scope
-- read [13-ltx-showcase-execution-plan.md](/Users/numman/Repos/mlxr/docs/research/13-ltx-showcase-execution-plan.md) when continuing the current capability-to-showcase tranche
-- read [14-first-showcase-pack.md](/Users/numman/Repos/mlxr/docs/research/14-first-showcase-pack.md) when validating, replacing, or promoting the current five-clip showcase set
-- read [ltx-reference-map.md](/Users/numman/Repos/mlxr/docs/families/ltx-reference-map.md) when implementing or validating against official LTX semantics
-- read [ltx-compatibility-checklist.md](/Users/numman/Repos/mlxr/docs/families/ltx-compatibility-checklist.md) when deciding whether an upstream LTX feature is still missing, merely planned, or truly complete
-- read [16-owned-substrate-migration-plan.md](/Users/numman/Repos/mlxr/docs/research/16-owned-substrate-migration-plan.md) when donor-runtime removal, non-distilled recovery, or Gemma substrate ownership is in scope
-- read [17-multimodal-inference-engine.md](/Users/numman/Repos/mlxr/docs/research/17-multimodal-inference-engine.md) when replacing `mlx-vlm` / `mlx-lm` or deciding what shared MLX multimodal execution logic belongs in `packages/core/`
+- read [ltx-capability-matrix.md](docs/families/ltx-capability-matrix.md)
+- read [12-ltx-prompting-guide.md](docs/research/12-ltx-prompting-guide.md) when text-first prompt quality or showcase work is in scope
+- read [ltx-showcase-execution-plan.md](docs/working/ltx-showcase-execution-plan.md) when continuing the current capability-to-showcase tranche
+- read [14-first-showcase-pack.md](docs/research/14-first-showcase-pack.md) when validating, replacing, or promoting the current five-clip showcase set
+- read [ltx-reference-map.md](docs/families/ltx-reference-map.md) when implementing or validating against official LTX semantics
+- read [ltx-compatibility-checklist.md](docs/families/ltx-compatibility-checklist.md) when deciding whether an upstream LTX feature is still missing, merely planned, or truly complete
+- read [ltx-owned-substrate-migration-plan.md](docs/working/ltx-owned-substrate-migration-plan.md) when donor-runtime removal, non-distilled recovery, or Gemma substrate ownership is in scope
+- read [17-multimodal-inference-engine.md](docs/research/17-multimodal-inference-engine.md) when replacing `mlx-vlm` / `mlx-lm` or deciding what shared MLX multimodal execution logic belongs in `packages/core/`
 
 ## Source Of Truth Order
 
@@ -323,7 +323,7 @@ Any meaningful claim about hardware, memory, speed, quantization, output-path wi
 - a local benchmark
 - an explicitly marked hypothesis
 
-If it is still uncertain, capture it in [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md).
+If it is still uncertain, capture it in [09-open-questions-and-validation-plan.md](docs/research/09-open-questions-and-validation-plan.md).
 
 ## Skills Policy
 
@@ -343,12 +343,12 @@ Repo-owned skills should live under `.agents/skills/` so Codex can discover them
 
 Use these support docs when you need the deeper operational details:
 
-- [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
-- [dev-harness.md](/Users/numman/Repos/mlxr/docs/dev-harness.md)
-- [test-layout.md](/Users/numman/Repos/mlxr/docs/test-layout.md)
-- [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
-- [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md)
-- [skill-policy.md](/Users/numman/Repos/mlxr/docs/skill-policy.md)
+- [agent-native-development.md](docs/agent-native-development.md)
+- [dev-harness.md](docs/dev-harness.md)
+- [test-layout.md](docs/test-layout.md)
+- [workflow-orchestration-design.md](docs/workflow-orchestration-design.md)
+- [docs/family-bringup/README.md](docs/family-bringup/README.md)
+- [skill-policy.md](docs/skill-policy.md)
 
 ## Policy For Updating This File
 

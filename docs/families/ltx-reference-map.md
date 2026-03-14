@@ -1,5 +1,7 @@
 # LTX Reference Map
 
+Status: canonical upstream-reference map for the `LTX-2.3` family surface
+
 ## Purpose
 
 This document is the canonical map from each `LTX-2.3` subsystem in `MLXR` to
@@ -15,7 +17,7 @@ Its job is simple:
 Use this together with:
 
 - [ltx-capability-matrix.md](./ltx-capability-matrix.md)
-- [owned-substrate-migration-plan.md](../research/16-owned-substrate-migration-plan.md)
+- [ltx-owned-substrate-migration-plan.md](../working/ltx-owned-substrate-migration-plan.md)
 - [multimodal-inference-engine.md](../research/17-multimodal-inference-engine.md)
 - [ltx-compatibility-checklist.md](./ltx-compatibility-checklist.md)
 

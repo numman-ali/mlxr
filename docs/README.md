@@ -43,6 +43,8 @@ companion notes:
 - [Mac app runtime hardening plan](./working/mac-app-runtime-parity.md)
 - [Unified studio master plan](./working/unified-studio/00-master-plan.md)
 - [Unified studio visual brief](./working/unified-studio/visual-brief.md)
+- [LTX showcase execution plan](./working/ltx-showcase-execution-plan.md)
+- [LTX owned-substrate migration plan](./working/ltx-owned-substrate-migration-plan.md)
 - [Next phase tasks](./working/next-phase-tasks.md)
 - [Qwen bring-up todo](./working/qwen-bring-up-todo.md)
 - [LTX closure plan](./working/ltx-closure-plan.md)

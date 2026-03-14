@@ -123,7 +123,7 @@ For the exact truth by family, use:
 - [LTX capability matrix](docs/families/ltx-capability-matrix.md)
 - [Qwen-Image capability matrix](docs/families/qwen-image-capability-matrix.md)
 - [FLUX.2 capability matrix](docs/families/flux2-capability-matrix.md)
-- [Z-Image family candidate](docs/families/z-image-positioning.md)
+- [Z-Image capability matrix](docs/families/z-image-capability-matrix.md)
 
 ## Start Here
 

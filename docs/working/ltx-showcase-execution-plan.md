@@ -1,5 +1,7 @@
 # LTX Showcase Execution Plan
 
+Status: active working execution plan for the current LTX showcase and quality tranche
+
 ## Purpose
 
 This is the current execution checklist for the next major `MLXR` tranche.
@@ -21,7 +23,7 @@ The goal is:
 The next quality target after the current distilled showcase tranche is not
 simply “bigger or longer.” It is the upstream full-checkpoint two-stage family.
 But the current engine still needs the owned-substrate migration described in
-[16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
+[ltx-owned-substrate-migration-plan.md](./ltx-owned-substrate-migration-plan.md)
 before those non-distilled rows should be promoted.
 
 - `TI2VidTwoStagesPipeline` as the production-default quality path

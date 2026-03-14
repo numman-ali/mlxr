@@ -1,8 +1,10 @@
 # Owned Substrate Migration Plan
 
+Status: active working migration plan for the LTX owned-substrate program
+
 ## Purpose
 
-This document is the canonical recovery and migration plan for the `LTX` family
+This document is the active recovery and migration plan for the `LTX` family
 engine.
 
 Its job is to keep three truths aligned:
@@ -12,14 +14,14 @@ Its job is to keep three truths aligned:
 3. the order in which those donors get removed without breaking the current
    promoted slice
 
-This is not a speculative design note. It is the implementation order for
-bringing `LTX` back onto a repo-owned substrate.
+This is not a speculative design note. It is the current implementation order
+for bringing `LTX` back onto a repo-owned substrate.
 
 Use it together with:
 
 - [ltx-reference-map.md](../families/ltx-reference-map.md)
 - [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
-- [17-multimodal-inference-engine.md](17-multimodal-inference-engine.md)
+- [17-multimodal-inference-engine.md](../research/17-multimodal-inference-engine.md)
 
 ## Current Truth
 
@@ -163,7 +165,7 @@ expanding the repo-owned shared package instead of reintroducing family-local or
 third-party runtime dependencies.
 
 The architecture and layering for that replacement should follow
-[17-multimodal-inference-engine.md](17-multimodal-inference-engine.md):
+[17-multimodal-inference-engine.md](../research/17-multimodal-inference-engine.md):
 
 - reusable LM and multimodal execution logic belongs in `packages/core/`
 - family adapters should keep family truth, not become the hidden home of a

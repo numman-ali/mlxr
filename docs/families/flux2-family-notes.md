@@ -1,8 +1,10 @@
-# FLUX.2 Family Candidate
+# FLUX.2 Family Notes
 
-Status: active family note. The first owned `klein` runtime slice is now real,
-and the matrix of what is green versus still open lives in
-`flux2-capability-matrix.md`.
+Status: companion family note for rationale, pressure, and bring-up context
+
+For the current repo truth by row, read
+[flux2-capability-matrix.md](./flux2-capability-matrix.md) together with this
+note.
 
 ## Recommendation
 

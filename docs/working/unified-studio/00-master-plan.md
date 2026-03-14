@@ -42,7 +42,9 @@ This keeps the Hailuo-style "one app, one prompt bar, one body of work" feel fro
 
 ## Locked Decisions
 
-- Remove the top-level `Studio` destination in the end-state. A temporary visible `Studio` entry may remain during migration, but it is fallback-only and must not gain new primary creation behaviors.
+- Remove the top-level `Studio` destination in the end-state. The visible rail
+  already hides `Studio`; only the internal fallback seam remains during
+  migration, and it must not regain new primary creation behaviors.
 - Keep the primary composer switcher to `Video` and `Image`.
 - Do not expose standalone `Audio` mode yet. `MLXR` supports audio-conditioned video, not standalone audio creation, so audio remains a video sub-workflow instead of a third top-level segment.
 - Treat `project` as the user-facing name for `WorkspaceRecord`.
@@ -56,8 +58,11 @@ This keeps the Hailuo-style "one app, one prompt bar, one body of work" feel fro
   - `Models`
   - `Settings`
   - `Activity` in the rail footer
-- Show the composer on `Home` and `Library` only.
+- Show the composer on `Home` and `Library` as the real user-facing creation
+  surfaces.
 - Hide the composer on `Models` and `Settings`.
+- Allow the internal `.studio` fallback seam to reuse the same shell composer
+  during migration without reintroducing a visible `Studio` destination.
 - Do not add a dedicated right-edge filmstrip in the first redesign pass. The project canvas grid and hero preview are enough.
 
 ## Resolved Differences From The Screen Brief

@@ -1,7 +1,6 @@
-# Qwen-Image Family Candidate
+# Qwen-Image Family Notes
 
-Status: in progress research note for the first editing-capable image family
-candidate after the `Z-Image` bring-up.
+Status: companion family note for rationale, pressure, and bring-up context
 
 For the current repo truth by row, read
 [qwen-image-capability-matrix.md](./qwen-image-capability-matrix.md)
@@ -248,7 +247,7 @@ not as part of the native family runtime contract.
 
 ## Product Role
 
-This family is the strongest current candidate for:
+This family is the strongest current fit for:
 
 - creating related stills from an existing reference image
 - generating alternative keyframes while preserving subject identity better than
