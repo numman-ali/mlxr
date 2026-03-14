@@ -1,5 +1,7 @@
 # Next Phase Task List
 
+Status: active working checklist
+
 ## Purpose
 
 This is the concrete follow-on checklist after the first best-available text-first showcase pack.
@@ -8,10 +10,10 @@ It exists so fresh sessions can keep moving without reconstructing the remaining
 
 Use this file together with:
 
-- `docs/research/11-ltx-capability-matrix.md`
+- `docs/families/ltx-capability-matrix.md`
 - `docs/research/13-ltx-showcase-execution-plan.md`
 - `docs/workflow-orchestration-design.md`
-- `docs/03-phased-delivery-plan.md`
+- `docs/phased-delivery-plan.md`
 
 ## Current truth
 

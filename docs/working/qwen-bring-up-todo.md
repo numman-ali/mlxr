@@ -1,5 +1,7 @@
 # Qwen Overnight TODO
 
+Status: active working checklist for Qwen-Image bring-up
+
 This note captures the concrete next steps for the current `Qwen-Image`
 tranche so long-running generation and backend bring-up can continue across
 context switches without re-deriving the same decisions.
@@ -150,6 +152,6 @@ context switches without re-deriving the same decisions.
 ## Docs To Update After Each Breakthrough
 
 - `packages/families/qwen-image/README.md`
-- `docs/research/21-qwen-image-family-candidate.md`
+- `docs/families/qwen-image-family-notes.md`
 - `MEMORY.md`
 - capability matrix docs once edit becomes truthful

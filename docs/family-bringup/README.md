@@ -16,8 +16,8 @@ Use it when we need to decide:
 ## What To Read First
 
 1. [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
-2. [02-universal-mlx-runtime-design.md](/Users/numman/Repos/mlxr/docs/02-universal-mlx-runtime-design.md)
-3. [03-phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/03-phased-delivery-plan.md)
+2. [technical-design.md](/Users/numman/Repos/mlxr/docs/technical-design.md)
+3. [phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/phased-delivery-plan.md)
 4. [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md)
 
 Then use:

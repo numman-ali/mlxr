@@ -1,5 +1,7 @@
 # Runtime-Led Composer Contract Plan
 
+Status: working stage plan
+
 ## Purpose
 
 Define how the global composer stays fully driven by runtime planning truth instead of drifting into host-owned validation.

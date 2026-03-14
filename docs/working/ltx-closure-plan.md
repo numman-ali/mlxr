@@ -1,5 +1,7 @@
 # LTX Capability Closure Plan
 
+Status: active working plan for LTX capability closure
+
 ## Purpose
 
 This is the concrete closure plan for the remaining official `LTX-2.3` family
@@ -8,9 +10,9 @@ surface in `MLXR`.
 It exists to keep the work ordered, evidence-driven, and resistant to
 capability drift. Use it together with:
 
-- [11-ltx-capability-matrix.md](11-ltx-capability-matrix.md)
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
-- [18-ltx-reference-map.md](18-ltx-reference-map.md)
+- [ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/families/ltx-capability-matrix.md)
+- [ltx-compatibility-checklist.md](/Users/numman/Repos/mlxr/docs/families/ltx-compatibility-checklist.md)
+- [ltx-reference-map.md](/Users/numman/Repos/mlxr/docs/families/ltx-reference-map.md)
 
 ## Current truthful boundary
 

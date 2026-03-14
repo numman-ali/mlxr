@@ -1,5 +1,7 @@
 # Implementation Architecture Plan
 
+Status: working implementation architecture plan
+
 ## Purpose
 
 Map the redesign onto the current Swift packages and app model without inventing a second architecture.

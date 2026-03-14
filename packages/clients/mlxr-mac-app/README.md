@@ -15,7 +15,8 @@ The app is intentionally:
 - SwiftUI-first
 - a thin client over the shared runtime daemon
 - separate from the `ltx-desktop` compatibility adapter
-- already moving toward a real studio workflow instead of separate technical forms
+- already moving toward one unified consumer studio shell instead of separate
+  technical forms
 
 ## What It Covers
 
@@ -23,17 +24,18 @@ The app is intentionally:
   - startup actions
   - recent assets
   - model and runtime readiness
-- `Studio`
+- `Library`
+  - project-first browsing and continuity
+  - generated outputs plus imported assets
+  - run-group-aware asset sets
+  - uniform `4:5` browser tiles with a large in-window modal preview
+  - keyboard-driven selection, preview, and continue-in-composer actions
+- `Composer`
   - runtime-led planning and submission over the shared workflow seam
   - image generation and editing
   - video generation, animation, audio-conditioned, guided-video, interpolation, and retake flows
   - model-aware presets and advanced controls behind disclosure
-  - persistent workspace draft that survives navigation
-- `Library`
-  - generated outputs plus imported assets
-  - run-group-aware asset sets
-  - uniform `4:5` browser tiles with a large in-window modal preview
-  - keyboard-driven selection, preview, and continue-in-studio actions
+  - shared draft behavior instead of a separate top-level Studio destination
 - `Models`
   - curated installs
   - first-run starter-model setup
@@ -97,7 +99,8 @@ peekaboo see --app MLXRMacApp --json --annotate
 
 Reference plan:
 
-- [docs/plans/mac-app-runtime-parity-plan.md](/Users/numman/Repos/mlxr/docs/plans/mac-app-runtime-parity-plan.md)
+- [docs/mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
+- [docs/working/mac-app-runtime-parity.md](/Users/numman/Repos/mlxr/docs/working/mac-app-runtime-parity.md)
 
 The app expects the repo-local Python runtime path by default:
 

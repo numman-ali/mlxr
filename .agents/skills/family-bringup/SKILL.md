@@ -21,7 +21,7 @@ Do not use this skill for routine bug fixes or the common implementation path. T
 1. Read `docs/workflow-orchestration-design.md`.
 2. Read `docs/family-bringup/README.md`, `docs/family-bringup/checklist.md`, and `docs/family-bringup/template.md`.
 3. When the family has real-weight runtime bugs or "wrong output" failures, read `docs/family-bringup/debugging-decision-tree.md`.
-4. Read `docs/02-universal-mlx-runtime-design.md`, `docs/03-phased-delivery-plan.md`, and `docs/research/09-open-questions-and-validation-plan.md`.
+4. Read `docs/technical-design.md`, `docs/phased-delivery-plan.md`, and `docs/research/09-open-questions-and-validation-plan.md`.
 5. Inspect the relevant current family and host code before claiming a clean boundary.
 6. Name the smallest truthful slice before optional features.
 7. Keep reusable sequencing in the core workflow layer, family truth in the family adapter, and UX glue in the host.
@@ -35,9 +35,9 @@ Do not use this skill for routine bug fixes or the common implementation path. T
 - `docs/family-bringup/checklist.md`
 - `docs/family-bringup/template.md`
 - `docs/family-bringup/debugging-decision-tree.md` when isolating runtime-quality or runtime-contract failures
-- `docs/01-product-requirements.md`
-- `docs/02-universal-mlx-runtime-design.md`
-- `docs/03-phased-delivery-plan.md`
+- `docs/product-requirements.md`
+- `docs/technical-design.md`
+- `docs/phased-delivery-plan.md`
 - `docs/research/09-open-questions-and-validation-plan.md`
 
 Load the relevant family research doc and adapter code only when needed for the specific family.

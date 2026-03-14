@@ -24,7 +24,7 @@
   ·
   <a href="docs/cli-ergonomics.md">CLI</a>
   ·
-  <a href="docs/mac-app-v1-product-spec.md">Mac app v1</a>
+  <a href="docs/mac-app-product-spec.md">Mac app</a>
   ·
   <a href="docs/open-source-release-checklist.md">Release checklist</a>
 </p>
@@ -37,7 +37,7 @@
 
 It is a local-first generative runtime built for Apple Silicon: one shared runtime, many thin surfaces, explicit provenance, and support claims that stay tied to real receipts instead of hope.
 
-The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished polished desktop app. The first native Mac app package now exists as an early Swift client over the same runtime, now evolving into a unified `Studio + Library + Models` workflow instead of separate technical media forms.
+The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished polished desktop app. The first native Mac app package now exists as an early Swift client over the same runtime, now evolving into a unified consumer shell with a shared composer, project-first library, and runtime-backed model management.
 
 ## See It In Motion
 
@@ -71,7 +71,7 @@ The project is already a real runtime with a real CLI and real family slices for
 - A first-party `mlxr` CLI with `generate`, `serve`, `doctor`, `models list`, `models install`, and `feedback`.
 - Promoted `LTX` fast video slices.
 - Real `Qwen-Image`, `FLUX.2`, and `Z-Image` image-family slices.
-- An early native Mac app package under `packages/clients/mlxr-mac-app/`, with a unified Studio surface, reusable library assets, and runtime-backed model installs.
+- An early native Mac app package under `packages/clients/mlxr-mac-app/`, with a shared composer, reusable library assets, and runtime-backed model installs.
 - Public docs for current status, roadmap, open-source maintenance, and the first Mac app direction.
 
 What is not true yet:
@@ -120,10 +120,10 @@ targetable by macOS and Peekaboo.
 
 For the exact truth by family, use:
 
-- [LTX capability matrix](docs/research/11-ltx-capability-matrix.md)
-- [Qwen-Image capability matrix](docs/research/26-qwen-image-capability-matrix.md)
-- [FLUX.2 capability matrix](docs/research/23-flux2-capability-matrix.md)
-- [Z-Image family candidate](docs/research/20-z-image-family-candidate.md)
+- [LTX capability matrix](docs/families/ltx-capability-matrix.md)
+- [Qwen-Image capability matrix](docs/families/qwen-image-capability-matrix.md)
+- [FLUX.2 capability matrix](docs/families/flux2-capability-matrix.md)
+- [Z-Image family candidate](docs/families/z-image-positioning.md)
 
 ## Start Here
 
@@ -132,14 +132,14 @@ If you want to understand the project quickly:
 - [Current status](docs/current-status.md)
 - [Roadmap](docs/roadmap.md)
 - [CLI ergonomics](docs/cli-ergonomics.md)
-- [Mac app v1 product spec](docs/mac-app-v1-product-spec.md)
+- [Mac app product spec](docs/mac-app-product-spec.md)
 - [Open-source maintenance model](docs/open-source-maintenance.md)
 
 If you want the platform docs:
 
-- [Product requirements](docs/01-product-requirements.md)
-- [Technical design](docs/02-universal-mlx-runtime-design.md)
-- [Phased delivery plan](docs/03-phased-delivery-plan.md)
+- [Product requirements](docs/product-requirements.md)
+- [Technical design](docs/technical-design.md)
+- [Phased delivery plan](docs/phased-delivery-plan.md)
 - [Benchmark matrix](docs/benchmark-matrix.md)
 - [Workflow orchestration design](docs/workflow-orchestration-design.md)
 - [Provider and provenance model](docs/provider-and-provenance-model.md)
@@ -175,4 +175,4 @@ The repository code is released under [Apache-2.0](LICENSE).
 
 Model families preserve upstream model licenses independently. A permissive repo license does not make upstream model weights redistributable.
 
-_Last verified: 2026-03-12_
+_Last verified: 2026-03-14_

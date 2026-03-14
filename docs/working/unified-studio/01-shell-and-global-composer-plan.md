@@ -1,5 +1,7 @@
 # Shell And Global Composer Plan
 
+Status: working stage plan
+
 ## Purpose
 
 Define the app shell for the migration and the end-state after the composer becomes a shared bottom overlay.

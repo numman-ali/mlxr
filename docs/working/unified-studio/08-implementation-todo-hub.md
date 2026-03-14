@@ -1,19 +1,19 @@
 # Unified Studio Implementation Todo Hub
 
-Status: operational checklist for the unified studio redesign
+Status: working implementation checklist for the unified studio redesign
 
 Use this as the execution hub for implementation, review, and regression checking.
 
 Primary plan sources:
 
-- `docs/design-thinking/00-unified-studio-master-plan.md`
-- `docs/design-thinking/01-shell-and-global-composer-plan.md`
-- `docs/design-thinking/02-runtime-led-composer-contract-plan.md`
-- `docs/design-thinking/03-project-and-canvas-plan.md`
-- `docs/design-thinking/04-library-browser-plan.md`
-- `docs/design-thinking/05-home-models-activity-plan.md`
-- `docs/design-thinking/06-implementation-architecture-plan.md`
-- `docs/design-thinking/07-stage-acceptance-and-review-checklists.md`
+- `docs/working/unified-studio/00-master-plan.md`
+- `docs/working/unified-studio/01-shell-and-global-composer-plan.md`
+- `docs/working/unified-studio/02-runtime-led-composer-contract-plan.md`
+- `docs/working/unified-studio/03-project-and-canvas-plan.md`
+- `docs/working/unified-studio/04-library-browser-plan.md`
+- `docs/working/unified-studio/05-home-models-activity-plan.md`
+- `docs/working/unified-studio/06-implementation-architecture-plan.md`
+- `docs/working/unified-studio/07-stage-acceptance-and-review-checklists.md`
 
 Review gate:
 
@@ -21,7 +21,7 @@ Review gate:
 
 ## Stage 0: Spec Lock And Architecture Prep
 
-- [ ] Confirm `docs/design-thinking/unified-studio-screens.md` still matches the intended north-star UI.
+- [ ] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI.
 - [ ] Confirm all eight reference frames still support the chosen IA and interaction model.
 - [ ] Keep `00-unified-studio-master-plan.md` aligned with the latest locked decisions.
 - [ ] Keep `07-stage-acceptance-and-review-checklists.md` aligned with the validation and review gate.

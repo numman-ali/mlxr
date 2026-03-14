@@ -1,13 +1,13 @@
 # MLXR Roadmap
 
-Last updated: 2026-03-12
+Last updated: 2026-03-14
 
 ## Summary
 
-The roadmap now has two product horizons:
+The roadmap now has one clear app direction:
 
-- first: open-source runtime + CLI + simple native Mac app
-- later: `MLXR Studio` as a deeper AI-native generative suite
+- open-source runtime + CLI as the platform
+- one first-party native Mac app evolving into the unified studio shell
 
 The runtime remains the center of gravity. Every client should stay thin over
 the same capability, job, provenance, and artifact model.
@@ -34,25 +34,28 @@ the same capability, job, provenance, and artifact model.
 
 ## Next
 
-### 3. Simple native Mac app
-
-The first app is not `MLXR Studio`, and it is no longer just a spec.
+### 3. First-party Mac app
 
 The current state is:
 
 - native Swift package scaffold is real
-- runtime bridge, model install, advanced import, image flows, video flows,
-  library, jobs, and settings surfaces all exist in early form
-- the next work is hardening and product polish, not architecture invention
+- runtime bridge, model install, advanced import, and shared workflow seams are
+  real
+- the app is already moving toward one unified studio shell with a shared
+  composer, project-first library, and rail-based activity
+- the next work is hardening, polish, and release posture, not architecture
+  invention
 
 The next app tranche is:
 
 - talks to the shared runtime
 - starts or attaches to the local runtime cleanly
-- exposes real + supported image and video flows
+- exposes real + supported image and video flows through one coherent consumer
+  app
 - keeps advanced or unpromoted rows visibly separate from recommended defaults
 - treats prompt enhancement as an optional host-side helper
-- improves preview, onboarding, validation, and release packaging
+- improves preview, onboarding, validation, documentation, and release
+  packaging
 
 ### 4. Capability closure
 
@@ -72,26 +75,13 @@ The next capability work after the OSS foundation is:
 - Comfy adapter
 - clearer embedded first-party host boundary
 
-### 6. MLXR Studio discovery
-
-`MLXR Studio` is a separate product track.
-
-It should only start after the simpler first-party app proves:
-
-- the runtime story is stable enough
-- the first-party client ergonomics are understood
-- the capability map is public and trustworthy
-
-Studio should be treated as a researched product design effort, not as a
-rename of the first simple app.
-
 ## Ordering
 
 1. OSS foundation and repo truth
 2. CLI public polish
-3. simple Mac app v1
+3. first-party Mac app hardening
 4. capability closure and adapter growth
-5. Studio discovery
+5. broader adapter and product expansion
 
 ## Not In The First Milestone
 
@@ -99,4 +89,4 @@ rename of the first simple app.
 - fully closed LTX `dev` family
 - prompt enhancement as a core runtime dependency
 - every possible family-specific advanced control in the shared public surface
-- Studio-level UX or orchestration
+- a second host-owned studio architecture

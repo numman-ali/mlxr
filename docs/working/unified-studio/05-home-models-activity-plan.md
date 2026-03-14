@@ -1,5 +1,7 @@
 # Home, Models, And Activity Plan
 
+Status: working stage plan
+
 ## Purpose
 
 Define the three non-canvas surfaces that support the unified studio shell.

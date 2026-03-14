@@ -1,17 +1,20 @@
-# MLXR Mac App v1 Product Spec
+# MLXR Mac App Product Spec
+
+Status: canonical product spec for the first-party Mac app
 
 ## Summary
 
-The first `MLXR` Mac app is a simple native macOS client over the shared
-runtime.
+The first-party `MLXR` Mac app is the unified native consumer shell over the
+shared runtime.
 
 Current implementation status:
 
 - native Swift package scaffold exists in `packages/clients/mlxr-mac-app/`
 - runtime bridge, feature shells, and early tests are real
-- the app now has a persistent runtime-led `Studio` draft, a reusable `Library`
-  with uniform tiles and modal preview, rail-based `Activity`, and guided
-  starter-model setup
+- the app now has a shared global composer, a project-first `Library`, rail-
+  based `Activity`, guided starter-model setup, and a transitional internal
+  `Studio` seam that should disappear from the final visible information
+  architecture
 - polish, onboarding, packaging, and release hardening still remain
 
 Its job is to make the current runtime accessible to non-technical Mac users
@@ -20,7 +23,7 @@ without creating a second architecture or a host-owned inference stack.
 ## Product Goals
 
 - zero-complication local use on a Mac
-- clear generate and edit flows
+- clear generate, edit, and iteration flows
 - straightforward progress, outputs, and errors
 - one thin client over the same runtime used by the CLI
 
@@ -54,7 +57,7 @@ it should not be the main product-development path.
 
 ## Product Boundary
 
-The first app should expose real + supported runtime capabilities on day one.
+The first app should expose real and supported runtime capabilities on day one.
 
 That means:
 
@@ -68,10 +71,13 @@ That means:
 Top-level app areas:
 
 - `Home`
-- `Studio`
 - `Library`
 - `Models`
 - `Settings`
+- `Activity` in the left rail footer
+
+Creation is shared through one global composer rather than a top-level `Studio`
+destination.
 
 ### Models
 
@@ -81,22 +87,26 @@ Top-level app areas:
 - remove model from the MLXR-managed install home
 - first-run starter-model setup flow for new users
 
-### Studio
-
-- one creation surface for image and video workflows
-- prompt in the main workspace
-- config on the right
-- reusable assets from the library on the left
-- current progress stays in context instead of pushing the user to a separate job list
-
 ### Library
 
+- project-first browsing rather than a flat job log
+- one continuity surface for progress, outputs, and reuse
 - generated outputs plus imported source assets
 - run-group-aware asset sets instead of a raw job list
 - uniform `4:5` asset tiles in the browser
 - large in-window modal preview instead of a sidebar inspector
 - quick reveal in Finder
-- fast reuse into Studio for edit, animate, guide, and retake flows
+- fast reuse into the shared composer for edit, animate, guide, and retake
+  flows
+
+### Composer
+
+- one shared creation surface for image and video workflows
+- visible on `Home` and `Library`
+- runtime-led planning and submission through the shared workflow seam
+- model-aware presets and advanced controls behind disclosure
+- current progress stays in context instead of pushing the user to a separate
+  jobs page
 
 ### Settings
 
@@ -163,6 +173,14 @@ The app should not:
 - own family-specific stage sequencing
 - redefine capability truth
 
+The durable boundary rules for that split live in:
+
+- [mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
+
+The current redesign implementation plan lives in:
+
+- [working/unified-studio/00-master-plan.md](/Users/numman/Repos/mlxr/docs/working/unified-studio/00-master-plan.md)
+
 ## Repo Placement
 
 The preferred repo home for the first app is:
@@ -172,4 +190,5 @@ The preferred repo home for the first app is:
 This keeps it aligned with the runtime-first client model and distinct from:
 
 - `packages/adapters/ltx-desktop/` for compatibility work
-- the later `MLXR Studio` product track
+- future adapter or embedded host work that still stays thin over the same
+  runtime

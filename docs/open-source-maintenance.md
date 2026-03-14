@@ -1,5 +1,7 @@
 # Open-Source Maintenance Model
 
+Status: public-facing maintenance guidance for contributors
+
 ## Summary
 
 `MLXR` is an agent-native open-source repo.
@@ -16,24 +18,6 @@ private chat history.
 - host adapters stay thin
 - family adapters keep family truth local
 - the shared runtime remains the canonical contract
-
-## Human And Agent Roles
-
-Humans are expected to:
-
-- set direction
-- choose tradeoffs
-- review outcomes
-- decide what gets promoted publicly
-
-Agents are expected to:
-
-- inspect the repo and docs first
-- implement changes
-- run validation
-- inspect logs when runtime behavior changes
-- update docs in the same pass
-- keep the repo legible for the next session
 
 ## Public Contribution Standard
 
@@ -56,17 +40,6 @@ That especially applies to:
 Do not treat a one-off run as public truth unless the docs say it has earned
 that status.
 
-## Maintenance Rhythm
-
-The healthy rhythm for this repo is:
-
-1. inspect current truth
-2. make the change
-3. run the harness
-4. inspect logs when needed
-5. update docs
-6. review the diff with fresh eyes
-
 ## Scope Discipline
 
 When adding public-facing features:
@@ -88,3 +61,8 @@ The public repo should be understandable and maintainable by someone who was
 not in the original conversation.
 
 This document exists to make that expectation explicit.
+
+For the fuller repo operating model, validation loop, and agent workflow, use:
+
+- [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
+- [AGENTS.md](/Users/numman/Repos/mlxr/AGENTS.md)

@@ -1,5 +1,7 @@
 # MLXR App: Definitive Interface Design
 
+Status: non-normative visual brief — the numbered stage plans are the implementation spec
+
 This is the UI blueprint for the MLXR Mac App — a consumer-friendly local
 creative tool for image, video, and audio generation on Apple Silicon.
 
@@ -12,8 +14,8 @@ This file is the visual brief and design rationale for the unified studio direct
 
 The normative implementation spec lives in:
 
-- `docs/design-thinking/00-unified-studio-master-plan.md`
-- the numbered stage plans in `docs/design-thinking/`
+- `docs/working/unified-studio/00-master-plan.md`
+- the numbered stage plans in `docs/working/unified-studio/`
 
 If this brief and the stage plans differ, the stage plans win for implementation once they explicitly close a question.
 

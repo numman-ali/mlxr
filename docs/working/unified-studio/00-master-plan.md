@@ -3,14 +3,15 @@
 Status: approved redesign meta-plan and implementation governance for the unified studio tranche
 
 Primary visual brief:
-- `docs/design-thinking/unified-studio-screens.md`
+- `docs/working/unified-studio/visual-brief.md`
 
 Primary implementation spec:
-- this file plus the numbered stage plans in `docs/design-thinking/`
+- this file plus the numbered stage plans in `docs/working/unified-studio/`
 
 Supporting product and architecture anchors:
-- `docs/plans/mac-app-runtime-parity-plan.md`
-- `docs/mac-app-v1-product-spec.md`
+- `docs/working/mac-app-runtime-parity.md`
+- `docs/mac-app-product-spec.md`
+- `docs/mac-app-runtime-contract.md`
 
 ## Summary
 
@@ -22,7 +23,10 @@ The governing rule is fixed:
 - keep planning, capability, and run-acceptance truth in the runtime
 - use `swiftui-pro` as a mandatory engineering and review gate for every stage
 
-This redesign is executed as a staged plan set under `docs/design-thinking/`, with each stage carrying its own acceptance criteria, Peekaboo validation flow, runtime-log checks, and `swiftui-pro` checklist.
+This redesign is executed as a staged plan set under
+`docs/working/unified-studio/`, with each stage carrying its own acceptance
+criteria, Peekaboo validation flow, runtime-log checks, and `swiftui-pro`
+checklist.
 
 ## Outcome
 

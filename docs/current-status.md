@@ -71,7 +71,8 @@ The project direction is now:
 1. make the runtime and CLI public, legible, and trustworthy
 2. harden the native Mac app, especially the shared composer, project-first library, and model-management flows, into the first user-facing product
 3. keep desktop and Comfy as thin client or compatibility tracks
-4. treat a future `MLXR Studio` as a separate longer-term product
+4. keep the Mac app on the unified studio path instead of splitting into a
+   separate “simple app first, Studio later” track
 
 ## Current Release-Readiness Gaps
 
@@ -89,5 +90,6 @@ are:
 - [roadmap.md](/Users/numman/Repos/mlxr/docs/roadmap.md)
 - [open-source-release-checklist.md](/Users/numman/Repos/mlxr/docs/open-source-release-checklist.md)
 - [cli-ergonomics.md](/Users/numman/Repos/mlxr/docs/cli-ergonomics.md)
-- [mac-app-v1-product-spec.md](/Users/numman/Repos/mlxr/docs/mac-app-v1-product-spec.md)
-- [plans/mac-app-runtime-parity-plan.md](/Users/numman/Repos/mlxr/docs/plans/mac-app-runtime-parity-plan.md)
+- [mac-app-product-spec.md](/Users/numman/Repos/mlxr/docs/mac-app-product-spec.md)
+- [mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
+- [working/mac-app-runtime-parity.md](/Users/numman/Repos/mlxr/docs/working/mac-app-runtime-parity.md)

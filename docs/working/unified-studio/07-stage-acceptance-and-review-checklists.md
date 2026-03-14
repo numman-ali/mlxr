@@ -1,5 +1,7 @@
 # Stage Acceptance And Review Checklists
 
+Status: working acceptance and review checklist
+
 ## Cross-Stage Invariants
 
 Every stage must preserve these rules:

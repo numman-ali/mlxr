@@ -230,9 +230,9 @@ A change is not done until all of the following are true:
 Any new agent should read these in this order after `AGENTS.md` and `MEMORY.md`, unless the task is tiny and local:
 
 1. [README.md](/Users/numman/Repos/mlxr/README.md)
-2. [01-product-requirements.md](/Users/numman/Repos/mlxr/docs/01-product-requirements.md)
-3. [02-universal-mlx-runtime-design.md](/Users/numman/Repos/mlxr/docs/02-universal-mlx-runtime-design.md)
-4. [03-phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/03-phased-delivery-plan.md)
+2. [product-requirements.md](/Users/numman/Repos/mlxr/docs/product-requirements.md)
+3. [technical-design.md](/Users/numman/Repos/mlxr/docs/technical-design.md)
+4. [phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/phased-delivery-plan.md)
 5. [benchmark-matrix.md](/Users/numman/Repos/mlxr/docs/benchmark-matrix.md)
 6. [provider-and-provenance-model.md](/Users/numman/Repos/mlxr/docs/provider-and-provenance-model.md)
 7. Relevant ADRs in [docs/adr](/Users/numman/Repos/mlxr/docs/adr)
@@ -261,12 +261,12 @@ If the task is LTX-fidelity-specific:
 
 If the task is LTX-capability-specific:
 
-- read [11-ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/research/11-ltx-capability-matrix.md)
+- read [ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/families/ltx-capability-matrix.md)
 - read [12-ltx-prompting-guide.md](/Users/numman/Repos/mlxr/docs/research/12-ltx-prompting-guide.md) when text-first prompt quality or showcase work is in scope
 - read [13-ltx-showcase-execution-plan.md](/Users/numman/Repos/mlxr/docs/research/13-ltx-showcase-execution-plan.md) when continuing the current capability-to-showcase tranche
 - read [14-first-showcase-pack.md](/Users/numman/Repos/mlxr/docs/research/14-first-showcase-pack.md) when validating, replacing, or promoting the current five-clip showcase set
-- read [18-ltx-reference-map.md](/Users/numman/Repos/mlxr/docs/research/18-ltx-reference-map.md) when implementing or validating against official LTX semantics
-- read [19-ltx-compatibility-checklist.md](/Users/numman/Repos/mlxr/docs/research/19-ltx-compatibility-checklist.md) when deciding whether an upstream LTX feature is still missing, merely planned, or truly complete
+- read [ltx-reference-map.md](/Users/numman/Repos/mlxr/docs/families/ltx-reference-map.md) when implementing or validating against official LTX semantics
+- read [ltx-compatibility-checklist.md](/Users/numman/Repos/mlxr/docs/families/ltx-compatibility-checklist.md) when deciding whether an upstream LTX feature is still missing, merely planned, or truly complete
 - read [16-owned-substrate-migration-plan.md](/Users/numman/Repos/mlxr/docs/research/16-owned-substrate-migration-plan.md) when donor-runtime removal, non-distilled recovery, or Gemma substrate ownership is in scope
 - read [17-multimodal-inference-engine.md](/Users/numman/Repos/mlxr/docs/research/17-multimodal-inference-engine.md) when replacing `mlx-vlm` / `mlx-lm` or deciding what shared MLX multimodal execution logic belongs in `packages/core/`
 

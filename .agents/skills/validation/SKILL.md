@@ -36,7 +36,7 @@ For real `LTX-2.3` fidelity bring-up and stage-local smoke debugging, use the de
   - `docs/benchmark-matrix.md`
   - `docs/research/09-open-questions-and-validation-plan.md`
 - For runtime and scheduler interpretation:
-  - `docs/02-universal-mlx-runtime-design.md`
+  - `docs/technical-design.md`
   - `docs/research/05-optimization-playbook.md`
 - For LTX-specific runtime pressure:
   - `docs/research/07-ltx-integration-seams.md`

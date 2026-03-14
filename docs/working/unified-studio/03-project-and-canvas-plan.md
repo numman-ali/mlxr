@@ -1,5 +1,7 @@
 # Project And Canvas Plan
 
+Status: working stage plan
+
 ## Purpose
 
 Define the continuity surface for work after `Studio` is removed as a separate destination.

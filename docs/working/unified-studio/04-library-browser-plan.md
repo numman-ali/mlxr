@@ -1,5 +1,7 @@
 # Library Browser Plan
 
+Status: working stage plan
+
 ## Purpose
 
 Define the top-level `Library` experience as a project browser first and an asset browser second.
