@@ -35,6 +35,8 @@ class ManagedMessageQueue(Protocol):
 
     def get(self, timeout: float | None = None) -> WorkerMessage: ...
 
+    def get_nowait(self) -> WorkerMessage: ...
+
     def close(self) -> None: ...
 
 
@@ -55,6 +57,8 @@ class SpawnQueueLike(Protocol):
     def put(self, item: WorkerMessage) -> None: ...
 
     def get(self, block: bool = True, timeout: float | None = None) -> object: ...
+
+    def get_nowait(self) -> object: ...
 
     def close(self) -> None: ...
 
@@ -80,6 +84,12 @@ class SpawnManagedQueue:
 
     def get(self, timeout: float | None = None) -> WorkerMessage:
         item = self._queue.get(timeout=timeout)
+        if not isinstance(item, dict):
+            raise TypeError("Worker queue emitted a non-dictionary message")
+        return item
+
+    def get_nowait(self) -> WorkerMessage:
+        item = self._queue.get_nowait()
         if not isinstance(item, dict):
             raise TypeError("Worker queue emitted a non-dictionary message")
         return item
@@ -110,6 +120,9 @@ class ThreadMessageQueue:
 
     def get(self, timeout: float | None = None) -> WorkerMessage:
         return self._queue.get(timeout=timeout)
+
+    def get_nowait(self) -> WorkerMessage:
+        return self._queue.get_nowait()
 
     def close(self) -> None:
         return None
@@ -211,6 +224,72 @@ def _validate_num_frames_constraint(
     formula = constraint.get("formula")
     if formula == "8n+1" and (value < 1 or (value - 1) % 8 != 0):
         raise JobValidationError("num_frames must satisfy the current 8n+1 rule")
+
+
+def _validate_numeric_constraint(
+    *,
+    name: str,
+    value: object,
+    constraints: dict[str, object],
+    integer: bool,
+) -> None:
+    if value is None:
+        return
+    if integer:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise JobValidationError(f"{name} must be an integer")
+        numeric_value = float(value)
+    else:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise JobValidationError(f"{name} must be numeric")
+        numeric_value = float(value)
+
+    raw_constraint = constraints.get(name)
+    if not isinstance(raw_constraint, dict):
+        return
+
+    fixed = raw_constraint.get("fixed")
+    if fixed is not None:
+        if integer:
+            if not isinstance(fixed, int) or isinstance(fixed, bool):
+                raise JobValidationError(f"{name} fixed constraint must be an integer")
+            if int(numeric_value) != fixed:
+                raise JobValidationError(f"{name} must be exactly {fixed}")
+        else:
+            if not isinstance(fixed, (int, float)) or isinstance(fixed, bool):
+                raise JobValidationError(f"{name} fixed constraint must be numeric")
+            if numeric_value != float(fixed):
+                raise JobValidationError(f"{name} must be exactly {fixed}")
+
+    minimum = raw_constraint.get("minimum")
+    if minimum is not None:
+        if not isinstance(minimum, (int, float)) or isinstance(minimum, bool):
+            raise JobValidationError(f"{name} minimum constraint must be numeric")
+        if numeric_value < float(minimum):
+            raise JobValidationError(f"{name} must be >= {minimum}")
+
+    maximum = raw_constraint.get("maximum")
+    if maximum is not None:
+        if not isinstance(maximum, (int, float)) or isinstance(maximum, bool):
+            raise JobValidationError(f"{name} maximum constraint must be numeric")
+        if numeric_value > float(maximum):
+            raise JobValidationError(f"{name} must be <= {maximum}")
+
+    if integer:
+        multiple_of = raw_constraint.get("multiple_of")
+        if multiple_of is not None:
+            if (
+                not isinstance(multiple_of, int)
+                or isinstance(multiple_of, bool)
+                or multiple_of <= 0
+            ):
+                raise JobValidationError(
+                    f"{name} multiple_of constraint must be a positive integer"
+                )
+            if int(numeric_value) % multiple_of != 0:
+                raise JobValidationError(
+                    f"{name} must be an integer multiple of {multiple_of}"
+                )
 
 
 class JobManagerError(Exception):
@@ -606,6 +685,18 @@ class JobManager:
         )
         num_frames = request.params.get("num_frames")
         _validate_num_frames_constraint(num_frames, constraints)
+        _validate_numeric_constraint(
+            name="num_inference_steps",
+            value=request.params.get("num_inference_steps"),
+            constraints=constraints,
+            integer=True,
+        )
+        _validate_numeric_constraint(
+            name="guidance_scale",
+            value=request.params.get("guidance_scale"),
+            constraints=constraints,
+            integer=False,
+        )
         images = request.inputs.get("images")
         videos = request.inputs.get("videos")
         audio = request.inputs.get("audio")

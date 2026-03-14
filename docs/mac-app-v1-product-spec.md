@@ -9,7 +9,9 @@ Current implementation status:
 
 - native Swift package scaffold exists in `packages/clients/mlxr-mac-app/`
 - runtime bridge, feature shells, and early tests are real
-- the app now has a persistent studio draft, a reusable asset library, grouped run results, and guided starter-model setup
+- the app now has a persistent runtime-led `Studio` draft, a reusable `Library`
+  with uniform tiles and modal preview, rail-based `Activity`, and guided
+  starter-model setup
 - polish, onboarding, packaging, and release hardening still remain
 
 Its job is to make the current runtime accessible to non-technical Mac users
@@ -91,6 +93,8 @@ Top-level app areas:
 
 - generated outputs plus imported source assets
 - run-group-aware asset sets instead of a raw job list
+- uniform `4:5` asset tiles in the browser
+- large in-window modal preview instead of a sidebar inspector
 - quick reveal in Finder
 - fast reuse into Studio for edit, animate, guide, and retake flows
 
@@ -147,6 +151,7 @@ without making it part of the hard runtime dependency chain.
 The app should:
 
 - discover or start the local runtime
+- plan drafts through the shared workflow planning seam
 - submit the same job-oriented requests as the CLI
 - import local media through trusted local helper flows
 - consume runtime job events and artifacts

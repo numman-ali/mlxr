@@ -94,6 +94,48 @@ class Flux2WorkflowTests(unittest.TestCase):
         self.assertEqual(plan.selected_task, "image.edit")
         self.assertEqual(request.inputs["images"][0]["input_handle"], "inp_ref")
 
+    def test_readiness_requires_image_reference_for_edit(self) -> None:
+        strategy = Flux2WorkflowStrategy()
+        context = _context()
+        intent = WorkflowIntent(
+            model_id="flux2-klein-9b-local",
+            prompt="keep the subject and change the location",
+            task="image.edit",
+            output=JobOutputPolicy(artifact_format="png"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertEqual(
+            readiness.reference_requirements[0].description,
+            "Choose at least one image to edit.",
+        )
+        self.assertIn(
+            "Choose at least one image to edit.",
+            readiness.blocking_issues,
+        )
+
+    def test_readiness_blocks_unsupported_output_format(self) -> None:
+        strategy = Flux2WorkflowStrategy()
+        context = _context()
+        context.capability.artifacts_out = ["png"]
+        intent = WorkflowIntent(
+            model_id="flux2-klein-9b-local",
+            prompt="cinematic portrait",
+            output=JobOutputPolicy(artifact_format="jpg"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn(
+            "Output format 'jpg' is not supported for this model.",
+            readiness.blocking_issues,
+        )
+
     def test_to_job_request_preserves_flux_extensions(self) -> None:
         strategy = Flux2WorkflowStrategy()
         context = _context()

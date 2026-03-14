@@ -183,6 +183,41 @@ public struct WorkflowPlan: Codable, Sendable, Hashable {
     public var metadata: JSONMap
 }
 
+public struct WorkflowReferenceRequirement: Codable, Sendable, Hashable, Identifiable {
+    public var kind: WorkflowReferenceKind
+    public var minimumCount: Int
+    public var maximumCount: Int?
+    public var acceptedRoles: [String]
+    public var description: String
+
+    public var id: String {
+        let maximumLabel = maximumCount.map(String.init) ?? "many"
+        return "\(kind.rawValue)-\(minimumCount)-\(maximumLabel)-\(description)"
+    }
+}
+
+public struct WorkflowPlanReadiness: Codable, Sendable, Hashable {
+    public var ready: Bool
+    public var blockingIssues: [String]
+    public var warnings: [String]
+    public var referenceRequirements: [WorkflowReferenceRequirement]
+    public var allowedOutputFormats: [String]
+
+    public init(
+        ready: Bool = true,
+        blockingIssues: [String] = [],
+        warnings: [String] = [],
+        referenceRequirements: [WorkflowReferenceRequirement] = [],
+        allowedOutputFormats: [String] = []
+    ) {
+        self.ready = ready
+        self.blockingIssues = blockingIssues
+        self.warnings = warnings
+        self.referenceRequirements = referenceRequirements
+        self.allowedOutputFormats = allowedOutputFormats
+    }
+}
+
 public struct WorkflowStageSpec: Codable, Sendable, Hashable, Identifiable {
     public var stageId: String
     public var stageType: String
@@ -199,6 +234,7 @@ public struct WorkflowStageSpec: Codable, Sendable, Hashable, Identifiable {
 public struct WorkflowPlanResult: Codable, Sendable, Hashable {
     public var capability: CapabilityDescriptor
     public var plan: WorkflowPlan
+    public var readiness: WorkflowPlanReadiness
 }
 
 public struct JobRequest: Codable, Sendable, Hashable {

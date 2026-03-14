@@ -237,6 +237,9 @@ class QwenImageFamilyAdapter:
             }
         )
 
+    def normalize_capability(self, artifact: PortableArtifact) -> CapabilityDescriptor:
+        return self.capabilities(artifact)
+
     def run_stage(
         self, loaded: LoadedModelHandle, stage: ExecutionStage
     ) -> StageResult:

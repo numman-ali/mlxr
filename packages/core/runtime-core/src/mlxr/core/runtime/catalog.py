@@ -242,13 +242,13 @@ class RuntimeCatalog:
         return record
 
     def list_models(self) -> list[ModelRecord]:
-        return self.models.list()
+        return [self._resolved_model_record(record) for record in self.models.list()]
 
     def get_model(self, model_id: str) -> ModelRecord:
         record = self.models.get(model_id)
         if record is None:
             raise CatalogNotFoundError(f"Unknown model '{model_id}'")
-        return record
+        return self._resolved_model_record(record)
 
     def list_supported_models(self) -> list[SupportedModelDescriptor]:
         installed_model_ids = {record.model_id for record in self.models.list()}
@@ -340,7 +340,7 @@ class RuntimeCatalog:
         if existing_model is not None and existing_model.artifact is not None:
             return ModelInstallResult(
                 status="already_installed",
-                model=existing_model,
+                model=self._resolved_model_record(existing_model),
                 supported_model=recipe.to_descriptor(installed=True),
             )
 
@@ -365,7 +365,7 @@ class RuntimeCatalog:
         )
         return ModelInstallResult(
             status="installed",
-            model=conversion_result.model,
+            model=self._resolved_model_record(conversion_result.model),
             supported_model=recipe.to_descriptor(installed=True),
         )
 
@@ -430,9 +430,41 @@ class RuntimeCatalog:
     def list_capabilities(self) -> list[CapabilityDescriptor]:
         return [
             record.capability
-            for record in self.models.list()
+            for record in self.list_models()
             if record.capability is not None
         ]
+
+    def _resolved_model_record(self, record: ModelRecord) -> ModelRecord:
+        artifact = record.artifact
+        if artifact is None:
+            return record
+        family = self._family(record.family)
+        artifact_root = self.runtime_home.artifact_dir(
+            artifact.family,
+            artifact.model_id,
+            artifact.artifact_digest,
+        )
+        portable_artifact = PortableArtifact(
+            record=artifact,
+            storage_path=artifact_root if artifact_root.exists() else None,
+        )
+        normalized_capability = family.normalize_capability(portable_artifact)
+        next_artifact = artifact
+        if artifact.capability != normalized_capability:
+            next_artifact = artifact.model_copy(
+                update={"capability": normalized_capability}
+            )
+            self.artifacts.save(next_artifact)
+        if record.capability == normalized_capability and next_artifact == artifact:
+            return record
+        next_record = record.model_copy(
+            update={
+                "artifact": next_artifact,
+                "capability": normalized_capability,
+            }
+        )
+        self.models.save(next_record)
+        return next_record
 
     def _persist_artifact(self, artifact: PortableArtifact) -> PortableArtifactRecord:
         artifact_root = self.runtime_home.artifact_dir(

@@ -301,6 +301,60 @@ func submitVideoSurfacesErrorToVideoError() async {
 
 @Test
 @MainActor
+func dismissingActivityFailureHidesItWithoutAffectingRunningWork() {
+    let model = MLXRAppModel(runtime: MockRuntime())
+    let failedGroup = RunGroupRecord(
+        id: "failed-group",
+        workspaceId: "default-workspace",
+        task: .imageGenerate,
+        title: "Failed image",
+        updatedAt: Date(),
+        state: .failed
+    )
+    let runningGroup = RunGroupRecord(
+        id: "running-group",
+        workspaceId: "default-workspace",
+        task: .imageGenerate,
+        title: "Running image",
+        updatedAt: Date(),
+        state: .running
+    )
+    model.runGroups = [failedGroup, runningGroup]
+
+    #expect(model.activityRunGroups.map(\.id).sorted() == ["failed-group", "running-group"])
+
+    model.dismissActivityRunGroup("failed-group")
+
+    #expect(model.activityRunGroups.map(\.id) == ["running-group"])
+}
+
+@Test
+@MainActor
+func activityRunGroupsHideOldCompletedWorkButKeepRecentCompletions() {
+    let model = MLXRAppModel(runtime: MockRuntime())
+    let oldCompletedGroup = RunGroupRecord(
+        id: "old-complete",
+        workspaceId: "default-workspace",
+        task: .imageGenerate,
+        title: "Old completion",
+        updatedAt: Date().addingTimeInterval(-(72 * 60 * 60)),
+        state: .completed
+    )
+    let recentCompletedGroup = RunGroupRecord(
+        id: "recent-complete",
+        workspaceId: "default-workspace",
+        task: .imageGenerate,
+        title: "Recent completion",
+        updatedAt: Date(),
+        state: .completed
+    )
+    model.runGroups = [oldCompletedGroup, recentCompletedGroup]
+
+    #expect(model.activityRunGroups.map(\.id) == ["recent-complete"])
+}
+
+@Test
+@MainActor
 func dismissErrorsClearsCorrectSurface() async {
     let mock = MockRuntime()
     let model = MLXRAppModel(runtime: mock)
@@ -508,22 +562,6 @@ func defaultImageModelPrefersZImageTurboWhenAvailable() async {
     let mock = MockRuntime()
     mock.supportedModels = [
         SupportedModelDescriptor(
-            modelId: "qwen-image-local",
-            displayName: "Qwen Image",
-            family: "qwen_image",
-            familyVariant: nil,
-            recommendationTier: .recommended,
-            supportLevel: .promoted,
-            tasks: ["image.generate"],
-            provider: "huggingface",
-            sourceSummary: "Qwen/Qwen-Image-2512",
-            license: nil,
-            accessState: "public",
-            installed: true,
-            installable: true,
-            notes: nil
-        ),
-        SupportedModelDescriptor(
             modelId: "z-image-turbo-local",
             displayName: "Z-Image Turbo",
             family: "z_image",
@@ -533,6 +571,22 @@ func defaultImageModelPrefersZImageTurboWhenAvailable() async {
             tasks: ["image.generate"],
             provider: "huggingface",
             sourceSummary: "Tongyi-MAI/Z-Image-Turbo",
+            license: nil,
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        ),
+        SupportedModelDescriptor(
+            modelId: "qwen-image-local",
+            displayName: "Qwen Image",
+            family: "qwen_image",
+            familyVariant: nil,
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.generate"],
+            provider: "huggingface",
+            sourceSummary: "Qwen/Qwen-Image-2512",
             license: nil,
             accessState: "public",
             installed: true,
@@ -602,4 +656,38 @@ func refreshReconstructsRunGroupsFromJobContext() async {
     #expect(model.runGroups[0].jobIds == ["job-run-group"])
     #expect(model.runGroups[0].assetIds == ["art_1"])
     #expect(model.runGroups[0].state == .completed)
+}
+
+@Test
+@MainActor
+func activityRunGroupsIncludeLegacyJobsWithoutContext() async {
+    let now = Date()
+    let mock = MockRuntime()
+    mock.jobs = [
+        JobRecord(
+            jobId: "job_legacy",
+            request: JobRequest(
+                modelId: "z-image-turbo-local",
+                task: "image.generate",
+                inputs: ["prompt": .string("A lighthouse in a storm")],
+                params: [:],
+                output: .init(),
+                context: nil,
+                extensions: [:]
+            ),
+            state: .failed,
+            createdAt: now,
+            updatedAt: now,
+            error: "boom",
+            artifacts: []
+        )
+    ]
+
+    let model = MLXRAppModel(runtime: mock)
+    await model.refresh()
+
+    #expect(model.activityRunGroups.count == 1)
+    #expect(model.activityRunGroups[0].id == "legacy-job_legacy")
+    #expect(model.activityRunGroups[0].title == "A lighthouse in a storm")
+    #expect(model.activityRunGroups[0].state == .failed)
 }

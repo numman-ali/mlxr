@@ -373,6 +373,12 @@ def capabilities(
     return artifact.record.capability
 
 
+def normalize_capability(
+    self: LTXFamilyAdapter, artifact: PortableArtifact
+) -> CapabilityDescriptor:
+    return capabilities(self, artifact)
+
+
 def _checkpoint_variant(self: LTXFamilyAdapter, checkpoint_path: Path) -> str:
     if checkpoint_path.name == self._checkpoint_filename:
         return "fast"

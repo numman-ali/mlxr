@@ -38,6 +38,7 @@ public final class MLXRAppModel {
     public var isRefreshing = false
     public var isSubmittingImage = false
     public var isSubmittingVideo = false
+    public var isPlanningStudio = false
     public var promptHelperMode: PromptHelperMode = .suggest
     public var hasCompletedOnboarding = false {
         didSet { persistPresentationState() }
@@ -52,6 +53,9 @@ public final class MLXRAppModel {
         didSet { persistPresentationState() }
     }
     public var runGroups: [RunGroupRecord] = [] {
+        didSet { persistPresentationState() }
+    }
+    public var dismissedActivityRunGroupIds: Set<String> = [] {
         didSet { persistPresentationState() }
     }
     public var assetRecords: [String: AssetRecord] = [:] {
@@ -74,6 +78,8 @@ public final class MLXRAppModel {
 
     // Active job progress tracking (jobId -> latest phase).
     public var activeJobPhases: [String: String] = [:]
+    public var studioPlanResult: WorkflowPlanResult?
+    public var studioPlanError: String?
 
     @ObservationIgnored
     let runtime: RuntimeServing?
@@ -98,6 +104,9 @@ public final class MLXRAppModel {
 
     @ObservationIgnored
     private var jobsRefreshTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var studioPlanTask: Task<Void, Never>?
 
     @ObservationIgnored
     private var lastFullRefreshAt: Date?
@@ -126,6 +135,7 @@ public final class MLXRAppModel {
             workspaces = presentation.workspaces
             collections = presentation.collections
             runGroups = presentation.runGroups
+            dismissedActivityRunGroupIds = Set(presentation.dismissedActivityRunGroupIds)
             assetRecords = Dictionary(uniqueKeysWithValues: presentation.assets.map { ($0.id, $0) })
             studioWorkspace = presentation.workspaceDraft
         } catch {
@@ -150,6 +160,7 @@ public final class MLXRAppModel {
         healthMonitorTask?.cancel()
         installMonitorTask?.cancel()
         jobsRefreshTask?.cancel()
+        studioPlanTask?.cancel()
     }
 
     // MARK: - Derived State
@@ -276,6 +287,48 @@ public final class MLXRAppModel {
     public func dismissModelsError() { modelsError = nil }
     public func dismissSettingsError() { settingsError = nil }
     public func dismissGlobalError() { globalError = nil }
+    public func dismissStudioPlanError() { studioPlanError = nil }
+
+    // MARK: - Studio Planning
+
+    public func scheduleStudioPlan() {
+        studioPlanTask?.cancel()
+        studioPlanTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let self else { return }
+            await self.refreshStudioPlan()
+        }
+    }
+
+    public func refreshStudioPlan() async {
+        guard let runtime else {
+            studioPlanResult = nil
+            studioPlanError = bootstrapError
+            return
+        }
+        guard let intent = studioPlanningIntent() else {
+            studioPlanTask = nil
+            isPlanningStudio = false
+            studioPlanResult = nil
+            studioPlanError = nil
+            return
+        }
+        isPlanningStudio = true
+        defer {
+            isPlanningStudio = false
+            studioPlanTask = nil
+        }
+
+        do {
+            studioPlanResult = try await runtime.plan(intent: intent)
+            studioPlanError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            studioPlanResult = nil
+            studioPlanError = error.localizedDescription
+        }
+    }
 
     // MARK: - Image Submission
 
@@ -285,7 +338,12 @@ public final class MLXRAppModel {
         defer { isSubmittingImage = false }
         do {
             let intent = try await buildImageIntent(from: request)
-            try await submit(intent: intent)
+            try await submit(
+                intent: intent,
+                task: request.task,
+                runGroupTitle: request.runGroupTitle,
+                variationCount: request.variationCount
+            )
         } catch {
             imageError = error.localizedDescription
         }
@@ -299,7 +357,12 @@ public final class MLXRAppModel {
         defer { isSubmittingVideo = false }
         do {
             let intent = try await buildVideoIntent(from: request)
-            try await submit(intent: intent)
+            try await submit(
+                intent: intent,
+                task: request.task,
+                runGroupTitle: request.runGroupTitle,
+                variationCount: request.variationCount
+            )
         } catch {
             videoError = error.localizedDescription
         }
@@ -314,6 +377,21 @@ public final class MLXRAppModel {
             await refreshJobsOnly(force: true)
         } catch {
             globalError = error.localizedDescription
+        }
+    }
+
+    public func cancelRunGroup(runGroupId: String) async {
+        let activeJobs: [JobRecord]
+        if let legacyJobId = runGroupId.split(separator: "-", maxSplits: 1).last, runGroupId.hasPrefix("legacy-") {
+            activeJobs = jobs.filter { $0.jobId == String(legacyJobId) && !$0.state.isTerminal }
+        } else {
+            activeJobs = jobs.filter {
+                $0.request.context?.runGroupId == runGroupId && !$0.state.isTerminal
+            }
+        }
+        guard !activeJobs.isEmpty else { return }
+        for job in activeJobs {
+            await cancelJob(jobId: job.jobId)
         }
     }
 
@@ -389,13 +467,25 @@ public final class MLXRAppModel {
 
     // MARK: - Private: Submission
 
-    private func submit(intent: WorkflowIntent) async throws {
+    private func submit(
+        intent: WorkflowIntent,
+        task: ProductTask,
+        runGroupTitle: String,
+        variationCount: Int
+    ) async throws {
         guard let runtime else {
             throw RuntimeBridgeError.featureUnavailable("The runtime bridge is unavailable.")
         }
         let result = try await runtime.run(intent: intent)
         if let runGroupId = intent.context?.runGroupId {
-            recordSubmittedJob(result.submit.jobId, in: runGroupId)
+            recordAcceptedRunGroup(
+                runGroupId: runGroupId,
+                task: task,
+                title: runGroupTitle,
+                context: intent.context,
+                jobId: result.submit.jobId,
+                variationCount: variationCount
+            )
         } else {
             lastSubmittedJobId = result.submit.jobId
         }
@@ -633,7 +723,7 @@ public final class MLXRAppModel {
         return imported
     }
 
-    private func namespacedExtensions(for modelId: String, familyExtensions: JSONMap) -> JSONMap {
+    func namespacedExtensions(for modelId: String, familyExtensions: JSONMap) -> JSONMap {
         guard !familyExtensions.isEmpty, let family = catalog.items.first(where: { $0.modelId == modelId })?.family else {
             return [:]
         }

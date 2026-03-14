@@ -109,6 +109,48 @@ class QwenImageWorkflowTests(unittest.TestCase):
         self.assertEqual(plan.selected_task, "image.edit")
         self.assertEqual(request.inputs["images"][0]["input_handle"], "inp_ref")
 
+    def test_readiness_requires_image_reference_for_edit(self) -> None:
+        strategy = QwenImageWorkflowStrategy()
+        context = _context(tasks=["image.edit"])
+        intent = WorkflowIntent(
+            model_id="qwen-image-local",
+            prompt="preserve the face but move the scene to dusk",
+            task="image.edit",
+            output=JobOutputPolicy(artifact_format="png"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertEqual(
+            readiness.reference_requirements[0].description,
+            "Choose at least one image to edit.",
+        )
+        self.assertIn(
+            "Choose at least one image to edit.",
+            readiness.blocking_issues,
+        )
+
+    def test_readiness_blocks_unsupported_output_format(self) -> None:
+        strategy = QwenImageWorkflowStrategy()
+        context = _context(tasks=["image.generate"])
+        context.capability.artifacts_out = ["png"]
+        intent = WorkflowIntent(
+            model_id="qwen-image-local",
+            prompt="poster",
+            output=JobOutputPolicy(artifact_format="jpg"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn(
+            "Output format 'jpg' is not supported for this model.",
+            readiness.blocking_issues,
+        )
+
     def test_plan_rejects_non_image_references(self) -> None:
         strategy = QwenImageWorkflowStrategy()
         context = _context(tasks=["image.edit"])

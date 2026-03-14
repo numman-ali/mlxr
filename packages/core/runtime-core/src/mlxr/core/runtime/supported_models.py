@@ -116,6 +116,22 @@ SUPPORTED_MODEL_RECIPES: tuple[SupportedModelRecipe, ...] = (
         },
     ),
     SupportedModelRecipe(
+        model_id="z-image-turbo-local",
+        display_name="Z-Image Turbo",
+        family="z_image",
+        family_variant="z-image-turbo",
+        recommendation_tier="recommended",
+        support_level="promoted",
+        tasks=("image.generate",),
+        provider="huggingface",
+        source_summary="Tongyi-MAI/Z-Image-Turbo",
+        license="other",
+        access_state="public",
+        source_ref=_hf_source_ref(
+            repo="Tongyi-MAI/Z-Image-Turbo", family_hint="z_image"
+        ),
+    ),
+    SupportedModelRecipe(
         model_id="qwen-image-local",
         display_name="Qwen-Image 2512",
         family="qwen_image",
@@ -162,22 +178,6 @@ SUPPORTED_MODEL_RECIPES: tuple[SupportedModelRecipe, ...] = (
         access_state="public",
         source_ref=_hf_source_ref(
             repo="black-forest-labs/FLUX.2-klein-9B", family_hint="flux2"
-        ),
-    ),
-    SupportedModelRecipe(
-        model_id="z-image-turbo-local",
-        display_name="Z-Image Turbo",
-        family="z_image",
-        family_variant="z-image-turbo",
-        recommendation_tier="recommended",
-        support_level="promoted",
-        tasks=("image.generate",),
-        provider="huggingface",
-        source_summary="Tongyi-MAI/Z-Image-Turbo",
-        license="other",
-        access_state="public",
-        source_ref=_hf_source_ref(
-            repo="Tongyi-MAI/Z-Image-Turbo", family_hint="z_image"
         ),
     ),
 )

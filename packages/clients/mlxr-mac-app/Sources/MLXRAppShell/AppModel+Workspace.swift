@@ -83,6 +83,49 @@ extension MLXRAppModel {
         runGroups.sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    public var activityRunGroups: [RunGroupRecord] {
+        let retentionCutoff = Date().addingTimeInterval(-(48 * 60 * 60))
+        let persistedIds = Set(runGroups.map(\.id))
+        let legacyGroups = jobs.compactMap { job -> RunGroupRecord? in
+            guard job.request.context?.runGroupId == nil else {
+                return nil
+            }
+            guard let task = ProductTask.from(rawTask: job.request.task) else {
+                return nil
+            }
+            let syntheticId = "legacy-\(job.jobId)"
+            guard !persistedIds.contains(syntheticId) else {
+                return nil
+            }
+            let relatedAssets = libraryAssets.filter { $0.jobId == job.jobId }
+            let group = RunGroupRecord(
+                id: syntheticId,
+                workspaceId: activeWorkspaceId,
+                collectionId: nil,
+                task: task,
+                title: legacyActivityTitle(for: job, task: task),
+                sourceAssetIds: [],
+                jobIds: [job.jobId],
+                assetIds: relatedAssets.map(\.id),
+                variationCount: max(relatedAssets.count, 1),
+                createdAt: job.createdAt,
+                updatedAt: job.updatedAt,
+                state: state(for: [job], assetCount: relatedAssets.count)
+            )
+            return shouldIncludeInActivity(group, retentionCutoff: retentionCutoff)
+                ? group
+                : nil
+        }
+        let persistedGroups = runGroups.filter {
+            shouldIncludeInActivity($0, retentionCutoff: retentionCutoff)
+        }
+        return (persistedGroups + legacyGroups).sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    public func dismissActivityRunGroup(_ runGroupId: String) {
+        dismissedActivityRunGroupIds.insert(runGroupId)
+    }
+
     public func persistPresentationState() {
         do {
             try workspaceStateStore.persist(
@@ -92,6 +135,7 @@ extension MLXRAppModel {
                     workspaces: workspaces,
                     collections: collections,
                     runGroups: runGroups,
+                    dismissedActivityRunGroupIds: Array(dismissedActivityRunGroupIds).sorted(),
                     assets: Array(assetRecords.values).sorted { $0.id < $1.id },
                     workspaceDraft: studioWorkspace
                 )
@@ -158,7 +202,7 @@ extension MLXRAppModel {
                 qualityPreset: studioWorkspace.qualityPreset,
                 aspectPreset: studioWorkspace.aspectPreset,
                 durationPreset: studioWorkspace.durationPreset,
-                selectedFamily: selectedModelFamily(for: studioWorkspace.selectedModelId)
+                selectedModel: selectedItem
             )
             studioWorkspace.manualWidth = Double(recommended.width)
             studioWorkspace.manualHeight = Double(recommended.height)
@@ -166,6 +210,18 @@ extension MLXRAppModel {
             studioWorkspace.manualFps = Double(recommended.fps)
             studioWorkspace.manualSteps = Double(recommended.numInferenceSteps)
             studioWorkspace.manualGuidance = recommended.guidanceScale
+        }
+        normalizeWorkspaceReferences()
+        applyFixedModelConstraints(for: selectedItem)
+        if
+            let selectedPackId = studioWorkspace.selectedPackId,
+            !packCatalog.contains(where: {
+                $0.id == selectedPackId
+                    && $0.family == selectedItem?.family
+                    && $0.supports(task: studioWorkspace.task)
+            })
+        {
+            studioWorkspace.selectedPackId = nil
         }
         if studioWorkspace.selectedPackId == nil {
             studioWorkspace.selectedPackId = defaultPackId(for: studioWorkspace.selectedModelId, task: studioWorkspace.task)
@@ -178,28 +234,7 @@ extension MLXRAppModel {
     }
 
     public func preferredDefaultModelId(for task: ProductTask) -> String? {
-        let preferredIds: [String]
-        switch task {
-        case .imageGenerate:
-            preferredIds = ["z-image-turbo-local", "qwen-image-local", "flux2-klein-9b-local"]
-        case .imageEdit:
-            preferredIds = ["qwen-image-edit-local", "flux2-klein-9b-local", "qwen-image-local"]
-        default:
-            preferredIds = ["ltx-2.3-fast-local"]
-        }
-
-        let compatibleItems = catalog.items(for: task)
-        for modelId in preferredIds {
-            if compatibleItems.contains(where: { $0.modelId == modelId && $0.installed }) {
-                return modelId
-            }
-        }
-        for modelId in preferredIds {
-            if compatibleItems.contains(where: { $0.modelId == modelId }) {
-                return modelId
-            }
-        }
-        return compatibleItems.first(where: \.installed)?.modelId ?? compatibleItems.first?.modelId
+        catalog.defaultModel(for: task)?.modelId
     }
 
     public func selectedModelFamily(for modelId: String) -> String? {
@@ -212,12 +247,132 @@ extension MLXRAppModel {
         return packCatalog.first(where: { $0.id == selectedPackId })
     }
 
+    public func prepareRunContext(
+        task: ProductTask,
+        title: String,
+        sourceAssetIds: [String]
+    ) -> WorkflowContextMetadata {
+        WorkflowContextMetadata(
+            workspaceId: activeWorkspaceId,
+            collectionId: nil,
+            runGroupId: UUID().uuidString,
+            sourceAssetIds: sourceAssetIds,
+            intentLabel: title.isEmpty ? task.title : title,
+            presetId: studioWorkspace.aspectPreset.rawValue.lowercased()
+        )
+    }
+
+    public func studioPlanningIntent(for draft: StudioWorkspaceDraft? = nil) -> WorkflowIntent? {
+        let current = draft ?? studioWorkspace
+        guard let selectedModel = selectedModel(for: current), selectedModel.installed else {
+            return nil
+        }
+        let settings = resolvedSettings(for: current)
+        let references = planningReferences(for: current, settings: settings)
+        let familyExtensions = studioFamilyExtensions(for: current)
+        var params: JSONMap = [
+            "width": .integer(settings.width),
+            "height": .integer(settings.height),
+            "num_inference_steps": .integer(settings.numInferenceSteps),
+            "guidance_scale": .number(settings.guidanceScale),
+        ]
+        if current.task.category == .video {
+            params["num_frames"] = .integer(settings.numFrames)
+            params["fps"] = .integer(settings.fps)
+            params["regenerate_video"] = .bool(true)
+            params["regenerate_audio"] = .bool(true)
+        }
+        if let seedValue = Int(current.seed) {
+            params["seed"] = .integer(seedValue)
+        }
+        return WorkflowIntent(
+            modelId: selectedModel.modelId,
+            prompt: current.prompt,
+            task: current.task.rawValue,
+            negativePrompt: current.negativePrompt.isEmpty ? nil : current.negativePrompt,
+            references: references,
+            params: params,
+            output: JobOutputPolicy(artifactFormat: current.artifactFormat),
+            preferences: WorkflowPreferences(quality: current.qualityPreset.quality),
+            extensions: namespacedExtensions(
+                for: selectedModel.modelId,
+                familyExtensions: familyExtensions
+            )
+        )
+    }
+
+    public func selectedModel(for draft: StudioWorkspaceDraft? = nil) -> ModelCatalogItem? {
+        let current = draft ?? studioWorkspace
+        let compatibleItems = catalog.items(for: current.task)
+        return compatibleItems.first(where: { $0.modelId == current.selectedModelId })
+            ?? compatibleItems.first
+    }
+
+    public var currentStudioReferenceRequirements: [WorkflowReferenceRequirement] {
+        studioPlanResult?.readiness.referenceRequirements ?? []
+    }
+
+    public func resolvedSettings(for draft: StudioWorkspaceDraft? = nil) -> StudioResolvedSettings {
+        let current = draft ?? studioWorkspace
+        let selectedItem = selectedModel(for: current)
+        let baseSettings: StudioResolvedSettings
+        if current.useCustomSettings {
+            baseSettings = StudioResolvedSettings(
+                width: Int(current.manualWidth),
+                height: Int(current.manualHeight),
+                numFrames: Int(current.manualFrames),
+                fps: Int(current.manualFps),
+                numInferenceSteps: Int(current.manualSteps),
+                guidanceScale: current.manualGuidance
+            )
+        } else {
+            baseSettings = recommendedSettings(
+                for: current.task,
+                qualityPreset: current.qualityPreset,
+                aspectPreset: current.aspectPreset,
+                durationPreset: current.durationPreset,
+                selectedModel: selectedItem
+            )
+        }
+
+        guard let constraints = selectedItem?.capability?.constraints else {
+            return baseSettings
+        }
+        return StudioResolvedSettings(
+            width: baseSettings.width,
+            height: baseSettings.height,
+            numFrames: baseSettings.numFrames,
+            fps: baseSettings.fps,
+            numInferenceSteps: constraints.object("num_inference_steps")?.integer("fixed")
+                ?? baseSettings.numInferenceSteps,
+            guidanceScale: constraints.object("guidance_scale")?.double("fixed")
+                ?? baseSettings.guidanceScale
+        )
+    }
+
+    public func referenceKind(for asset: LibraryAsset, draft: StudioWorkspaceDraft? = nil) -> WorkflowReferenceKind? {
+        let requirements = currentStudioReferenceRequirements
+        guard !requirements.isEmpty else { return nil }
+        let kind: WorkflowReferenceKind
+        switch asset.kind {
+        case .image:
+            kind = .image
+        case .video:
+            kind = .video
+        case .audio:
+            kind = .audio
+        case .other:
+            return nil
+        }
+        return requirements.contains(where: { $0.kind == kind }) ? kind : nil
+    }
+
     public func recommendedSettings(
         for task: ProductTask,
         qualityPreset: QualityPreset,
         aspectPreset: AspectPreset,
         durationPreset: DurationPreset,
-        selectedFamily: String?
+        selectedModel: ModelCatalogItem?
     ) -> StudioResolvedSettings {
         let dimensions = aspectPreset.dimensions(for: task.category)
         let imageStepsByFamily: [String: (Int, Int, Int)] = [
@@ -225,7 +380,7 @@ extension MLXRAppModel {
             "qwen_image": (12, 24, 36),
             "z_image": (6, 12, 20),
         ]
-        let defaultImageSteps = imageStepsByFamily[selectedFamily ?? ""] ?? (8, 16, 24)
+        let defaultImageSteps = imageStepsByFamily[selectedModel?.family ?? ""] ?? (8, 16, 24)
         let imageSteps: Int = switch qualityPreset {
         case .draft: defaultImageSteps.0
         case .standard: defaultImageSteps.1
@@ -236,7 +391,8 @@ extension MLXRAppModel {
         case .standard: 28
         case .cinematic: 40
         }
-        let guidance = task.category == .image ? 4.0 : 3.0
+        let guidance = selectedModel?.capability?.constraints.object("guidance_scale")?.double("fixed")
+            ?? (task.category == .image ? 4.0 : 3.0)
 
         return StudioResolvedSettings(
             width: dimensions.width,
@@ -256,7 +412,7 @@ extension MLXRAppModel {
             qualityPreset: current.qualityPreset,
             aspectPreset: current.aspectPreset,
             durationPreset: current.durationPreset,
-            selectedFamily: selectedModelFamily(for: current.selectedModelId)
+            selectedModel: selectedModel(for: current)
         )
         let currentSettings = StudioResolvedSettings(
             width: Int(current.manualWidth),
@@ -307,28 +463,43 @@ extension MLXRAppModel {
         assetRecords.removeValue(forKey: assetId)
     }
 
-    func createRunGroup(task: ProductTask, title: String, sourceAssetIds: [String], variationCount: Int) -> RunGroupRecord {
+    func recordAcceptedRunGroup(
+        runGroupId: String,
+        task: ProductTask,
+        title: String,
+        context: WorkflowContextMetadata?,
+        jobId: String,
+        variationCount: Int
+    ) {
+        ensureWorkspaceExists()
+        if let index = runGroups.firstIndex(where: { $0.id == runGroupId }) {
+            if !runGroups[index].jobIds.contains(jobId) {
+                runGroups[index].jobIds.append(jobId)
+            }
+            runGroups[index].state = .running
+            runGroups[index].updatedAt = .now
+            runGroups[index].variationCount = max(runGroups[index].variationCount, variationCount)
+            studioWorkspace.lastActiveRunGroupId = runGroupId
+            lastSubmittedJobId = jobId
+            return
+        }
+
         let group = RunGroupRecord(
-            workspaceId: activeWorkspaceId,
-            collectionId: nil,
+            id: runGroupId,
+            workspaceId: context?.workspaceId ?? activeWorkspaceId,
+            collectionId: context?.collectionId,
             task: task,
-            title: title,
-            sourceAssetIds: sourceAssetIds,
-            variationCount: variationCount,
-            state: .queued
+            title: context?.intentLabel ?? title,
+            sourceAssetIds: context?.sourceAssetIds ?? [],
+            jobIds: [jobId],
+            assetIds: [],
+            variationCount: max(variationCount, 1),
+            createdAt: .now,
+            updatedAt: .now,
+            state: .running
         )
         runGroups.insert(group, at: 0)
-        studioWorkspace.lastActiveRunGroupId = group.id
-        return group
-    }
-
-    func recordSubmittedJob(_ jobId: String, in runGroupId: String) {
-        guard let index = runGroups.firstIndex(where: { $0.id == runGroupId }) else { return }
-        if !runGroups[index].jobIds.contains(jobId) {
-            runGroups[index].jobIds.append(jobId)
-        }
-        runGroups[index].state = .running
-        runGroups[index].updatedAt = .now
+        studioWorkspace.lastActiveRunGroupId = runGroupId
         lastSubmittedJobId = jobId
     }
 
@@ -378,22 +549,197 @@ extension MLXRAppModel {
             runGroups[index].jobIds = relatedJobs.map(\.jobId)
             runGroups[index].assetIds = assets.filter { $0.runGroupId == groupId }.map(\.id)
             runGroups[index].variationCount = max(max(runGroups[index].variationCount, relatedJobs.count), max(runGroups[index].assetIds.count, 1))
-            if relatedJobs.contains(where: { $0.state == .failed }) {
-                runGroups[index].state = .failed
-            } else if relatedJobs.contains(where: { $0.state == .cancelled }) && relatedJobs.allSatisfy(\.state.isTerminal) {
-                runGroups[index].state = .cancelled
-            } else if relatedJobs.allSatisfy(\.state.isTerminal), !relatedJobs.isEmpty {
-                runGroups[index].state = .completed
-            } else if relatedJobs.contains(where: { !$0.state.isTerminal }) {
-                runGroups[index].state = .running
-            } else if relatedJobs.isEmpty {
+            if relatedJobs.isEmpty {
                 runGroups[index].state = assets.contains(where: { $0.runGroupId == groupId }) ? .completed : .queued
             } else {
-                runGroups[index].state = .queued
+                runGroups[index].state = state(for: relatedJobs, assetCount: runGroups[index].assetIds.count)
             }
             runGroups[index].updatedAt = relatedJobs.map(\.updatedAt).max() ?? runGroups[index].updatedAt
         }
         runGroups.sort { $0.updatedAt > $1.updatedAt }
+    }
+
+    private func shouldIncludeInActivity(
+        _ group: RunGroupRecord,
+        retentionCutoff: Date
+    ) -> Bool {
+        switch group.state {
+        case .queued, .running:
+            return true
+        case .failed:
+            return !dismissedActivityRunGroupIds.contains(group.id)
+        case .completed, .cancelled:
+            return
+                group.updatedAt >= retentionCutoff
+                && !dismissedActivityRunGroupIds.contains(group.id)
+        }
+    }
+
+    private func legacyActivityTitle(for job: JobRecord, task: ProductTask) -> String {
+        if let prompt = job.request.inputs.string("prompt") {
+            let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                if trimmed.count <= 72 {
+                    return trimmed
+                }
+                let truncated = String(trimmed.prefix(69)).trimmingCharacters(in: .whitespacesAndNewlines)
+                return "\(truncated)…"
+            }
+        }
+        return task.title
+    }
+
+    private func normalizeWorkspaceReferences() {
+        let requirements = currentStudioReferenceRequirements
+        let allowedKinds = Set(requirements.map(\.kind))
+        let compatibleAssetIds = Set(
+            libraryAssets
+                .filter { asset in
+                    guard let kind = referenceKind(for: asset) else { return false }
+                    return allowedKinds.contains(kind)
+                }
+                .map(\.id)
+        )
+        var referenceIds = studioWorkspace.referenceAssetIds.filter { compatibleAssetIds.contains($0) }
+
+        if allowedKinds.isEmpty {
+            studioWorkspace.referenceAssetIds = []
+            return
+        }
+
+        if referenceIds.isEmpty,
+           let selectedAssetId = studioWorkspace.selectedAssetId,
+           compatibleAssetIds.contains(selectedAssetId)
+        {
+            referenceIds = [selectedAssetId]
+        }
+
+        referenceIds = trimmedReferenceIds(referenceIds, requirements: requirements)
+        studioWorkspace.referenceAssetIds = Array(NSOrderedSet(array: referenceIds)) as? [String] ?? referenceIds
+    }
+
+    private func applyFixedModelConstraints(for selectedItem: ModelCatalogItem?) {
+        guard let constraints = selectedItem?.capability?.constraints else {
+            return
+        }
+        if let fixedSteps = constraints.object("num_inference_steps")?.integer("fixed") {
+            studioWorkspace.manualSteps = Double(fixedSteps)
+        }
+        if let fixedGuidance = constraints.object("guidance_scale")?.double("fixed") {
+            studioWorkspace.manualGuidance = fixedGuidance
+        }
+    }
+
+    private func trimmedReferenceIds(
+        _ referenceIds: [String],
+        requirements: [WorkflowReferenceRequirement]
+    ) -> [String] {
+        guard !requirements.isEmpty else { return [] }
+        var remainingByKind = Dictionary(
+            uniqueKeysWithValues: requirements.compactMap { requirement in
+                requirement.maximumCount.map { (requirement.kind, $0) }
+            }
+        )
+        var trimmed: [String] = []
+        for referenceId in referenceIds {
+            guard let asset = libraryAssets.first(where: { $0.id == referenceId }),
+                  let kind = referenceKind(for: asset) else {
+                continue
+            }
+            if let remaining = remainingByKind[kind] {
+                guard remaining > 0 else { continue }
+                remainingByKind[kind] = remaining - 1
+            }
+            trimmed.append(referenceId)
+        }
+        return trimmed
+    }
+
+    private func studioFamilyExtensions(for draft: StudioWorkspaceDraft) -> JSONMap {
+        var familyExtensions = selectedPack(for: draft)?.familyExtensions ?? [:]
+        if let workflowVariant = selectedPack(for: draft)?.workflowVariant {
+            familyExtensions["workflow_variant"] = .string(workflowVariant)
+        }
+        if let controlVariant = selectedPack(for: draft)?.controlVariant {
+            familyExtensions["control_variant"] = .string(controlVariant)
+        }
+        if let conditioningAttentionStrength = selectedPack(for: draft)?.conditioningAttentionStrength {
+            familyExtensions["conditioning_attention_strength"] = .number(conditioningAttentionStrength)
+        }
+        return familyExtensions
+    }
+
+    private func planningReferences(
+        for draft: StudioWorkspaceDraft,
+        settings: StudioResolvedSettings
+    ) -> [WorkflowReference] {
+        let referenceAssets = libraryAssets.filter { draft.referenceAssetIds.contains($0.id) }
+        let imageFrameIndices = imageFrameIndicesForPlanning(
+            count: referenceAssets.filter(\.isImage).count,
+            numFrames: settings.numFrames,
+            task: draft.task
+        )
+        var imageIndex = 0
+        var references: [WorkflowReference] = []
+        for asset in referenceAssets {
+            guard let kind = referenceKind(for: asset, draft: draft) else { continue }
+            var metadata: JSONMap = [:]
+            switch kind {
+            case .image:
+                metadata["frame_index"] = .integer(imageFrameIndices[imageIndex])
+                metadata["strength"] = .number(1.0)
+                imageIndex += 1
+            case .video, .lora:
+                metadata["strength"] = .number(1.0)
+            case .audio:
+                metadata["start_time_seconds"] = .number(0.0)
+            }
+            references.append(
+                WorkflowReference(
+                    inputHandle: nil,
+                    kind: kind,
+                    role: "reference",
+                    metadata: metadata
+                )
+            )
+        }
+        return references
+    }
+
+    private func imageFrameIndicesForPlanning(
+        count: Int,
+        numFrames: Int,
+        task: ProductTask
+    ) -> [Int] {
+        guard count > 0 else { return [] }
+        guard task == .videoInterpolate, count > 1 else {
+            return Array(repeating: 0, count: count)
+        }
+        let maxFrame = max(numFrames - 1, 0)
+        if count == 2 {
+            return [0, maxFrame]
+        }
+        let step = maxFrame / max(count - 1, 1)
+        return (0..<count).map { min($0 * step, maxFrame) }
+    }
+
+    private func state(for jobs: [JobRecord], assetCount: Int) -> RunGroupState {
+        if jobs.contains(where: { $0.state == .failed }) {
+            return .failed
+        }
+        if jobs.contains(where: { $0.state == .cancelled }) && jobs.allSatisfy(\.state.isTerminal) {
+            return .cancelled
+        }
+        if jobs.allSatisfy(\.state.isTerminal), !jobs.isEmpty {
+            return .completed
+        }
+        if jobs.contains(where: { !$0.state.isTerminal }) {
+            return .running
+        }
+        if assetCount > 0 {
+            return .completed
+        }
+        return .queued
     }
 
     private func ensureWorkspaceExists() {

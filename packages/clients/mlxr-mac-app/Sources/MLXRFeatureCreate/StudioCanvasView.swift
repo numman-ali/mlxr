@@ -15,6 +15,8 @@ struct StudioCanvasView: View {
     let currentRunGroupTitle: String?
     let currentRunGroupAssets: [LibraryAsset]
     @Binding var focusedResultAssetId: String?
+    let planningError: String?
+    let onDismissPlanningError: () -> Void
     let isBusy: Bool
     let error: String?
     let onDismissError: () -> Void
@@ -28,6 +30,9 @@ struct StudioCanvasView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
+            if let planningError {
+                InlineErrorBanner(planningError, onDismiss: onDismissPlanningError)
+            }
             if let error {
                 InlineErrorBanner(error, onDismiss: onDismissError)
             }
@@ -155,7 +160,7 @@ struct StudioCanvasView: View {
                             VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
                                 ThumbnailTile(asset: asset, isSelected: focusedResultAssetId == asset.id)
                                     .frame(width: 136, height: 96)
-                                Text(asset.title)
+                                Text(asset.displayTitle)
                                     .font(MLXRType.captionLarge)
                                     .foregroundStyle(MLXRColor.textPrimary)
                                     .lineLimit(1)
@@ -208,7 +213,7 @@ private struct StudioPreviewView: View {
                 VideoCanvasPreview(url: url)
             } else {
                 EmptyStateView(
-                    title: asset.title,
+                    title: asset.displayTitle,
                     subtitle: asset.subtitle,
                     systemImage: "doc"
                 )

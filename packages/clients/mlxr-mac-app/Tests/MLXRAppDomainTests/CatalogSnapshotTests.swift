@@ -119,3 +119,50 @@ func catalogIncludesInstalledAdvancedRowsOutsideCuratedCatalog() {
     #expect(snapshot.items[0].implementedPipelineVariants == ["one_stage", "two_stage"])
     #expect(snapshot.items(for: .videoInterpolate).first?.modelId == "ltx-dev-two-stage")
 }
+
+@Test
+func catalogPreservesSupportedOrderingForDefaultRecommendations() {
+    let supported: [SupportedModelDescriptor] = [
+        SupportedModelDescriptor(
+            modelId: "z-image-turbo-local",
+            displayName: "Z-Image Turbo",
+            family: "z_image",
+            familyVariant: "z-image-turbo",
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.generate"],
+            provider: "huggingface",
+            sourceSummary: "Tongyi-MAI/Z-Image-Turbo",
+            license: "other",
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        ),
+        SupportedModelDescriptor(
+            modelId: "qwen-image-local",
+            displayName: "Qwen-Image 2512",
+            family: "qwen_image",
+            familyVariant: "qwen-image-2512",
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.generate"],
+            provider: "huggingface",
+            sourceSummary: "Qwen/Qwen-Image-2512",
+            license: "apache-2.0",
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        ),
+    ]
+
+    let snapshot = CatalogSnapshot(
+        supportedModels: supported,
+        installedModels: [],
+        capabilities: []
+    )
+
+    #expect(snapshot.items.map(\.modelId) == ["z-image-turbo-local", "qwen-image-local"])
+    #expect(snapshot.defaultModel(for: .imageGenerate)?.modelId == "z-image-turbo-local")
+}

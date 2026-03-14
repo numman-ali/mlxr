@@ -42,6 +42,8 @@ public struct ImageGenerationRequest: Sendable, Hashable {
     public var promptHelperMode: PromptHelperMode
     public var quality: WorkflowQuality
     public var context: WorkflowContextMetadata?
+    public var runGroupTitle: String
+    public var variationCount: Int
     public var references: [MediaReferenceInput]
     public var familyExtensions: JSONMap
 
@@ -59,6 +61,8 @@ public struct ImageGenerationRequest: Sendable, Hashable {
         promptHelperMode: PromptHelperMode = .suggest,
         quality: WorkflowQuality = .balanced,
         context: WorkflowContextMetadata? = nil,
+        runGroupTitle: String = "",
+        variationCount: Int = 1,
         references: [MediaReferenceInput] = [],
         familyExtensions: JSONMap = [:]
     ) {
@@ -75,6 +79,8 @@ public struct ImageGenerationRequest: Sendable, Hashable {
         self.promptHelperMode = promptHelperMode
         self.quality = quality
         self.context = context
+        self.runGroupTitle = runGroupTitle
+        self.variationCount = variationCount
         self.references = references
         self.familyExtensions = familyExtensions
     }
@@ -95,6 +101,8 @@ public struct VideoGenerationRequest: Sendable, Hashable {
     public var artifactFormat: String
     public var quality: WorkflowQuality
     public var context: WorkflowContextMetadata?
+    public var runGroupTitle: String
+    public var variationCount: Int
     public var references: [MediaReferenceInput]
     public var workflowVariant: String?
     public var controlVariant: String?
@@ -120,6 +128,8 @@ public struct VideoGenerationRequest: Sendable, Hashable {
         artifactFormat: String = "mp4",
         quality: WorkflowQuality = .balanced,
         context: WorkflowContextMetadata? = nil,
+        runGroupTitle: String = "",
+        variationCount: Int = 1,
         references: [MediaReferenceInput] = [],
         workflowVariant: String? = nil,
         controlVariant: String? = nil,
@@ -144,6 +154,8 @@ public struct VideoGenerationRequest: Sendable, Hashable {
         self.artifactFormat = artifactFormat
         self.quality = quality
         self.context = context
+        self.runGroupTitle = runGroupTitle
+        self.variationCount = variationCount
         self.references = references
         self.workflowVariant = workflowVariant
         self.controlVariant = controlVariant

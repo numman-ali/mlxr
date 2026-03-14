@@ -5,9 +5,11 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanReadiness,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import family_extensions
 
@@ -94,6 +96,19 @@ class ZImageWorkflowStrategy(FamilyWorkflowStrategy):
             params=dict(intent.params),
             output=intent.output,
             extensions=extensions,
+        )
+
+    def readiness(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+    ) -> WorkflowPlanReadiness:
+        return build_plan_readiness(
+            capability=context.capability,
+            intent=intent,
+            plan=plan,
+            requirements=[],
         )
 
 

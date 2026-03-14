@@ -43,12 +43,6 @@ class WorkflowIntent(BaseModel):
     context: WorkflowContextMetadata | None = None
     extensions: dict[str, Any] = Field(default_factory=dict)
 
-    @model_validator(mode="after")
-    def validate_prompt(self) -> "WorkflowIntent":
-        if not self.prompt.strip():
-            raise ValueError("Workflow intent requires a non-empty prompt")
-        return self
-
 
 class WorkflowStageSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -61,6 +55,28 @@ class WorkflowStageSpec(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     optional: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkflowReferenceRequirement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["image", "video", "audio", "lora"]
+    minimum_count: int = 0
+    maximum_count: int | None = None
+    accepted_roles: list[str] = Field(default_factory=list)
+    description: str
+
+
+class WorkflowPlanReadiness(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ready: bool = True
+    blocking_issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    reference_requirements: list[WorkflowReferenceRequirement] = Field(
+        default_factory=list
+    )
+    allowed_output_formats: list[str] = Field(default_factory=list)
 
 
 class WorkflowPlan(BaseModel):
@@ -84,6 +100,7 @@ class WorkflowPlanResult(BaseModel):
 
     capability: CapabilityDescriptor
     plan: WorkflowPlan
+    readiness: WorkflowPlanReadiness = Field(default_factory=WorkflowPlanReadiness)
 
 
 class WorkflowRunRequest(BaseModel):

@@ -102,6 +102,10 @@ class ZImageFamilyTests(unittest.TestCase):
         self.assertEqual(artifact.record.capability.tasks, ["image.generate"])
         self.assertEqual(artifact.record.capability.artifacts_out, ["png", "jpg"])
         self.assertEqual(
+            artifact.record.capability.constraints["guidance_scale"],
+            {"fixed": 1.0},
+        )
+        self.assertEqual(
             artifact.record.metadata["blocked_variants"],
             ["z-image-omni-base", "z-image-edit"],
         )
@@ -173,6 +177,40 @@ class ZImageFamilyTests(unittest.TestCase):
         self.assertEqual(request.inputs["negative_prompt"], "low quality")
         self.assertEqual(request.extensions["z_image"]["cfg_normalization"], True)
         self.assertEqual(request.extensions["z_image"]["cfg_truncation"], 0.5)
+
+    def test_workflow_readiness_blocks_guidance_above_fixed_constraint(self) -> None:
+        adapter = ZImageFamilyAdapter()
+        strategy = ZImageWorkflowStrategy()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bundle_root = make_local_z_image_bundle(
+                Path(tmp_dir), variant_dir_name="Z-Image-Turbo"
+            )
+            artifact = build_portable_artifact_for_test(adapter, bundle_root)
+
+        context = WorkflowPlanningContext(
+            model=ModelRecord(
+                model_id="z-image-turbo-local",
+                family="z_image",
+                artifact=artifact.record,
+                capability=artifact.record.capability,
+            ),
+            capability=artifact.record.capability,
+        )
+        intent = WorkflowIntent(
+            model_id="z-image-turbo-local",
+            prompt="a cinematic bookstore interior",
+            output=JobOutputPolicy(artifact_format="png"),
+            params={"width": 1024, "height": 1024, "guidance_scale": 4.0},
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn(
+            "guidance_scale must be exactly 1.0.",
+            readiness.blocking_issues,
+        )
 
     def test_prompt_encode_stage_uses_prompt_encoder_and_stores_context(self) -> None:
         class FakePromptEncoder:

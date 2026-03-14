@@ -16,12 +16,18 @@ public struct StudioScreen: View {
     private let currentRunGroup: RunGroupRecord?
     private let currentRunGroupAssets: [LibraryAsset]
     private let packs: [PackRecord]
+    private let planningResult: WorkflowPlanResult?
+    private let planningError: String?
+    private let isPlanning: Bool
+    private let resolvedSettings: StudioResolvedSettings
     private let isBusy: Bool
     private let error: String?
     private let onDismissError: () -> Void
+    private let onDismissPlanningError: () -> Void
     private let onResetDraft: () -> Void
     private let onSyncWorkspaceDefaults: () -> Void
-    private let onPrepareRunContext: (_ task: ProductTask, _ title: String, _ sourceAssetIds: [String], _ variationCount: Int) -> WorkflowContextMetadata
+    private let onPlanWorkspace: () -> Void
+    private let onPrepareRunContext: (_ task: ProductTask, _ title: String, _ sourceAssetIds: [String]) -> WorkflowContextMetadata
     private let onImportAssets: @Sendable ([URL]) async -> [ImportedAssetRecord]
     private let onResolveAssetURL: @Sendable (LibraryAsset) async -> URL?
     private let onQueueInstall: @Sendable (String) async -> Void
@@ -43,12 +49,18 @@ public struct StudioScreen: View {
         currentRunGroup: RunGroupRecord?,
         currentRunGroupAssets: [LibraryAsset],
         packs: [PackRecord],
+        planningResult: WorkflowPlanResult?,
+        planningError: String?,
+        isPlanning: Bool,
+        resolvedSettings: StudioResolvedSettings,
         isBusy: Bool,
         error: String?,
         onDismissError: @escaping () -> Void,
+        onDismissPlanningError: @escaping () -> Void,
         onResetDraft: @escaping () -> Void,
         onSyncWorkspaceDefaults: @escaping () -> Void,
-        onPrepareRunContext: @escaping (_ task: ProductTask, _ title: String, _ sourceAssetIds: [String], _ variationCount: Int) -> WorkflowContextMetadata,
+        onPlanWorkspace: @escaping () -> Void,
+        onPrepareRunContext: @escaping (_ task: ProductTask, _ title: String, _ sourceAssetIds: [String]) -> WorkflowContextMetadata,
         onImportAssets: @escaping @Sendable ([URL]) async -> [ImportedAssetRecord],
         onResolveAssetURL: @escaping @Sendable (LibraryAsset) async -> URL?,
         onQueueInstall: @escaping @Sendable (String) async -> Void,
@@ -64,11 +76,17 @@ public struct StudioScreen: View {
         self.currentRunGroup = currentRunGroup
         self.currentRunGroupAssets = currentRunGroupAssets
         self.packs = packs
+        self.planningResult = planningResult
+        self.planningError = planningError
+        self.isPlanning = isPlanning
+        self.resolvedSettings = resolvedSettings
         self.isBusy = isBusy
         self.error = error
         self.onDismissError = onDismissError
+        self.onDismissPlanningError = onDismissPlanningError
         self.onResetDraft = onResetDraft
         self.onSyncWorkspaceDefaults = onSyncWorkspaceDefaults
+        self.onPlanWorkspace = onPlanWorkspace
         self.onPrepareRunContext = onPrepareRunContext
         self.onImportAssets = onImportAssets
         self.onResolveAssetURL = onResolveAssetURL
@@ -78,139 +96,198 @@ public struct StudioScreen: View {
     }
 
     public var body: some View {
-        HSplitView {
-            StudioSidebarView(
-                workflows: workflows,
-                selectedTask: Binding(
-                    get: { workspace.task },
-                    set: { newTask in
-                        workspace.task = newTask
-                    }
-                ),
-                recentAssets: Array(libraryAssets.prefix(18)),
-                selectedAssetId: Binding(
-                    get: { workspace.selectedAssetId },
-                    set: { workspace.selectedAssetId = $0 }
-                ),
-                referenceAssetIds: Binding(
-                    get: { Set(workspace.referenceAssetIds) },
-                    set: { workspace.referenceAssetIds = Array($0).sorted() }
-                ),
-                onImport: { isPickingImports = true },
-                onResetDraft: onResetDraft
-            )
-            .frame(minWidth: 260, idealWidth: 290, maxWidth: 340)
+        applyLifecycle(
+            to: HSplitView {
+                sidebarPane
+                canvasPane
+                inspectorPane
+            }
+            .background(AdaptiveBackground())
+            .animation(MLXRMotion.snappy, value: workspace.task)
+            .animation(MLXRMotion.snappy, value: workspace.selectedAssetId)
+            .animation(MLXRMotion.snappy, value: workspace.lastActiveRunGroupId)
+        )
+    }
 
-            StudioCanvasView(
-                task: workspace.task,
-                prompt: Binding(
-                    get: { workspace.prompt },
-                    set: { workspace.prompt = $0 }
-                ),
-                selectedAsset: displayedAsset,
-                selectedAssetURL: displayedAssetURL,
-                referenceAssets: referenceAssets,
-                currentJob: currentJob,
-                currentJobPhase: currentJobPhase,
-                currentRunGroupTitle: currentRunGroup?.title,
-                currentRunGroupAssets: currentRunGroupAssets,
-                focusedResultAssetId: Binding(
-                    get: { workspace.preferredDisplayedAssetId },
-                    set: { workspace.preferredDisplayedAssetId = $0 }
-                ),
-                isBusy: isBusy,
-                error: error,
-                onDismissError: onDismissError,
-                suggestions: selectedRecipe?.examplePrompts ?? [],
-                canSubmit: canSubmit,
-                submitDisabledReason: submitDisabledReason,
-                onSubmit: submit,
-                onUseFocusedAssetAsReference: addFocusedAssetAsReference,
-                onEditAsset: { asset in seedWorkspace(from: asset, task: .imageEdit) },
-                onAnimateAsset: { asset in seedWorkspace(from: asset, task: .videoConditionImage) }
-            )
-            .frame(minWidth: 620, idealWidth: 780, maxWidth: .infinity)
+    private var sidebarPane: some View {
+        StudioSidebarView(
+            workflows: workflows,
+            allowedReferenceKinds: allowedReferenceKinds,
+            selectedTask: taskBinding,
+            recentAssets: Array(libraryAssets.prefix(18)),
+            selectedAssetId: selectedAssetIdBinding,
+            referenceAssetIds: referenceAssetIdsBinding,
+            onImport: { isPickingImports = true },
+            onResetDraft: onResetDraft
+        )
+        .frame(minWidth: 260, idealWidth: 290, maxWidth: 340)
+    }
 
-            StudioInspectorView(
-                workspace: $workspace,
-                selectedModel: selectedModel,
-                availableModels: availableModels,
-                availablePacks: availablePacks,
-                selectedPack: selectedPack,
-                installOperation: selectedModel.flatMap { installOperation(for: $0.modelId) },
-                resolvedSettings: resolvedSettings,
-                shouldShowResetToRecommended: shouldShowResetToRecommended,
-                referenceAssets: referenceAssets,
-                onSelectModel: { workspace.selectedModelId = $0 },
-                onSelectPack: { workspace.selectedPackId = $0 },
-                onQueueInstall: { modelId in
-                    await onQueueInstall(modelId)
-                },
-                onResetToRecommended: {
-                    workspace.useCustomSettings = false
+    private var canvasPane: some View {
+        StudioCanvasView(
+            task: workspace.task,
+            prompt: promptBinding,
+            selectedAsset: displayedAsset,
+            selectedAssetURL: displayedAssetURL,
+            referenceAssets: referenceAssets,
+            currentJob: currentJob,
+            currentJobPhase: currentJobPhase,
+            currentRunGroupTitle: currentRunGroup?.title,
+            currentRunGroupAssets: currentRunGroupAssets,
+            focusedResultAssetId: focusedResultAssetIdBinding,
+            planningError: planningError,
+            onDismissPlanningError: onDismissPlanningError,
+            isBusy: isBusy,
+            error: error,
+            onDismissError: onDismissError,
+            suggestions: selectedRecipe?.examplePrompts ?? [],
+            canSubmit: canSubmit,
+            submitDisabledReason: submitDisabledReason,
+            onSubmit: submit,
+            onUseFocusedAssetAsReference: addFocusedAssetAsReference,
+            onEditAsset: { asset in seedWorkspace(from: asset, task: .imageEdit) },
+            onAnimateAsset: { asset in seedWorkspace(from: asset, task: .videoConditionImage) }
+        )
+        .frame(minWidth: 620, idealWidth: 780, maxWidth: .infinity)
+    }
+
+    private var inspectorPane: some View {
+        StudioInspectorView(
+            workspace: $workspace,
+            selectedModel: selectedModel,
+            availableModels: availableModels,
+            availablePacks: availablePacks,
+            selectedPack: selectedPack,
+            installOperation: selectedModel.flatMap { installOperation(for: $0.modelId) },
+            resolvedSettings: resolvedSettings,
+            shouldShowResetToRecommended: shouldShowResetToRecommended,
+            referenceAssets: referenceAssets,
+            referenceRequirements: planningResult?.readiness.referenceRequirements ?? [],
+            readinessWarnings: planningResult?.readiness.warnings ?? [],
+            isPlanning: isPlanning,
+            onSelectModel: { workspace.selectedModelId = $0 },
+            onSelectPack: { workspace.selectedPackId = $0 },
+            onQueueInstall: onQueueInstall,
+            onResetToRecommended: {
+                workspace.useCustomSettings = false
+                onSyncWorkspaceDefaults()
+            }
+        )
+        .frame(minWidth: 330, idealWidth: 380, maxWidth: 440)
+    }
+
+    private var taskBinding: Binding<ProductTask> {
+        Binding(
+            get: { workspace.task },
+            set: { workspace.task = $0 }
+        )
+    }
+
+    private var promptBinding: Binding<String> {
+        Binding(
+            get: { workspace.prompt },
+            set: { workspace.prompt = $0 }
+        )
+    }
+
+    private var selectedAssetIdBinding: Binding<String?> {
+        Binding(
+            get: { workspace.selectedAssetId },
+            set: { workspace.selectedAssetId = $0 }
+        )
+    }
+
+    private var referenceAssetIdsBinding: Binding<Set<String>> {
+        Binding(
+            get: { Set(workspace.referenceAssetIds) },
+            set: { workspace.referenceAssetIds = Array($0).sorted() }
+        )
+    }
+
+    private var focusedResultAssetIdBinding: Binding<String?> {
+        Binding(
+            get: { workspace.preferredDisplayedAssetId },
+            set: { workspace.preferredDisplayedAssetId = $0 }
+        )
+    }
+
+    private var allowedReferenceKinds: Set<WorkflowReferenceKind> {
+        Set((planningResult?.readiness.referenceRequirements ?? []).map(\.kind))
+    }
+
+    private func applyLifecycle<Content: View>(to content: Content) -> some View {
+        content
+            .task {
+                onSyncWorkspaceDefaults()
+                syncPreferredDisplayedAsset()
+            }
+            .onChange(of: workspace.task) { _, _ in
+                workspace.selectedPackId = selectedPack?.id
+                onSyncWorkspaceDefaults()
+            }
+            .onChange(of: workspace.selectedModelId) { _, _ in
+                if let pack = selectedPack, pack.family != selectedModel?.family {
+                    workspace.selectedPackId = nil
+                }
+                onSyncWorkspaceDefaults()
+            }
+            .onChange(of: workspace.qualityPreset) { _, _ in
+                if !workspace.useCustomSettings {
                     onSyncWorkspaceDefaults()
                 }
-            )
-            .frame(minWidth: 330, idealWidth: 380, maxWidth: 440)
-        }
-        .background(AdaptiveBackground())
-        .animation(MLXRMotion.snappy, value: workspace.task)
-        .animation(MLXRMotion.snappy, value: workspace.selectedAssetId)
-        .animation(MLXRMotion.snappy, value: workspace.lastActiveRunGroupId)
-        .task {
-            onSyncWorkspaceDefaults()
-            syncPreferredDisplayedAsset()
-        }
-        .onChange(of: workspace.task) { _, _ in
-            workspace.selectedPackId = selectedPack?.id
-            onSyncWorkspaceDefaults()
-        }
-        .onChange(of: workspace.selectedModelId) { _, _ in
-            if let pack = selectedPack, pack.family != selectedModel?.family {
-                workspace.selectedPackId = nil
             }
-            onSyncWorkspaceDefaults()
-        }
-        .onChange(of: workspace.qualityPreset) { _, _ in
-            if !workspace.useCustomSettings {
-                onSyncWorkspaceDefaults()
-            }
-        }
-        .onChange(of: workspace.aspectPreset) { _, _ in
-            if !workspace.useCustomSettings {
-                onSyncWorkspaceDefaults()
-            }
-        }
-        .onChange(of: workspace.durationPreset) { _, _ in
-            if !workspace.useCustomSettings {
-                onSyncWorkspaceDefaults()
-            }
-        }
-        .onChange(of: currentRunGroupAssets.map(\.id)) { _, _ in
-            syncPreferredDisplayedAsset()
-        }
-        .task(id: displayedAsset?.id) {
-            guard let displayedAsset else {
-                displayedAssetURL = nil
-                return
-            }
-            displayedAssetURL = await onResolveAssetURL(displayedAsset)
-        }
-        .fileImporter(
-            isPresented: $isPickingImports,
-            allowedContentTypes: [.image, .movie, .audio],
-            allowsMultipleSelection: true
-        ) { result in
-            guard case let .success(urls) = result else { return }
-            Task {
-                let imported = await onImportAssets(urls)
-                if let first = imported.first {
-                    workspace.selectedAssetId = first.id
-                    if compatibleReferenceKind(for: libraryAssets.first(where: { $0.id == first.id }) ?? LibraryAsset.fromImported(imported).first!) != nil {
-                        workspace.referenceAssetIds = [first.id]
-                    }
+            .onChange(of: workspace.aspectPreset) { _, _ in
+                if !workspace.useCustomSettings {
+                    onSyncWorkspaceDefaults()
                 }
             }
+            .onChange(of: workspace.durationPreset) { _, _ in
+                if !workspace.useCustomSettings {
+                    onSyncWorkspaceDefaults()
+                }
+            }
+            .onChange(of: currentRunGroupAssets.map(\.id)) { _, _ in
+                syncPreferredDisplayedAsset()
+            }
+            .task(id: planningKey) {
+                onPlanWorkspace()
+            }
+            .task(id: displayedAsset?.id) {
+                guard let displayedAsset else {
+                    displayedAssetURL = nil
+                    return
+                }
+                displayedAssetURL = await onResolveAssetURL(displayedAsset)
+            }
+            .fileImporter(
+                isPresented: $isPickingImports,
+                allowedContentTypes: [.image, .movie, .audio],
+                allowsMultipleSelection: true,
+                onCompletion: handleImportResult
+            )
+    }
+
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        guard case let .success(urls) = result else {
+            return
+        }
+        Task {
+            let imported = await onImportAssets(urls)
+            handleImportedAssets(imported)
+        }
+    }
+
+    private func handleImportedAssets(_ imported: [ImportedAssetRecord]) {
+        guard let first = imported.first else {
+            return
+        }
+        let importedAssets = LibraryAsset.fromImported(imported)
+        guard let firstAsset = importedAssets.first else {
+            return
+        }
+        workspace.selectedAssetId = first.id
+        if compatibleReferenceKind(for: firstAsset) != nil {
+            workspace.referenceAssetIds = [first.id]
         }
     }
 
@@ -268,52 +345,12 @@ public struct StudioScreen: View {
                 return active
             }
         }
-        return jobs.first(where: { !$0.state.isTerminal })
+        return nil
     }
 
     private var currentJobPhase: String? {
         guard let currentJob else { return nil }
         return activePhases[currentJob.jobId]
-    }
-
-    private var resolvedSettings: StudioResolvedSettings {
-        if workspace.useCustomSettings {
-            return StudioResolvedSettings(
-                width: Int(workspace.manualWidth),
-                height: Int(workspace.manualHeight),
-                numFrames: Int(workspace.manualFrames),
-                fps: Int(workspace.manualFps),
-                numInferenceSteps: Int(workspace.manualSteps),
-                guidanceScale: workspace.manualGuidance
-            )
-        }
-
-        let dimensions = workspace.aspectPreset.dimensions(for: workspace.task.category)
-        let imageStepsByFamily: [String: (Int, Int, Int)] = [
-            "flux2": (4, 8, 12),
-            "qwen_image": (12, 24, 36),
-            "z_image": (6, 12, 20),
-        ]
-        let defaultImageSteps = imageStepsByFamily[selectedModel?.family ?? ""] ?? (8, 16, 24)
-        let imageSteps: Int = switch workspace.qualityPreset {
-        case .draft: defaultImageSteps.0
-        case .standard: defaultImageSteps.1
-        case .cinematic: defaultImageSteps.2
-        }
-        let videoSteps: Int = switch workspace.qualityPreset {
-        case .draft: 18
-        case .standard: 28
-        case .cinematic: 40
-        }
-
-        return StudioResolvedSettings(
-            width: dimensions.width,
-            height: dimensions.height,
-            numFrames: workspace.task.category == .video ? workspace.durationPreset.numFrames : 1,
-            fps: workspace.task.category == .video ? 24 : 1,
-            numInferenceSteps: workspace.task.category == .image ? imageSteps : videoSteps,
-            guidanceScale: workspace.task.category == .image ? 4.0 : 3.0
-        )
     }
 
     private var shouldShowResetToRecommended: Bool {
@@ -329,26 +366,25 @@ public struct StudioScreen: View {
     }
 
     private var canSubmit: Bool {
-        guard !workspace.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return false
-        }
-        guard let selectedModel else {
-            return false
-        }
-        return selectedModel.installed
+        selectedModel?.installed == true
+            && planningError == nil
+            && (planningResult?.readiness.ready ?? false)
     }
 
     private var submitDisabledReason: String? {
-        if workspace.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Add a prompt so MLXR knows what to make or change."
-        }
         if selectedModel == nil {
             return "Pick a model row that supports this workflow."
         }
-        if selectedModel?.installed == false {
+        if selectedModel?.installed != true {
             return "Install the selected model or switch to an installed row before running."
         }
-        return nil
+        if isPlanning {
+            return "Checking the draft against the runtime plan…"
+        }
+        if let planningError {
+            return planningError
+        }
+        return planningResult?.readiness.blockingIssues.first
     }
 
     private var workflows: [StudioWorkflowOption] {
@@ -374,7 +410,7 @@ public struct StudioScreen: View {
 
     private func addFocusedAssetAsReference() {
         guard let assetId = displayedAsset?.id else { return }
-        if !workspace.referenceAssetIds.contains(assetId) {
+        if compatibleReferenceKind(for: displayedAsset) != nil && !workspace.referenceAssetIds.contains(assetId) {
             workspace.referenceAssetIds.append(assetId)
         }
     }
@@ -389,14 +425,15 @@ public struct StudioScreen: View {
 
     private func submit() {
         Task {
+            guard canSubmit else { return }
             guard let model = selectedModel else { return }
             let references = await resolveReferenceInputs()
             let sourceAssetIds = Array(Set(workspace.referenceAssetIds + [workspace.selectedAssetId].compactMap { $0 })).sorted()
+            let runGroupTitle = workspace.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             let context = onPrepareRunContext(
                 workspace.task,
-                workspace.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-                sourceAssetIds,
-                workspace.task.category == .image ? workspace.variationCount : 1
+                runGroupTitle,
+                sourceAssetIds
             )
 
             if workspace.task.category == .image {
@@ -418,6 +455,8 @@ public struct StudioScreen: View {
                             artifactFormat: workspace.artifactFormat,
                             quality: workspace.qualityPreset.quality,
                             context: context,
+                            runGroupTitle: runGroupTitle,
+                            variationCount: variationCount,
                             references: references,
                             familyExtensions: selectedPack?.familyExtensions ?? [:]
                         )
@@ -440,6 +479,8 @@ public struct StudioScreen: View {
                         artifactFormat: workspace.artifactFormat,
                         quality: workspace.qualityPreset.quality,
                         context: context,
+                        runGroupTitle: runGroupTitle,
+                        variationCount: 1,
                         references: references,
                         workflowVariant: selectedPack?.workflowVariant,
                         controlVariant: selectedPack?.controlVariant,
@@ -475,16 +516,19 @@ public struct StudioScreen: View {
         compatibleReferenceKind(for: asset) != nil
     }
 
-    private func compatibleReferenceKind(for asset: LibraryAsset) -> WorkflowReferenceKind? {
-        switch workspace.task {
-        case .imageGenerate, .videoGenerate:
-            return nil
-        case .imageEdit, .videoConditionImage, .videoInterpolate:
-            return asset.isImage ? .image : nil
-        case .videoConditionAudio:
-            return asset.isAudio ? .audio : nil
-        case .videoConditionVideo, .videoRetake:
-            return asset.isVideo ? .video : nil
+    private func compatibleReferenceKind(for asset: LibraryAsset?) -> WorkflowReferenceKind? {
+        guard let asset else { return nil }
+        let allowedKinds = Set((planningResult?.readiness.referenceRequirements ?? []).map(\.kind))
+        guard !allowedKinds.isEmpty else { return nil }
+        return switch asset.kind {
+        case .image where allowedKinds.contains(.image):
+            .image
+        case .video where allowedKinds.contains(.video):
+            .video
+        case .audio where allowedKinds.contains(.audio):
+            .audio
+        default:
+            nil
         }
     }
 
@@ -499,5 +543,28 @@ public struct StudioScreen: View {
             workspace.referenceAssetIds = [asset.id]
         }
         onSyncWorkspaceDefaults()
+    }
+
+    private var planningKey: String {
+        [
+            workspace.task.rawValue,
+            workspace.prompt,
+            workspace.negativePrompt,
+            workspace.selectedModelId,
+            workspace.selectedPackId ?? "",
+            workspace.qualityPreset.rawValue,
+            workspace.aspectPreset.rawValue,
+            workspace.durationPreset.rawValue,
+            workspace.artifactFormat,
+            workspace.useCustomSettings.description,
+            workspace.manualWidth.description,
+            workspace.manualHeight.description,
+            workspace.manualFrames.description,
+            workspace.manualFps.description,
+            workspace.manualSteps.description,
+            workspace.manualGuidance.description,
+            workspace.referenceAssetIds.sorted().joined(separator: ","),
+        ]
+        .joined(separator: "|")
     }
 }

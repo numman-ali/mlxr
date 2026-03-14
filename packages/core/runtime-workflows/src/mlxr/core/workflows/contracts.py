@@ -9,6 +9,7 @@ from mlxr.core.schemas import (
     ModelRecord,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanReadiness,
 )
 
 
@@ -41,3 +42,10 @@ class FamilyWorkflowStrategy(Protocol):
         intent: WorkflowIntent,
         plan: WorkflowPlan,
     ) -> JobRequest: ...
+
+    def readiness(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+    ) -> WorkflowPlanReadiness: ...

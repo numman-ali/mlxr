@@ -12,6 +12,9 @@ struct StudioInspectorView: View {
     let resolvedSettings: StudioResolvedSettings
     let shouldShowResetToRecommended: Bool
     let referenceAssets: [LibraryAsset]
+    let referenceRequirements: [WorkflowReferenceRequirement]
+    let readinessWarnings: [String]
+    let isPlanning: Bool
     let onSelectModel: (String) -> Void
     let onSelectPack: (String?) -> Void
     let onQueueInstall: @Sendable (String) async -> Void
@@ -151,8 +154,48 @@ struct StudioInspectorView: View {
     private var referencesCard: some View {
         GlassCard(
             title: "References",
-            subtitle: referenceHelpText
+            subtitle: referenceSubtitle
         ) {
+            if isPlanning {
+                HStack(spacing: MLXRSpacing.xs) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Checking the current draft against the runtime…")
+                        .font(MLXRType.bodySmall)
+                        .foregroundStyle(MLXRColor.textSecondary)
+                }
+            }
+
+            if !referenceRequirements.isEmpty {
+                VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
+                    ForEach(referenceRequirements) { requirement in
+                        VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
+                            Text(requirement.description)
+                                .font(MLXRType.bodySmall)
+                                .foregroundStyle(MLXRColor.textPrimary)
+                            Text(requirementSummary(requirement))
+                                .font(MLXRType.captionLarge)
+                                .foregroundStyle(MLXRColor.textTertiary)
+                        }
+                    }
+                }
+            }
+
+            if !readinessWarnings.isEmpty {
+                VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
+                    ForEach(readinessWarnings, id: \.self) { warning in
+                        Label {
+                            Text(warning)
+                                .font(MLXRType.bodySmall)
+                                .foregroundStyle(MLXRColor.textSecondary)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(MLXRColor.brandWarm)
+                        }
+                    }
+                }
+            }
+
             if referenceAssets.isEmpty {
                 Text("No references selected yet.")
                     .font(MLXRType.bodySmall)
@@ -163,7 +206,7 @@ struct StudioInspectorView: View {
                         Image(systemName: icon(for: asset))
                             .foregroundStyle(MLXRColor.brandPrimary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(asset.title)
+                            Text(asset.displayTitle)
                                 .font(MLXRType.bodySmall)
                                 .foregroundStyle(MLXRColor.textPrimary)
                             Text(asset.sourceSummary)
@@ -218,23 +261,33 @@ struct StudioInspectorView: View {
         return base.map { ($0, $0.rawValue) }
     }
 
-    private var referenceHelpText: String {
-        switch workspace.task {
-        case .imageGenerate, .videoGenerate:
-            "Optional source material can still help, but this workflow does not require it."
-        case .imageEdit:
-            "Add one or more images to guide the edit."
-        case .videoConditionImage:
-            "Use an image to set the look and first frame."
-        case .videoConditionAudio:
-            "Use audio as the timing and mood reference."
-        case .videoConditionVideo:
-            "Use a source clip to guide the motion."
-        case .videoInterpolate:
-            "Use key images as the frames to blend between."
-        case .videoRetake:
-            "Use the original clip as the source for the retake."
+    private var referenceSubtitle: String {
+        if referenceRequirements.isEmpty {
+            return "This workflow does not need source material unless the selected model says otherwise."
         }
+        return "The runtime plan decides what kinds of source material are valid here."
+    }
+
+    private func requirementSummary(_ requirement: WorkflowReferenceRequirement) -> String {
+        let minimum = requirement.minimumCount
+        let maximum = requirement.maximumCount
+        let countSummary: String
+        switch (minimum, maximum) {
+        case (0, .none):
+            countSummary = "Optional"
+        case let (min, .none):
+            countSummary = "At least \(min)"
+        case let (min, .some(max)) where min == max:
+            countSummary = "Exactly \(max)"
+        case let (min, .some(max)):
+            countSummary = "\(min) to \(max)"
+        }
+
+        if requirement.acceptedRoles.isEmpty {
+            return "\(countSummary) \(requirement.kind.rawValue) reference"
+        }
+        let roles = requirement.acceptedRoles.joined(separator: ", ")
+        return "\(countSummary) \(requirement.kind.rawValue) reference (\(roles))"
     }
 
     private func phaseLabel(_ phase: ModelInstallOperationPhase) -> String {

@@ -18,9 +18,15 @@ from mlxr.clients.cli.cli import (
 from mlxr.clients.cli.daemon import DaemonStatus
 from mlxr.core.runtime import RuntimeHome
 from mlxr.core.schemas import (
+    CapabilityDescriptor,
     ModelInstallResult,
     ModelRecord,
+    PolicyDescriptor,
     SupportedModelDescriptor,
+    WorkflowPlan,
+    WorkflowPlanReadiness,
+    WorkflowPlanResult,
+    WorkflowReferenceRequirement,
 )
 
 
@@ -99,6 +105,17 @@ class _ModelsClient:
         if self.install_result is None:
             raise AssertionError("install_result must be provided for install tests")
         return self.install_result
+
+
+class _GeneratePlanClient:
+    def __init__(self, plan_result: WorkflowPlanResult) -> None:
+        self.plan_result = plan_result
+
+    def close(self) -> None:
+        return None
+
+    def plan(self, intent):  # pragma: no cover - intent shape is exercised indirectly
+        return self.plan_result
 
 
 class RuntimeCliSurfaceTests(unittest.TestCase):
@@ -248,6 +265,65 @@ class RuntimeCliSurfaceTests(unittest.TestCase):
         output = stdout.getvalue()
         self.assertIn("Installed flux2-klein-9b-local", output)
         self.assertIn("Tasks: image.generate, image.edit", output)
+
+    def test_generate_plan_only_reports_blocking_runtime_readiness(self) -> None:
+        plan_result = WorkflowPlanResult(
+            capability=CapabilityDescriptor(
+                model_id="z-image-turbo-local",
+                artifact_digest="sha256:test",
+                family="z_image",
+                tasks=["image.generate"],
+                modalities_in=["text"],
+                modalities_out=["image"],
+                scheduler_class="image_diffusion",
+                policy=PolicyDescriptor(access_state="public"),
+                metadata={},
+            ),
+            plan=WorkflowPlan(
+                model_id="z-image-turbo-local",
+                family="z_image",
+                selected_task="image.generate",
+                resolved_prompt="cinematic lighthouse",
+            ),
+            readiness=WorkflowPlanReadiness(
+                ready=False,
+                blocking_issues=["Choose one source image before editing."],
+                warnings=["The selected row is slower at large sizes."],
+                reference_requirements=[
+                    WorkflowReferenceRequirement(
+                        kind="image",
+                        minimum_count=1,
+                        maximum_count=1,
+                        accepted_roles=[],
+                        description="One source image is required",
+                    )
+                ],
+                allowed_output_formats=["png"],
+            ),
+        )
+        client = _GeneratePlanClient(plan_result)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch(
+            "mlxr.clients.cli.generation._runtime_client_for_args",
+            return_value=nullcontext(client),
+        ):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                exit_code = main(
+                    [
+                        "generate",
+                        "--model-id",
+                        "z-image-turbo-local",
+                        "--prompt",
+                        "cinematic lighthouse",
+                        "--plan-only",
+                    ]
+                )
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout.getvalue())
+        self.assertFalse(payload["readiness"]["ready"])
+        self.assertIn("Choose one source image before editing.", stderr.getvalue())
+        self.assertIn("Reference: exactly 1 image", stderr.getvalue())
 
     def test_doctor_json_reports_local_runtime_and_auth_warnings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -221,6 +221,19 @@ class ZImageFamilyAdapter:
             }
         )
 
+    def normalize_capability(self, artifact: PortableArtifact) -> CapabilityDescriptor:
+        capability = self.capabilities(artifact)
+        constraints = dict(capability.constraints)
+        guidance_constraint = constraints.get("guidance_scale")
+        if (
+            not isinstance(guidance_constraint, dict)
+            or "fixed" not in guidance_constraint
+        ):
+            constraints["guidance_scale"] = {"fixed": 1.0}
+        if constraints == capability.constraints:
+            return capability
+        return capability.model_copy(update={"constraints": constraints})
+
     def run_stage(
         self, loaded: LoadedModelHandle, stage: ExecutionStage
     ) -> StageResult:
@@ -520,6 +533,7 @@ def _capability_descriptor(
         constraints={
             "width": {"multiple_of": 16},
             "height": {"multiple_of": 16},
+            "guidance_scale": {"fixed": 1.0},
         },
         conditioning={
             "image": False,

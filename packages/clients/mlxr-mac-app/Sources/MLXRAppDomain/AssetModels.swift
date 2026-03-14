@@ -148,6 +148,28 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
     public var isVideo: Bool { kind == .video }
     public var isAudio: Bool { kind == .audio }
 
+    public var filename: String? {
+        if let artifact, let filename = artifact.filename, !filename.isEmpty {
+            return filename
+        }
+        if let importedAsset {
+            return importedAsset.title
+        }
+        return nil
+    }
+
+    public var displayTitle: String {
+        switch origin {
+        case .generated:
+            if let promptHeadline = Self.promptHeadline(from: prompt) {
+                return promptHeadline
+            }
+            return filename ?? title
+        case .imported:
+            return title
+        }
+    }
+
     public var referenceKind: WorkflowReferenceKind? {
         switch kind {
         case .image:
@@ -186,6 +208,8 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
     public var searchableText: String {
         [
             title,
+            displayTitle,
+            filename ?? "",
             prompt,
             modelId ?? "",
             task?.rawValue ?? "",
@@ -253,5 +277,34 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
                 lastUsedAt: metadata?.lastUsedAt
             )
         }
+    }
+
+    private static func promptHeadline(from prompt: String) -> String? {
+        let normalized = prompt
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return nil
+        }
+        if normalized.count <= 72 {
+            return normalized
+        }
+        let cutoff = normalized.index(normalized.startIndex, offsetBy: 69)
+        let truncated = String(normalized[..<cutoff]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(truncated)…"
+    }
+}
+
+public struct LibraryAssetGroup: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let assets: [LibraryAsset]
+
+    public init(id: String, assets: [LibraryAsset]) {
+        self.id = id
+        self.assets = assets
+    }
+
+    public var primaryAsset: LibraryAsset {
+        assets[0]
     }
 }

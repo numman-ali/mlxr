@@ -516,6 +516,82 @@ class LTXWorkflowStrategyTests(unittest.TestCase):
         ):
             strategy.to_job_request(context, intent, plan)
 
+    def test_readiness_requires_control_video_and_lora_for_video_guidance(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context()
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="match the guide motion but change the subject",
+            task="video.condition.video",
+            output=JobOutputPolicy(artifact_format="mp4"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn("Choose exactly one guide video.", readiness.blocking_issues)
+        self.assertIn(
+            "Choose exactly one compatible control LoRA.",
+            readiness.blocking_issues,
+        )
+
+    def test_readiness_requires_distinct_keyframes_for_interpolation(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.condition.image", "video.interpolate"],
+            conditioning={"image": True, "video": False, "audio": False, "lora": False},
+            pipeline_variants=["one_stage", "two_stage"],
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-dev-local",
+            prompt="blend between the two poses",
+            task="video.interpolate",
+            references=[
+                WorkflowReference(
+                    kind="image",
+                    input_handle="first-image",
+                    metadata={"frame_index": 0, "strength": 1.0},
+                ),
+                WorkflowReference(
+                    kind="image",
+                    input_handle="second-image",
+                    metadata={"frame_index": 0, "strength": 1.0},
+                ),
+            ],
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn(
+            "Set at least two distinct keyframe positions for interpolation.",
+            readiness.blocking_issues,
+        )
+
+    def test_readiness_requires_retake_window(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.condition.image", "video.retake"],
+            conditioning={"image": True, "video": True, "audio": False, "lora": False},
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="replace the middle beat",
+            task="video.retake",
+            references=[WorkflowReference(kind="video", input_handle="video-handle")],
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn(
+            "Set a valid retake window before running this workflow.",
+            readiness.blocking_issues,
+        )
+
     def test_to_job_request_rejects_retake_without_window_params(self) -> None:
         strategy = LTXWorkflowStrategy()
         context = _context(

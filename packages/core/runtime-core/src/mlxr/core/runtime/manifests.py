@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -29,7 +30,7 @@ def canonical_json_data(value: Any) -> str:
 def write_json_atomic(path: Path, value: BaseModel | dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = canonical_json_data(value)
-    tmp_path = path.with_name(f"{path.name}.tmp")
+    tmp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     tmp_path.write_text(f"{payload}\n", encoding="utf-8")
     tmp_path.replace(path)
 

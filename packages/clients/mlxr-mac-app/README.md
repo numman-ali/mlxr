@@ -24,6 +24,7 @@ The app is intentionally:
   - recent assets
   - model and runtime readiness
 - `Studio`
+  - runtime-led planning and submission over the shared workflow seam
   - image generation and editing
   - video generation, animation, audio-conditioned, guided-video, interpolation, and retake flows
   - model-aware presets and advanced controls behind disclosure
@@ -31,12 +32,15 @@ The app is intentionally:
 - `Library`
   - generated outputs plus imported assets
   - run-group-aware asset sets
-  - preview, reuse, and continue-in-studio actions
+  - uniform `4:5` browser tiles with a large in-window modal preview
+  - keyboard-driven selection, preview, and continue-in-studio actions
 - `Models`
   - curated installs
   - first-run starter-model setup
   - install queue
   - installed model details and removal
+- `Activity`
+  - left-rail utility panel for runtime-accepted running work, installs, and dismissible failures
 - `Settings`
   - runtime status
   - advanced import
@@ -90,6 +94,10 @@ Peekaboo flow:
 peekaboo app switch --to MLXRMacApp
 peekaboo see --app MLXRMacApp --json --annotate
 ```
+
+Reference plan:
+
+- [docs/plans/mac-app-runtime-parity-plan.md](/Users/numman/Repos/mlxr/docs/plans/mac-app-runtime-parity-plan.md)
 
 The app expects the repo-local Python runtime path by default:
 

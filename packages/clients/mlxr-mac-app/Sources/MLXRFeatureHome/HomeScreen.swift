@@ -200,7 +200,7 @@ public struct HomeScreen: View {
                             .foregroundStyle(asset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary)
                             .frame(width: 18)
                         VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
-                            Text(asset.title)
+                            Text(asset.displayTitle)
                                 .font(.system(.headline, design: .rounded, weight: .semibold))
                                 .foregroundStyle(MLXRColor.textPrimary)
                             Text(asset.subtitle)

@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from mlxr.core.schemas import (
     CapabilityDescriptor,
+    InputHandleRecord,
     JobOutputPolicy,
     JobRecord,
     JobRequest,
@@ -13,7 +14,10 @@ from mlxr.core.schemas import (
     WorkflowContextMetadata,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanReadiness,
     WorkflowPlanResult,
+    WorkflowReference,
+    WorkflowReferenceRequirement,
 )
 from mlxr.core.server.workflows import WorkflowService
 
@@ -45,6 +49,19 @@ class _FakePlanner:
                 selected_task=intent.task or "image.generate",
                 resolved_prompt=intent.prompt,
             ),
+            readiness=WorkflowPlanReadiness(
+                ready=True,
+                warnings=["test warning"],
+                reference_requirements=[
+                    WorkflowReferenceRequirement(
+                        kind="image",
+                        minimum_count=0,
+                        maximum_count=1,
+                        description="Optional image reference",
+                    )
+                ],
+                allowed_output_formats=["png"],
+            ),
         )
 
     def job_request_for_plan(
@@ -75,11 +92,60 @@ class _FakeJobManager:
 
 
 class _FakeInputStore:
+    def __init__(self, records: dict[str, object] | None = None) -> None:
+        self.records = records or {}
+
     def get(self, handle_id: str):  # pragma: no cover - not used in this test
-        return None
+        return self.records.get(handle_id)
+
+
+class _BlockingPlanner(_FakePlanner):
+    def plan_for_model(
+        self, model: object, intent: WorkflowIntent
+    ) -> WorkflowPlanResult:
+        result = super().plan_for_model(model, intent)
+        return result.model_copy(
+            update={
+                "readiness": WorkflowPlanReadiness(
+                    ready=False,
+                    blocking_issues=["Choose at least one reference image."],
+                    reference_requirements=[
+                        WorkflowReferenceRequirement(
+                            kind="image",
+                            minimum_count=1,
+                            maximum_count=1,
+                            description="One source image is required",
+                        )
+                    ],
+                    allowed_output_formats=["png"],
+                )
+            }
+        )
 
 
 class WorkflowContextTests(unittest.TestCase):
+    def test_plan_returns_readiness_metadata(self) -> None:
+        service = WorkflowService(
+            catalog=_FakeCatalog(),
+            planner=_FakePlanner(),
+            job_manager=_FakeJobManager(),
+            input_store=_FakeInputStore(),
+        )
+
+        plan = service.plan(
+            WorkflowIntent(
+                model_id="z-image-turbo-local",
+                prompt="cinematic portrait",
+                task="image.generate",
+            )
+        )
+
+        self.assertTrue(plan.readiness.ready)
+        self.assertEqual(plan.readiness.warnings, ["test warning"])
+        self.assertEqual(plan.readiness.allowed_output_formats, ["png"])
+        self.assertEqual(len(plan.readiness.reference_requirements), 1)
+        self.assertEqual(plan.readiness.reference_requirements[0].kind, "image")
+
     def test_run_carries_workflow_context_into_job_request(self) -> None:
         manager = _FakeJobManager()
         service = WorkflowService(
@@ -114,3 +180,83 @@ class WorkflowContextTests(unittest.TestCase):
         self.assertEqual(
             manager.submitted_request.context.source_asset_ids, ["asset-a"]
         )
+
+    def test_run_rejects_blocked_plan_before_submit(self) -> None:
+        manager = _FakeJobManager()
+        service = WorkflowService(
+            catalog=_FakeCatalog(),
+            planner=_BlockingPlanner(),
+            job_manager=manager,
+            input_store=_FakeInputStore(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "Choose at least one reference image."):
+            service.run(
+                WorkflowIntent(
+                    model_id="z-image-turbo-local",
+                    prompt="cinematic portrait",
+                    task="image.edit",
+                )
+            )
+
+        self.assertIsNone(manager.submitted_request)
+
+    def test_plan_rejects_image_reference_with_non_image_media_type(self) -> None:
+        service = WorkflowService(
+            catalog=_FakeCatalog(),
+            planner=_FakePlanner(),
+            job_manager=_FakeJobManager(),
+            input_store=_FakeInputStore(
+                {
+                    "inp_bad": InputHandleRecord(
+                        handle_id="inp_bad",
+                        role="image",
+                        media_type="video/mp4",
+                        filename="clip.mp4",
+                        storage_key="inputs/inp_bad/clip.mp4",
+                        size_bytes=3,
+                    )
+                }
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "must use an image media type"):
+            service.plan(
+                WorkflowIntent(
+                    model_id="z-image-turbo-local",
+                    prompt="cinematic portrait",
+                    references=[
+                        WorkflowReference(kind="image", input_handle="inp_bad")
+                    ],
+                )
+            )
+
+    def test_run_rejects_lora_reference_without_safetensors_payload(self) -> None:
+        service = WorkflowService(
+            catalog=_FakeCatalog(),
+            planner=_FakePlanner(),
+            job_manager=_FakeJobManager(),
+            input_store=_FakeInputStore(
+                {
+                    "inp_lora": InputHandleRecord(
+                        handle_id="inp_lora",
+                        role="lora",
+                        media_type="application/octet-stream",
+                        filename="weights.bin",
+                        storage_key="inputs/inp_lora/weights.bin",
+                        size_bytes=3,
+                    )
+                }
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "must use a safetensors payload"):
+            service.run(
+                WorkflowIntent(
+                    model_id="z-image-turbo-local",
+                    prompt="cinematic portrait",
+                    references=[
+                        WorkflowReference(kind="lora", input_handle="inp_lora")
+                    ],
+                )
+            )

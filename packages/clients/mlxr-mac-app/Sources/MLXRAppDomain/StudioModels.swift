@@ -298,8 +298,20 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
     public var workspaces: [WorkspaceRecord]
     public var collections: [CollectionRecord]
     public var runGroups: [RunGroupRecord]
+    public var dismissedActivityRunGroupIds: [String]
     public var assets: [AssetRecord]
     public var workspaceDraft: StudioWorkspaceDraft
+
+    private enum CodingKeys: String, CodingKey {
+        case hasCompletedModelSetup
+        case activeWorkspaceId
+        case workspaces
+        case collections
+        case runGroups
+        case dismissedActivityRunGroupIds
+        case assets
+        case workspaceDraft
+    }
 
     public init(
         hasCompletedModelSetup: Bool = false,
@@ -307,6 +319,7 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")],
         collections: [CollectionRecord] = [],
         runGroups: [RunGroupRecord] = [],
+        dismissedActivityRunGroupIds: [String] = [],
         assets: [AssetRecord] = [],
         workspaceDraft: StudioWorkspaceDraft = .init()
     ) {
@@ -315,8 +328,40 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         self.workspaces = workspaces
         self.collections = collections
         self.runGroups = runGroups
+        self.dismissedActivityRunGroupIds = dismissedActivityRunGroupIds
         self.assets = assets
         self.workspaceDraft = workspaceDraft
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hasCompletedModelSetup =
+            try container.decodeIfPresent(Bool.self, forKey: .hasCompletedModelSetup) ?? false
+        activeWorkspaceId =
+            try container.decodeIfPresent(String.self, forKey: .activeWorkspaceId)
+            ?? "default-workspace"
+        workspaces =
+            try container.decodeIfPresent([WorkspaceRecord].self, forKey: .workspaces)
+            ?? [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")]
+        collections =
+            try container.decodeIfPresent([CollectionRecord].self, forKey: .collections)
+            ?? []
+        runGroups =
+            try container.decodeIfPresent([RunGroupRecord].self, forKey: .runGroups)
+            ?? []
+        dismissedActivityRunGroupIds =
+            try container.decodeIfPresent(
+                [String].self,
+                forKey: .dismissedActivityRunGroupIds
+            )
+            ?? []
+        assets = try container.decodeIfPresent([AssetRecord].self, forKey: .assets) ?? []
+        workspaceDraft =
+            try container.decodeIfPresent(
+                StudioWorkspaceDraft.self,
+                forKey: .workspaceDraft
+            )
+            ?? .init()
     }
 }
 

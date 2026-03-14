@@ -144,6 +144,7 @@ public struct CatalogSnapshot: Sendable {
         let capabilityByModel = Dictionary(uniqueKeysWithValues: capabilities.map { ($0.modelId, $0) })
         let installedByModel = Dictionary(uniqueKeysWithValues: installedModels.map { ($0.modelId, $0) })
         let supportedByModel = Dictionary(uniqueKeysWithValues: supportedModels.map { ($0.modelId, $0) })
+        let supportedOrder = Dictionary(uniqueKeysWithValues: supportedModels.enumerated().map { ($1.modelId, $0) })
 
         var merged: [ModelCatalogItem] = supportedModels.map { supported in
             let installed = installedByModel[supported.modelId]
@@ -197,6 +198,18 @@ public struct CatalogSnapshot: Sendable {
             }
             if $0.installed != $1.installed {
                 return $0.installed && !$1.installed
+            }
+            let lhsOrder = supportedOrder[$0.modelId]
+            let rhsOrder = supportedOrder[$1.modelId]
+            switch (lhsOrder, rhsOrder) {
+            case let (.some(lhsIndex), .some(rhsIndex)) where lhsIndex != rhsIndex:
+                return lhsIndex < rhsIndex
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            default:
+                break
             }
             return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }

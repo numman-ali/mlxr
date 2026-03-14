@@ -31,7 +31,7 @@ What is not true yet:
 | `mlxr` CLI | real | first-party thin client with `generate`, `serve`, `doctor`, `models`, and `feedback` |
 | `ltx-desktop` adapter | planned | compatibility seam, not yet implemented |
 | Comfy adapter | planned | thin runtime-backed adapter, not yet implemented |
-| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a persistent `Studio` draft, reusable `Library`, grouped asset sets, guided model installs, and a real dev `.app` bundle path for macOS/Peekaboo testing |
+| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a persistent runtime-led `Studio`, reusable asset-first `Library`, rail-based `Activity`, guided model installs, and a real dev `.app` bundle path for macOS/Peekaboo testing |
 | Embedded first-party access | planned later | Swift-side host boundary work |
 
 ## Family Truth
@@ -90,3 +90,4 @@ are:
 - [open-source-release-checklist.md](/Users/numman/Repos/mlxr/docs/open-source-release-checklist.md)
 - [cli-ergonomics.md](/Users/numman/Repos/mlxr/docs/cli-ergonomics.md)
 - [mac-app-v1-product-spec.md](/Users/numman/Repos/mlxr/docs/mac-app-v1-product-spec.md)
+- [plans/mac-app-runtime-parity-plan.md](/Users/numman/Repos/mlxr/docs/plans/mac-app-runtime-parity-plan.md)

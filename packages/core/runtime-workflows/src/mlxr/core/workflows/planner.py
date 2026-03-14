@@ -48,7 +48,12 @@ class WorkflowPlanner:
         strategy = self.registry.get(model.family)
         context = WorkflowPlanningContext(model=model, capability=capability)
         plan = strategy.plan(context, intent)
-        return WorkflowPlanResult(capability=capability, plan=plan)
+        readiness = strategy.readiness(context, intent, plan)
+        return WorkflowPlanResult(
+            capability=capability,
+            plan=plan,
+            readiness=readiness,
+        )
 
     def job_request_for_plan(
         self,

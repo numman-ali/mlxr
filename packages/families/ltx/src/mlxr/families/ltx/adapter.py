@@ -26,6 +26,7 @@ from ._adapter.capability import (
     fetch_policy_for_conversion,
     inspect_source,
     load,
+    normalize_capability,
 )
 from ._adapter.stages import (
     _conditioning_attention_strength,
@@ -78,6 +79,7 @@ class LTXFamilyAdapter:
     convert = convert
     load = load
     capabilities = capabilities
+    normalize_capability = normalize_capability
     run_stage = run_stage
     unload = unload
 

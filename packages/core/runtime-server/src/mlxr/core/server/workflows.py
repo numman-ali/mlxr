@@ -31,7 +31,10 @@ class WorkflowService:
     def run(self, intent: WorkflowIntent) -> WorkflowRunResult:
         self._validate_reference_bindings(intent, require_handles=True)
         model = self.catalog.get_model(intent.model_id)
-        resolved_plan = self.planner.plan_for_model(model=model, intent=intent).plan
+        plan_result = self.planner.plan_for_model(model=model, intent=intent)
+        if not plan_result.readiness.ready:
+            raise ValueError("; ".join(plan_result.readiness.blocking_issues))
+        resolved_plan = plan_result.plan
         job_request = self.planner.job_request_for_plan(
             model=model,
             intent=intent,

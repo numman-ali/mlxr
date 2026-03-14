@@ -12,6 +12,7 @@ from mlxr.core.schemas import (
     JobRecord,
     JobState,
     WorkflowIntent,
+    WorkflowPlanResult,
     WorkflowPreferences,
     WorkflowReference,
 )
@@ -63,8 +64,9 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
     )
     if args.plan_only:
         plan = client.plan(intent)
+        _emit_plan_feedback(plan)
         print(json.dumps(plan.model_dump(mode="json"), indent=2))
-        return 0
+        return 0 if plan.readiness.ready else 1
     result = client.run(intent)
     payload = {
         "job_id": result.submit.job_id,
@@ -94,6 +96,36 @@ def _run_generate_command(client: RuntimeClient, args: argparse.Namespace) -> in
     if not args.wait:
         return 0
     return 0 if terminal.state == JobState.COMPLETED else 1
+
+
+def _emit_plan_feedback(plan: WorkflowPlanResult) -> None:
+    readiness = plan.readiness
+    if readiness.ready:
+        print("Plan is ready to run.", file=sys.stderr)
+    else:
+        print("Plan is blocked:", file=sys.stderr)
+        for issue in readiness.blocking_issues:
+            print(f"- {issue}", file=sys.stderr)
+    for warning in readiness.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+    for requirement in readiness.reference_requirements:
+        count_summary = _reference_requirement_summary(
+            requirement.minimum_count, requirement.maximum_count
+        )
+        print(
+            f"Reference: {count_summary} {requirement.kind} - {requirement.description}",
+            file=sys.stderr,
+        )
+
+
+def _reference_requirement_summary(
+    minimum_count: int, maximum_count: int | None
+) -> str:
+    if maximum_count is None:
+        return "optional" if minimum_count == 0 else f"at least {minimum_count}"
+    if minimum_count == maximum_count:
+        return f"exactly {maximum_count}"
+    return f"{minimum_count} to {maximum_count}"
 
 
 def _generation_params(args: argparse.Namespace) -> dict[str, int | float]:

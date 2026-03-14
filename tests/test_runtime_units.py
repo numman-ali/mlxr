@@ -1336,6 +1336,11 @@ class RuntimeUnitTests(unittest.TestCase):
                 del sources, plan
                 raise RuntimeError("test double does not implement convert")
 
+            def normalize_capability(
+                self, artifact: PortableArtifact
+            ) -> CapabilityDescriptor:
+                return artifact.record.capability
+
             def load(
                 self, artifact: PortableArtifact, profile: ExecutionProfile
             ) -> LoadedModelHandle:
@@ -1795,6 +1800,9 @@ class RuntimeUnitTests(unittest.TestCase):
                 del timeout
                 raise queue.Empty
 
+            def get_nowait(self) -> dict[str, object]:
+                raise queue.Empty
+
             def close(self) -> None:
                 self.closed = True
 
@@ -1807,6 +1815,9 @@ class RuntimeUnitTests(unittest.TestCase):
 
             def get(self, timeout: float | None = None) -> dict[str, object]:
                 del timeout
+                raise queue.Empty
+
+            def get_nowait(self) -> dict[str, object]:
                 raise queue.Empty
 
             def close(self) -> None:

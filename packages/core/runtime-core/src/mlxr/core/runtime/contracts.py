@@ -138,6 +138,10 @@ class ModelFamilyAdapter(Protocol):
         self, sources: dict[str, ConversionSource], plan: ConversionPlan
     ) -> PortableArtifact: ...
 
+    def normalize_capability(
+        self, artifact: PortableArtifact
+    ) -> CapabilityDescriptor: ...
+
     def load(
         self, artifact: PortableArtifact, profile: ExecutionProfile
     ) -> LoadedModelHandle: ...

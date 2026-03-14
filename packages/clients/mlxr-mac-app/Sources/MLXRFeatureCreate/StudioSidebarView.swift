@@ -4,6 +4,7 @@ import SwiftUI
 
 struct StudioSidebarView: View {
     let workflows: [StudioWorkflowOption]
+    let allowedReferenceKinds: Set<WorkflowReferenceKind>
     @Binding var selectedTask: ProductTask
     let recentAssets: [LibraryAsset]
     @Binding var selectedAssetId: String?
@@ -72,6 +73,7 @@ struct StudioSidebarView: View {
                 }
             }
             .padding(.vertical, MLXRSpacing.xs)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled({
@@ -96,7 +98,7 @@ struct StudioSidebarView: View {
                     Image(systemName: icon(for: asset))
                         .foregroundStyle(isSelected ? MLXRColor.brandPrimary : MLXRColor.textSecondary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(asset.title)
+                        Text(asset.displayTitle)
                             .font(MLXRType.bodySmall)
                             .foregroundStyle(MLXRColor.textPrimary)
                             .lineLimit(1)
@@ -107,6 +109,7 @@ struct StudioSidebarView: View {
                     }
                     Spacer()
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -145,15 +148,9 @@ struct StudioSidebarView: View {
     }
 
     private func supportsReference(_ asset: LibraryAsset) -> Bool {
-        switch selectedTask {
-        case .imageGenerate, .videoGenerate:
-            false
-        case .imageEdit, .videoConditionImage, .videoInterpolate:
-            asset.isImage
-        case .videoConditionAudio:
-            asset.isAudio
-        case .videoConditionVideo, .videoRetake:
-            asset.isVideo
+        guard let kind = asset.referenceKind else {
+            return false
         }
+        return allowedReferenceKinds.contains(kind)
     }
 }

@@ -5,10 +5,13 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanReadiness,
     WorkflowReference,
+    WorkflowReferenceRequirement,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import (
     conditioning_attention_strength_from_extensions,
@@ -345,6 +348,19 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             extensions=extensions,
         )
 
+    def readiness(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+    ) -> WorkflowPlanReadiness:
+        return _readiness_for_plan(
+            capability=context.capability,
+            intent=intent,
+            plan=plan,
+            requirements=_reference_requirements_for_task(plan.selected_task),
+        )
+
 
 def _references_by_kind(
     references: tuple[WorkflowReference, ...],
@@ -425,3 +441,99 @@ def _lora_reference_payload(reference: WorkflowReference) -> dict[str, object]:
         "input_handle": reference.input_handle,
         "strength": strength_value,
     }
+
+
+def _reference_requirements_for_task(
+    task: str,
+) -> list[WorkflowReferenceRequirement]:
+    if task == "video.condition.image":
+        return [
+            WorkflowReferenceRequirement(
+                kind="image",
+                minimum_count=1,
+                description="Choose at least one image to animate.",
+            )
+        ]
+    if task == "video.condition.audio":
+        return [
+            WorkflowReferenceRequirement(
+                kind="audio",
+                minimum_count=1,
+                maximum_count=1,
+                description="Choose exactly one audio asset to drive the clip.",
+            )
+        ]
+    if task == "video.condition.video":
+        return [
+            WorkflowReferenceRequirement(
+                kind="video",
+                minimum_count=1,
+                maximum_count=1,
+                description="Choose exactly one guide video.",
+            ),
+            WorkflowReferenceRequirement(
+                kind="lora",
+                minimum_count=1,
+                maximum_count=1,
+                description="Choose exactly one compatible control LoRA.",
+            ),
+        ]
+    if task == "video.interpolate":
+        return [
+            WorkflowReferenceRequirement(
+                kind="image",
+                minimum_count=2,
+                description="Choose at least two key images to blend between.",
+            )
+        ]
+    if task == "video.retake":
+        return [
+            WorkflowReferenceRequirement(
+                kind="video",
+                minimum_count=1,
+                maximum_count=1,
+                description="Choose exactly one source video to retake.",
+            )
+        ]
+    return []
+
+
+def _readiness_for_plan(
+    *,
+    capability: CapabilityDescriptor,
+    intent: WorkflowIntent,
+    plan: WorkflowPlan,
+    requirements: list[WorkflowReferenceRequirement],
+) -> WorkflowPlanReadiness:
+    extra_blocking_issues: list[str] = []
+    counts = {
+        kind: len(references)
+        for kind, references in _references_by_kind(tuple(intent.references)).items()
+    }
+    if plan.selected_task == "video.interpolate":
+        frame_indices = {
+            int(reference.metadata.get("frame_index", 0))
+            for reference in intent.references
+            if reference.kind == "image"
+            and isinstance(reference.metadata.get("frame_index", 0), int)
+        }
+        if counts.get("image", 0) >= 2 and len(frame_indices) < 2:
+            extra_blocking_issues.append(
+                "Set at least two distinct keyframe positions for interpolation."
+            )
+
+    if plan.selected_task == "video.retake" and (
+        not isinstance(intent.params.get("window_start_seconds"), (int, float))
+        or not isinstance(intent.params.get("window_end_seconds"), (int, float))
+    ):
+        extra_blocking_issues.append(
+            "Set a valid retake window before running this workflow."
+        )
+
+    return build_plan_readiness(
+        capability=capability,
+        intent=intent,
+        plan=plan,
+        requirements=requirements,
+        extra_blocking_issues=extra_blocking_issues,
+    )

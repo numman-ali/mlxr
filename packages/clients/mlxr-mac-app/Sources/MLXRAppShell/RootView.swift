@@ -12,6 +12,7 @@ public struct MLXRMacAppRoot: View {
     @AppStorage("mlxr.mac-app.last-destination") private var lastDestinationRaw = Destination.home.rawValue
     @State private var appModel = MLXRAppModel()
     @State private var destination: Destination? = .home
+    @State private var isActivityPresented = false
 
     public init() {}
 
@@ -20,6 +21,18 @@ public struct MLXRMacAppRoot: View {
             if shouldShowBootstrapOverlay {
                 onboardingOverlay
                     .zIndex(200)
+                    .transition(.opacity)
+            }
+
+            if isActivityPresented {
+                activityOverlay
+                    .zIndex(180)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+
+            if appModel.hasPendingModelSetup {
+                starterModelSetupOverlay
+                    .zIndex(190)
                     .transition(.opacity)
             }
 
@@ -66,32 +79,6 @@ public struct MLXRMacAppRoot: View {
             if let newValue {
                 lastDestinationRaw = newValue
             }
-        }
-        .sheet(isPresented: Binding(
-            get: { appModel.hasPendingModelSetup },
-            set: { newValue in
-                if !newValue {
-                    appModel.completeModelSetup()
-                }
-            }
-        )) {
-            StarterModelSetupView(
-                catalog: appModel.catalog,
-                previews: appModel.modelPreviews,
-                onLoadPreview: { modelId in
-                    await appModel.loadPreviewIfNeeded(modelId: modelId)
-                },
-                onQueueInstall: { modelId in
-                    await appModel.queueModelInstall(modelId: modelId)
-                },
-                onComplete: {
-                    appModel.completeModelSetup()
-                },
-                onSkip: {
-                    appModel.completeModelSetup()
-                }
-            )
-            .interactiveDismissDisabled()
         }
     }
 
@@ -150,6 +137,10 @@ public struct MLXRMacAppRoot: View {
                 currentRunGroup: appModel.currentRunGroup,
                 currentRunGroupAssets: appModel.currentRunGroupAssets,
                 packs: appModel.packCatalog,
+                planningResult: appModel.studioPlanResult,
+                planningError: appModel.studioPlanError,
+                isPlanning: appModel.isPlanningStudio,
+                resolvedSettings: appModel.resolvedSettings(),
                 isBusy: appModel.studioWorkspace.task.category == .image ? appModel.isSubmittingImage : appModel.isSubmittingVideo,
                 error: appModel.studioWorkspace.task.category == .image ? appModel.imageError : appModel.videoError,
                 onDismissError: {
@@ -159,26 +150,23 @@ public struct MLXRMacAppRoot: View {
                         appModel.dismissVideoError()
                     }
                 },
+                onDismissPlanningError: {
+                    appModel.dismissStudioPlanError()
+                },
                 onResetDraft: {
                     appModel.resetStudioDraft()
                 },
                 onSyncWorkspaceDefaults: {
                     appModel.syncWorkspaceDefaultsForTask()
                 },
-                onPrepareRunContext: { task, title, sourceAssetIds, variationCount in
-                    let runGroup = appModel.createRunGroup(
+                onPlanWorkspace: {
+                    appModel.scheduleStudioPlan()
+                },
+                onPrepareRunContext: { task, title, sourceAssetIds in
+                    return appModel.prepareRunContext(
                         task: task,
-                        title: title.isEmpty ? task.title : title,
-                        sourceAssetIds: sourceAssetIds,
-                        variationCount: variationCount
-                    )
-                    return WorkflowContextMetadata(
-                        workspaceId: appModel.activeWorkspaceId,
-                        collectionId: nil,
-                        runGroupId: runGroup.id,
-                        sourceAssetIds: sourceAssetIds,
-                        intentLabel: task.title,
-                        presetId: appModel.studioWorkspace.aspectPreset.rawValue.lowercased()
+                        title: title,
+                        sourceAssetIds: sourceAssetIds
                     )
                 },
                 onImportAssets: { urls in
@@ -310,20 +298,50 @@ public struct MLXRMacAppRoot: View {
             }
             .buttonStyle(.plain)
 
-            ActivityCenterButton(
-                jobs: appModel.jobs,
+            ActivityRailButton(
+                runningCount: appModel.activityRunGroups.filter { $0.state == .running }.count + appModel.activeInstallCount,
+                queuedCount: appModel.activityRunGroups.filter { $0.state == .queued }.count,
+                hasFailures: appModel.activityRunGroups.contains { $0.state == .failed }
+            ) {
+                withAnimation(MLXRMotion.snappy) {
+                    isActivityPresented.toggle()
+                }
+            }
+        }
+    }
+
+    private var activityOverlay: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 120)
+            ActivityCenterSheet(
+                runGroups: appModel.activityRunGroups,
+                installOperations: appModel.installOperations,
                 activePhases: appModel.activeJobPhases,
-                onCancelJob: { jobId in
-                    await appModel.cancelJob(jobId: jobId)
+                onCancelRunGroup: { runGroupId in
+                    await appModel.cancelRunGroup(runGroupId: runGroupId)
+                },
+                onDismissRunGroup: { runGroupId in
+                    appModel.dismissActivityRunGroup(runGroupId)
                 },
                 onOpenLibrary: {
                     withAnimation(MLXRMotion.snappy) {
                         destination = .library
+                        isActivityPresented = false
                     }
                 },
-                presentation: .rail
+                onClose: {
+                    withAnimation(MLXRMotion.snappy) {
+                        isActivityPresented = false
+                    }
+                }
             )
+            .padding(.leading, 90)
+            .padding(.bottom, MLXRSpacing.lg)
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .allowsHitTesting(true)
     }
 
     private var runtimeRailTint: Color {
@@ -384,6 +402,32 @@ public struct MLXRMacAppRoot: View {
         }
     }
 
+    private var starterModelSetupOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+
+            StarterModelSetupView(
+                catalog: appModel.catalog,
+                previews: appModel.modelPreviews,
+                onLoadPreview: { modelId in
+                    await appModel.loadPreviewIfNeeded(modelId: modelId)
+                },
+                onQueueInstall: { modelId in
+                    await appModel.queueModelInstall(modelId: modelId)
+                },
+                onComplete: {
+                    appModel.completeModelSetup()
+                },
+                onSkip: {
+                    appModel.completeModelSetup()
+                }
+            )
+            .frame(maxWidth: 920, maxHeight: 760)
+            .padding(MLXRSpacing.xl)
+        }
+    }
+
     private var runtimeDeadBanner: some View {
         HStack(spacing: MLXRSpacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -427,7 +471,7 @@ public struct MLXRMacAppRoot: View {
             let count = appModel.activeInstallCount
             return count > 0 ? "\(count)" : nil
         case .library:
-            let count = appModel.recentRunGroups.filter { $0.state == .running || $0.state == .queued }.count
+            let count = appModel.activityRunGroups.filter { $0.state == .running || $0.state == .queued }.count
             return count > 0 ? "\(count)" : nil
         default:
             return nil

@@ -5,10 +5,13 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanReadiness,
     WorkflowReference,
+    WorkflowReferenceRequirement,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import family_extensions
 
@@ -107,6 +110,28 @@ class QwenImageWorkflowStrategy(FamilyWorkflowStrategy):
             extensions=extensions,
         )
 
+    def readiness(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+    ) -> WorkflowPlanReadiness:
+        requirements: list[WorkflowReferenceRequirement] = []
+        if plan.selected_task == "image.edit":
+            requirements.append(
+                WorkflowReferenceRequirement(
+                    kind="image",
+                    minimum_count=1,
+                    description="Choose at least one image to edit.",
+                )
+            )
+        return _readiness_for_plan(
+            capability=context.capability,
+            intent=intent,
+            plan=plan,
+            requirements=requirements,
+        )
+
 
 def _validate_references(references: list[WorkflowReference]) -> None:
     for reference in references:
@@ -149,3 +174,18 @@ def _lora_reference_payload(reference: WorkflowReference) -> dict[str, object]:
     if reference.metadata:
         payload["strength"] = float(reference.metadata.get("strength", 1.0))
     return payload
+
+
+def _readiness_for_plan(
+    *,
+    capability: CapabilityDescriptor,
+    intent: WorkflowIntent,
+    plan: WorkflowPlan,
+    requirements: list[WorkflowReferenceRequirement],
+) -> WorkflowPlanReadiness:
+    return build_plan_readiness(
+        capability=capability,
+        intent=intent,
+        plan=plan,
+        requirements=requirements,
+    )
