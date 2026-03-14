@@ -4,14 +4,22 @@ import unittest
 
 import mlx.core as mx
 import numpy as np
-import torch
-from diffusers import AutoencoderKLQwenImage as DiffusersAutoencoderKLQwenImage
 from mlxr.families.qwen_image._generation_backend.autoencoder import (
     QwenImageAutoencoderDecoder,
 )
 from mlxr.families.qwen_image._generation_backend.config import AutoencoderConfig
 
+from tests.optional_dependencies import HAS_QWEN_IMAGE_REFERENCE
 
+if HAS_QWEN_IMAGE_REFERENCE:
+    import torch
+    from diffusers import AutoencoderKLQwenImage as DiffusersAutoencoderKLQwenImage
+
+
+@unittest.skipUnless(
+    HAS_QWEN_IMAGE_REFERENCE,
+    "requires optional torch and diffusers reference dependencies",
+)
 class QwenImageAutoencoderParityTests(unittest.TestCase):
     def test_encode_matches_tiny_diffusers_forward(self) -> None:
         torch.manual_seed(0)

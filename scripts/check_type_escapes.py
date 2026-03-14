@@ -1,3 +1,5 @@
+"""Forbid broad type escapes in agent-facing runtime and test surfaces."""
+
 from __future__ import annotations
 
 import ast

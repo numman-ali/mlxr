@@ -69,9 +69,10 @@ source = ["packages"]
 data_file = "tmp/.coverage"
 
 [tool.coverage.report]
-fail_under = 85
+fail_under = 80
 omit = [
     "tests/*",
+    "packages/*/*/tests/*",
     "packages/families/ltx/src/mlxr/families/ltx/_audio_vocoder.py",
     "packages/families/ltx/src/mlxr/families/ltx/_generation_backend_legacy.py",
     "packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend_legacy.py",

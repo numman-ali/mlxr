@@ -1,3 +1,5 @@
+"""Run heavyweight official-style Qwen generation and editing evaluation passes."""
+
 from __future__ import annotations
 
 import argparse

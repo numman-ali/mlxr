@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Review generated images with Gemini and save strict XML-derived receipts."""
+
 from __future__ import annotations
 
 import argparse

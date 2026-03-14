@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import httpx
 
 os.environ.setdefault(
     "MLX_RUNTIME_HOME", str(Path(tempfile.gettempdir()) / "mlxr-test-import-home")
@@ -204,6 +208,37 @@ def make_supported_model_state(tmp_path: Path) -> RuntimeState:
     )
 
 
+def response_json_dict(response: httpx.Response) -> dict[str, object]:
+    payload = json.loads(response.content)
+    if not isinstance(payload, dict):
+        raise AssertionError(f"Expected JSON object response, got {type(payload)!r}")
+    return payload
+
+
+def expect_dict(value: object, *, field: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise AssertionError(f"Expected '{field}' to be a JSON object")
+    return value
+
+
+def expect_str(value: object, *, field: str) -> str:
+    if not isinstance(value, str):
+        raise AssertionError(f"Expected '{field}' to be a string")
+    return value
+
+
+def expect_int(value: object, *, field: str) -> int:
+    if not isinstance(value, int):
+        raise AssertionError(f"Expected '{field}' to be an integer")
+    return value
+
+
+def expect_list(value: object, *, field: str) -> list[object]:
+    if not isinstance(value, list):
+        raise AssertionError(f"Expected '{field}' to be a list")
+    return value
+
+
 class PhaseARuntimeTests(unittest.TestCase):
     def _wait_for_install_terminal_phase(
         self, client: TestClient, operation_id: str
@@ -213,12 +248,14 @@ class PhaseARuntimeTests(unittest.TestCase):
         while time.monotonic() < deadline:
             response = client.get(f"/v1/model-installs/{operation_id}")
             self.assertEqual(response.status_code, 200, response.text)
-            body = response.json()
+            body = response_json_dict(response)
             last_body = body
             if body["phase"] in {"completed", "failed", "cancelled"}:
                 return body
             time.sleep(0.05)
-        self.fail(f"Timed out waiting for install operation {operation_id}: {last_body}")
+        self.fail(
+            f"Timed out waiting for install operation {operation_id}: {last_body}"
+        )
 
     def test_source_id_is_deterministic(self) -> None:
         source_ref = SourceRef(
@@ -717,56 +754,75 @@ class PhaseARuntimeTests(unittest.TestCase):
                 "/v1/model-installs", json={"model_id": "ltx-2.3-fast-local"}
             )
             self.assertEqual(response.status_code, 200, response.text)
-            operation_id = response.json()["operation_id"]
+            response_body = response_json_dict(response)
+            operation_id = expect_str(
+                response_body["operation_id"], field="operation_id"
+            )
 
             final = self._wait_for_install_terminal_phase(client, operation_id)
             self.assertEqual(final["phase"], "completed", final)
-            self.assertEqual(final["result"]["status"], "installed")
+            final_result = expect_dict(final["result"], field="result")
+            self.assertEqual(final_result["status"], "installed")
 
             details_response = client.get("/v1/models/ltx-2.3-fast-local/details")
             self.assertEqual(details_response.status_code, 200, details_response.text)
-            details = details_response.json()
-            self.assertEqual(details["model"]["model_id"], "ltx-2.3-fast-local")
+            details = response_json_dict(details_response)
+            model_details = expect_dict(details["model"], field="model")
+            self.assertEqual(model_details["model_id"], "ltx-2.3-fast-local")
             self.assertEqual(
-                details["managed_storage_key"].split("/")[:3],
+                expect_str(
+                    details["managed_storage_key"], field="managed_storage_key"
+                ).split("/")[:3],
                 ["artifacts-portable", "ltx", "ltx-2.3-fast-local"],
             )
-            self.assertGreater(details["managed_size_bytes"], 0)
-            self.assertEqual(len(details["referenced_source_ids"]), 3)
+            self.assertGreater(
+                expect_int(details["managed_size_bytes"], field="managed_size_bytes"),
+                0,
+            )
+            self.assertEqual(
+                len(
+                    expect_list(
+                        details["referenced_source_ids"],
+                        field="referenced_source_ids",
+                    )
+                ),
+                3,
+            )
 
     def test_cancel_model_install_only_allows_queued_operations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             state = make_supported_model_state(Path(tmp_dir))
-            original_start = state.model_install_manager._ensure_worker_locked
-            state.model_install_manager._ensure_worker_locked = lambda: None
             client = TestClient(create_app(state))
-            try:
+            with patch.object(
+                state.model_install_manager, "_ensure_worker_locked", return_value=None
+            ):
                 enqueue_response = client.post(
                     "/v1/model-installs", json={"model_id": "ltx-2.3-fast-local"}
                 )
-            finally:
-                state.model_install_manager._ensure_worker_locked = original_start
 
             self.assertEqual(enqueue_response.status_code, 200, enqueue_response.text)
-            operation_id = enqueue_response.json()["operation_id"]
-            self.assertEqual(enqueue_response.json()["phase"], "queued")
+            enqueue_body = response_json_dict(enqueue_response)
+            operation_id = expect_str(
+                enqueue_body["operation_id"], field="operation_id"
+            )
+            self.assertEqual(enqueue_body["phase"], "queued")
 
             cancel_response = client.post(f"/v1/model-installs/{operation_id}/cancel")
             self.assertEqual(cancel_response.status_code, 200, cancel_response.text)
             self.assertEqual(cancel_response.json()["phase"], "cancelled")
 
-    def test_delete_model_rejects_active_install_and_preserves_shared_sources(self) -> None:
+    def test_delete_model_rejects_active_install_and_preserves_shared_sources(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             state = make_supported_model_state(Path(tmp_dir))
-            original_start = state.model_install_manager._ensure_worker_locked
-            state.model_install_manager._ensure_worker_locked = lambda: None
             client = TestClient(create_app(state))
-            try:
+            with patch.object(
+                state.model_install_manager, "_ensure_worker_locked", return_value=None
+            ):
                 queued_response = client.post(
                     "/v1/model-installs", json={"model_id": "ltx-2.3-fast-local"}
                 )
-            finally:
-                state.model_install_manager._ensure_worker_locked = original_start
 
             self.assertEqual(queued_response.status_code, 200, queued_response.text)
             blocked_delete = client.delete("/v1/models/ltx-2.3-fast-local")

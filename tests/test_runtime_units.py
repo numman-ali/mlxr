@@ -1788,6 +1788,9 @@ class RuntimeUnitTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.closed = False
 
+            def put(self, item: dict[str, object]) -> None:
+                del item
+
             def get(self, timeout: float | None = None) -> dict[str, object]:
                 del timeout
                 raise queue.Empty
@@ -1801,6 +1804,10 @@ class RuntimeUnitTests(unittest.TestCase):
 
             def put(self, item: dict[str, object]) -> None:
                 del item
+
+            def get(self, timeout: float | None = None) -> dict[str, object]:
+                del timeout
+                raise queue.Empty
 
             def close(self) -> None:
                 self.closed = True

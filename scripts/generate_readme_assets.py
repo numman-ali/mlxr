@@ -1,3 +1,5 @@
+"""Regenerate the README brand, poster, gallery, and reel assets."""
+
 from __future__ import annotations
 
 import subprocess

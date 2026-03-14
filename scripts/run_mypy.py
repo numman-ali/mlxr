@@ -1,3 +1,5 @@
+"""Run the repo mypy gate over packages first, then scripts and tests."""
+
 from __future__ import annotations
 
 import subprocess

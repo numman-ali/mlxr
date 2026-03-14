@@ -1,3 +1,5 @@
+"""Inspect or register a trusted local model bundle through the runtime API."""
+
 from __future__ import annotations
 
 import argparse

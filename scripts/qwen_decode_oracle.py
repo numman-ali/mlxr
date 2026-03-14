@@ -1,6 +1,9 @@
+"""Compare owned Qwen latent decoding against the official diffusers reference."""
+
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -9,8 +12,6 @@ from typing import Any, cast
 
 import mlx.core as mx
 import numpy as np
-import torch
-from diffusers import AutoencoderKLQwenImage
 from mlxr.families.qwen_image._generation_backend.runtime import (
     GenerationTrace,
     _RuntimeImageGenerator,
@@ -201,15 +202,18 @@ def _decode_with_diffusers(
     *,
     enable_tiling: bool,
 ) -> np.ndarray:
-    vae = AutoencoderKLQwenImage.from_pretrained(  # type: ignore[no-untyped-call]
+    torch_module = cast(Any, importlib.import_module("torch"))
+    diffusers_module = cast(Any, importlib.import_module("diffusers"))
+    autoencoder_cls = cast(Any, getattr(diffusers_module, "AutoencoderKLQwenImage"))
+    vae = autoencoder_cls.from_pretrained(
         str(vae_path),
-        torch_dtype=torch.float32,
+        torch_dtype=torch_module.float32,
         local_files_only=True,
     ).eval()
     if enable_tiling:
         vae.enable_tiling()
-    latents = torch.from_numpy(_to_numpy(denormalized_latents))
-    with torch.no_grad():
+    latents = torch_module.from_numpy(_to_numpy(denormalized_latents))
+    with torch_module.no_grad():
         decoded = vae.decode(latents, return_dict=False)[0]
     return cast(np.ndarray, decoded.detach().cpu().numpy())
 

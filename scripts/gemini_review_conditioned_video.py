@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Review conditioned videos against prompt and reference-image expectations."""
+
 from __future__ import annotations
 
 import argparse

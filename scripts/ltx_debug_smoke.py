@@ -1,3 +1,5 @@
+"""Run the heavyweight LTX debug and fidelity smoke workflow."""
+
 from __future__ import annotations
 
 import argparse

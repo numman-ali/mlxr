@@ -4,14 +4,18 @@ import unittest
 
 import mlx.core as mx
 import numpy as np
-import torch
 from mlxr.core.mlx_models import Qwen2VLVisionConfig, Qwen2VLVisionModel
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import (
-    Qwen2_5_VLVisionConfig,
-)
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VisionTransformerPretrainedModel,
-)
+
+from tests.optional_dependencies import HAS_QWEN_VISION_REFERENCE
+
+if HAS_QWEN_VISION_REFERENCE:
+    import torch
+    from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import (
+        Qwen2_5_VLVisionConfig,
+    )
+    from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
+        Qwen2_5_VisionTransformerPretrainedModel,
+    )
 
 
 class Qwen2VLVisionTests(unittest.TestCase):
@@ -37,6 +41,10 @@ class Qwen2VLVisionTests(unittest.TestCase):
 
         self.assertEqual(tuple(output.shape), (4, 64))
 
+    @unittest.skipUnless(
+        HAS_QWEN_VISION_REFERENCE,
+        "requires optional torch and transformers reference dependencies",
+    )
     def test_model_matches_tiny_official_qwen25_vl_vision_forward(self) -> None:
         config = Qwen2_5_VLVisionConfig(
             depth=2,

@@ -1,3 +1,5 @@
+"""Repo development harness for formatting, tests, builds, logs, and Mac app launch."""
+
 from __future__ import annotations
 
 import argparse
@@ -7,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -131,9 +134,7 @@ def cmd_mac_app(
     )
     built_executable = bin_path / MAC_APP_NAME
     if not built_executable.exists():
-        raise FileNotFoundError(
-            f"Built executable was not found at {built_executable}"
-        )
+        raise FileNotFoundError(f"Built executable was not found at {built_executable}")
 
     bundle_root = (
         Path(bundle_dir).expanduser()
@@ -147,7 +148,26 @@ def cmd_mac_app(
     launcher_path = macos_dir / MAC_APP_NAME
     bundled_binary = resources_dir / f"{MAC_APP_NAME}-bin"
 
+    if quit_existing:
+        _terminate_dev_mac_app(
+            app_bundle=app_bundle,
+            launcher_path=launcher_path,
+            bundled_binary=bundled_binary,
+        )
+
     if app_bundle.exists():
+        if _is_dev_mac_app_running(app_bundle):
+            print(
+                "MLXRMacApp is already running from the staged dev bundle. "
+                "Keeping the existing app instance; rerun with --quit-existing "
+                "to relaunch the updated binary."
+            )
+            print(app_bundle)
+            print(f"Dev app bundle ready at {app_bundle}")
+            print("Peekaboo:")
+            print(f"  peekaboo app switch --to {MAC_APP_NAME}")
+            print(f"  peekaboo see --app {MAC_APP_NAME} --json --annotate")
+            return
         shutil.rmtree(app_bundle)
     resources_dir.mkdir(parents=True, exist_ok=True)
     macos_dir.mkdir(parents=True, exist_ok=True)
@@ -166,9 +186,7 @@ def cmd_mac_app(
         or os.environ.get("MLXR_MAC_APP_PYTHON")
         or str(REPO_ROOT / ".venv" / "bin" / "python")
     )
-    uds_path_value = (
-        uds_path_override or os.environ.get("MLXR_MAC_APP_UDS_PATH") or ""
-    )
+    uds_path_value = uds_path_override or os.environ.get("MLXR_MAC_APP_UDS_PATH") or ""
 
     launcher_script = _mac_app_launcher_script(
         repo_root=str(REPO_ROOT),
@@ -182,6 +200,7 @@ def cmd_mac_app(
 
     info_plist = {
         "CFBundleDevelopmentRegion": "en",
+        "CFBundleDisplayName": "MLXR",
         "CFBundleExecutable": MAC_APP_NAME,
         "CFBundleIdentifier": MAC_APP_BUNDLE_ID,
         "CFBundleInfoDictionaryVersion": "6.0",
@@ -198,24 +217,8 @@ def cmd_mac_app(
         plistlib.dump(info_plist, handle, sort_keys=False)
     (contents_dir / "PkgInfo").write_text("APPL????", encoding="ascii")
 
-    if quit_existing:
-        subprocess.run(
-            ["pkill", "-f", str(launcher_path)],
-            check=False,
-            cwd=REPO_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        subprocess.run(
-            ["pkill", "-f", str(built_executable)],
-            check=False,
-            cwd=REPO_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
     if launch:
-        run_command(["open", "-na", str(app_bundle)])
+        run_command(["open", "-a", str(app_bundle)])
 
     if print_path or not launch:
         print(app_bundle)
@@ -224,6 +227,58 @@ def cmd_mac_app(
     print("Peekaboo:")
     print(f"  peekaboo app switch --to {MAC_APP_NAME}")
     print(f"  peekaboo see --app {MAC_APP_NAME} --json --annotate")
+
+
+def _is_dev_mac_app_running(app_bundle: Path) -> bool:
+    result = subprocess.run(
+        ["pgrep", "-f", str(app_bundle)],
+        check=False,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _terminate_dev_mac_app(
+    *,
+    app_bundle: Path,
+    launcher_path: Path,
+    bundled_binary: Path,
+) -> None:
+    subprocess.run(
+        [
+            "osascript",
+            "-e",
+            f'tell application id "{MAC_APP_BUNDLE_ID}" to quit',
+        ],
+        check=False,
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    for pattern in (str(app_bundle), str(launcher_path), str(bundled_binary)):
+        subprocess.run(
+            ["pkill", "-f", pattern],
+            check=False,
+            cwd=REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    for _ in range(20):
+        if not _is_dev_mac_app_running(app_bundle):
+            return
+        time.sleep(0.1)
+
+    subprocess.run(
+        ["pkill", "-9", "-f", str(app_bundle)],
+        check=False,
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def _mac_app_launcher_script(

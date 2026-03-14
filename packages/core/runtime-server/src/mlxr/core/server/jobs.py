@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from multiprocessing import get_context
 from pathlib import Path
 from queue import Queue
-from typing import Protocol
+from typing import Callable, Protocol
 
 from mlxr.core.runtime import RuntimeCatalog
 from mlxr.core.schemas import (
@@ -51,17 +51,66 @@ class ManagedProcess(Protocol):
     def exitcode(self) -> int | None: ...
 
 
-class ProcessContext(Protocol):
-    def Queue(self) -> ManagedMessageQueue: ...
+class SpawnQueueLike(Protocol):
+    def put(self, item: WorkerMessage) -> None: ...
 
-    def Process(self, target: object, kwargs: dict[str, object]) -> ManagedProcess: ...
+    def get(self, block: bool = True, timeout: float | None = None) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class ProcessContext(Protocol):
+    def Queue(self, maxsize: int = 0) -> ManagedMessageQueue: ...
+
+    def Process(
+        self, target: Callable[..., object], kwargs: dict[str, object]
+    ) -> ManagedProcess: ...
 
 
 TERMINAL_STATES = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 HEAVY_JOB_SCHEDULER_CLASSES = {"media_video_dit"}
 
 
-class ThreadMessageQueue(queue.Queue[dict[str, object]]):
+class SpawnManagedQueue:
+    def __init__(self, queue_obj: SpawnQueueLike) -> None:
+        self._queue = queue_obj
+
+    def put(self, item: WorkerMessage) -> None:
+        self._queue.put(item)
+
+    def get(self, timeout: float | None = None) -> WorkerMessage:
+        item = self._queue.get(timeout=timeout)
+        if not isinstance(item, dict):
+            raise TypeError("Worker queue emitted a non-dictionary message")
+        return item
+
+    def close(self) -> None:
+        self._queue.close()
+
+
+class SpawnProcessContext:
+    def __init__(self) -> None:
+        self._context = get_context("spawn")
+
+    def Queue(self, maxsize: int = 0) -> SpawnManagedQueue:
+        return SpawnManagedQueue(self._context.Queue(maxsize=maxsize))
+
+    def Process(
+        self, target: Callable[..., object], kwargs: dict[str, object]
+    ) -> ManagedProcess:
+        return self._context.Process(target=target, kwargs=kwargs)
+
+
+class ThreadMessageQueue:
+    def __init__(self, maxsize: int = 0) -> None:
+        self._queue: queue.Queue[WorkerMessage] = queue.Queue(maxsize=maxsize)
+
+    def put(self, item: WorkerMessage) -> None:
+        self._queue.put(item)
+
+    def get(self, timeout: float | None = None) -> WorkerMessage:
+        return self._queue.get(timeout=timeout)
+
     def close(self) -> None:
         return None
 
@@ -70,11 +119,9 @@ class ThreadManagedProcess:
     def __init__(
         self,
         *,
-        target: object,
+        target: Callable[..., object],
         kwargs: dict[str, object],
     ) -> None:
-        if not callable(target):
-            raise TypeError("ThreadManagedProcess target must be callable")
         self._target = target
         self._kwargs = kwargs
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -102,12 +149,12 @@ class ThreadManagedProcess:
 
 
 class ThreadProcessContext:
-    def Queue(self) -> ThreadMessageQueue:
-        return ThreadMessageQueue()
+    def Queue(self, maxsize: int = 0) -> ThreadMessageQueue:
+        return ThreadMessageQueue(maxsize=maxsize)
 
     def Process(
         self,
-        target: object,
+        target: Callable[..., object],
         kwargs: dict[str, object],
     ) -> ThreadManagedProcess:
         return ThreadManagedProcess(target=target, kwargs=kwargs)
@@ -754,7 +801,7 @@ def _collect_input_handles(value: object) -> list[str]:
 def _job_process_context(mode: str = "spawn") -> ProcessContext:
     normalized = mode.strip().lower()
     if normalized == "spawn":
-        return get_context("spawn")
+        return SpawnProcessContext()
     if normalized == "thread":
         return ThreadProcessContext()
     raise RuntimeError("Unsupported job execution mode; expected 'spawn' or 'thread'")

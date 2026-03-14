@@ -1,3 +1,5 @@
+"""Discover and run repo-level and package-local unittest suites."""
+
 from __future__ import annotations
 
 import argparse

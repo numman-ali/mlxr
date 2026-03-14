@@ -4,11 +4,15 @@ import unittest
 
 import mlx.core as mx
 import numpy as np
-import torch
 from mlx.utils import tree_flatten
 from mlxr.core.mlx_models import Qwen2TextConfig, Qwen2TextModel
 from mlxr.core.mlx_models.qwen2_text import MLP, RMSNorm, _attention_mask
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLTextModel
+
+from tests.optional_dependencies import HAS_QWEN_TEXT_REFERENCE
+
+if HAS_QWEN_TEXT_REFERENCE:
+    import torch
+    from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLTextModel
 
 
 class Qwen2TextTests(unittest.TestCase):
@@ -123,6 +127,10 @@ class Qwen2TextTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(np.asarray(mask), expected)
 
+    @unittest.skipUnless(
+        HAS_QWEN_TEXT_REFERENCE,
+        "requires optional torch and transformers reference dependencies",
+    )
     def test_model_matches_tiny_official_qwen25_vl_text_forward(self) -> None:
         config = Qwen2TextConfig(
             vocab_size=128,
@@ -175,6 +183,10 @@ class Qwen2TextTests(unittest.TestCase):
             rtol=1.0e-2,
         )
 
+    @unittest.skipUnless(
+        HAS_QWEN_TEXT_REFERENCE,
+        "requires optional torch and transformers reference dependencies",
+    )
     def test_model_matches_tiny_official_qwen25_vl_text_with_multimodal_positions(
         self,
     ) -> None:

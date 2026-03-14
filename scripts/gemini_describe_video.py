@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Review local videos with Gemini and emit structured validation receipts."""
+
 from __future__ import annotations
 
 import argparse

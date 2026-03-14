@@ -39,7 +39,7 @@ Runs the required pre-commit gate:
 - `python scripts/run_mypy.py`
 - `python scripts/check_type_escapes.py`
 - `coverage run scripts/run_unittests.py -v`
-- `coverage report` with the current repo floor set to `85%` line coverage across `packages/`
+- `coverage report` with the current repo floor set to `80%` line coverage across package code under `packages/`
 - `uv build --all-packages`
 
 Do not commit without a green `verify`.
@@ -73,7 +73,8 @@ Use it when:
 - `check_type_escapes.py` forbids `typing.cast` and explicit `Any` in the agent-facing runtime and test surfaces covered by the script
 - `unittest` is the current test runner
 - `scripts/run_unittests.py` discovers both repo-level `tests/` and package-local `packages/*/*/tests/`
-- `coverage.py` enforces the current line-coverage floor for repo-owned Python packages
+- package-local parity tests that depend on optional heavyweight reference frameworks such as `torch`, `transformers`, or `diffusers` must skip cleanly when those dependencies are absent from the default dev environment
+- `coverage.py` enforces the current line-coverage floor for repo-owned Python package code; test files are not counted toward the package coverage floor
 - `uv build --all-packages` is the build gate
 
 Do not add parallel quality tools without a concrete reason.

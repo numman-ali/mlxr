@@ -1,12 +1,24 @@
+"""Register a trusted local bundle by linking payload files into a runtime home."""
+
 from __future__ import annotations
 
 import argparse
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 
-from mlxr.core.runtime import ConversionPlan, ConversionSource, RuntimeHome
+from mlxr.core.runtime import (
+    ArtifactPayloadItem,
+    ConversionPlan,
+    ConversionSource,
+    RuntimeHome,
+)
 from mlxr.core.runtime.manifests import write_json_atomic
-from mlxr.core.schemas import ModelRecord, SourceRef, SourceRegistrationRecord
+from mlxr.core.schemas import (
+    ModelRecord,
+    SourceRef,
+    SourceRegistrationRecord,
+)
 from mlxr.core.server.registry import default_runtime_registry
 
 
@@ -57,7 +69,7 @@ def _link_payload_items(
     family: str,
     model_id: str,
     artifact_digest: str,
-    payload_items,
+    payload_items: Sequence[ArtifactPayloadItem],
 ) -> None:
     artifact_root = runtime_home.artifact_dir(family, model_id, artifact_digest)
     artifact_root.mkdir(parents=True, exist_ok=True)

@@ -1,3 +1,5 @@
+"""Clone an MLXR runtime home by reusing installed artifacts and manifests."""
+
 from __future__ import annotations
 
 import argparse

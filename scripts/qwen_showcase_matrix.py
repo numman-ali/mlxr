@@ -1,3 +1,5 @@
+"""Run a focused Qwen step/profile comparison matrix for showcase tuning."""
+
 from __future__ import annotations
 
 import csv

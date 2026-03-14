@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate, review, and promote the repo-owned LTX showcase set."""
+
 from __future__ import annotations
 
 import argparse

@@ -4,10 +4,6 @@ import unittest
 
 import mlx.core as mx
 import numpy as np
-import torch
-from diffusers import (
-    QwenImageTransformer2DModel as DiffusersQwenImageTransformer2DModel,
-)
 from mlxr.families.qwen_image._generation_backend.config import (
     QwenImageTransformerConfig,
 )
@@ -15,7 +11,19 @@ from mlxr.families.qwen_image._generation_backend.transformer import (
     QwenImageTransformer2DModel,
 )
 
+from tests.optional_dependencies import HAS_QWEN_IMAGE_REFERENCE
 
+if HAS_QWEN_IMAGE_REFERENCE:
+    import torch
+    from diffusers import (
+        QwenImageTransformer2DModel as DiffusersQwenImageTransformer2DModel,
+    )
+
+
+@unittest.skipUnless(
+    HAS_QWEN_IMAGE_REFERENCE,
+    "requires optional torch and diffusers reference dependencies",
+)
 class QwenImageTransformerParityTests(unittest.TestCase):
     def test_transformer_matches_tiny_diffusers_forward(self) -> None:
         torch.manual_seed(0)
