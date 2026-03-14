@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from types import ModuleType
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _load_module() -> ModuleType:
-    script_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "ltx_showcase_generate.py"
-    )
+    script_path = REPO_ROOT / "scripts" / "ltx_showcase_generate.py"
     spec = importlib.util.spec_from_file_location("ltx_showcase_generate", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load scripts/ltx_showcase_generate.py")

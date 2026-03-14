@@ -11,11 +11,11 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _load_script_module() -> types.ModuleType:
-    script_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "gemini_review_image.py"
-    )
+    script_path = REPO_ROOT / "scripts" / "gemini_review_image.py"
     spec = importlib.util.spec_from_file_location("gemini_review_image", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load scripts/gemini_review_image.py")

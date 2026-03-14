@@ -1,3 +1,6 @@
+// Transitional migration seam. Do not extend this canvas for new product work;
+// prefer the project-first library detail and modern result surfaces.
+
 import AVKit
 import MLXRAppDomain
 import MLXRDesignSystem

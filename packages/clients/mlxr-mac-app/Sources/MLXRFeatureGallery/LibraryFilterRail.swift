@@ -1,3 +1,6 @@
+// Transitional migration seam. Do not extend this rail for new product work;
+// prefer the compact project-first library browser surfaces.
+
 import MLXRAppDomain
 import MLXRDesignSystem
 import SwiftUI

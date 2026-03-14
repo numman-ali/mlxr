@@ -6,7 +6,6 @@ import math
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import mlx.core as mx
 import numpy as np
@@ -1516,8 +1515,8 @@ def _embedding_tuple(values: tuple[object, ...]) -> tuple[mx.array, ...]:
         if isinstance(value, np.ndarray):
             embeddings.append(mx.array(value))
             continue
-        if hasattr(value, "shape") and hasattr(value, "dtype"):
-            embeddings.append(cast(mx.array, value))
+        if isinstance(value, mx.array):
+            embeddings.append(value)
             continue
         raise ValueError("Prompt embeddings must be MLX arrays or numpy arrays")
     return tuple(embeddings)

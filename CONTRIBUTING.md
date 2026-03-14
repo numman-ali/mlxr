@@ -9,14 +9,16 @@ is real, what is merely implemented, and what is still planned.
 
 Read these first:
 
-- [README.md](/Users/numman/Repos/mlxr/README.md)
-- [current-status.md](/Users/numman/Repos/mlxr/docs/current-status.md)
-- [roadmap.md](/Users/numman/Repos/mlxr/docs/roadmap.md)
-- [AGENTS.md](/Users/numman/Repos/mlxr/AGENTS.md)
-- [agent-native-development.md](/Users/numman/Repos/mlxr/docs/agent-native-development.md)
+- [README.md](README.md)
+- [current-status.md](docs/current-status.md)
+- [roadmap.md](docs/roadmap.md)
+- [AGENTS.md](AGENTS.md)
+- [agent-native-development.md](docs/agent-native-development.md)
 
 If your change is family-specific, also read the relevant family matrix or
-family candidate doc under [docs/research](/Users/numman/Repos/mlxr/docs/research).
+family notes under [docs/families/README.md](docs/families/README.md). If the
+change is still in flight, also check the matching execution notes under
+[docs/working/](docs/working/).
 
 ## What Good Contributions Look Like
 
@@ -50,7 +52,7 @@ uv run python scripts/dev.py logs
 uv run pre-commit run --all-files
 ```
 
-`verify` is the main repo gate.
+`pre-commit` is fast local hygiene. `verify` is the real repo gate.
 
 ## Contribution Flow
 
@@ -79,7 +81,7 @@ you should either:
 - explicitly mark the claim as a hypothesis or planned work
 
 Temporary receipts belong under `tmp/`. Durable conclusions belong in tracked
-docs and, when appropriate, [MEMORY.md](/Users/numman/Repos/mlxr/MEMORY.md).
+docs and, when appropriate, [MEMORY.md](MEMORY.md).
 
 ## Pull Request Checklist
 

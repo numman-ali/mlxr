@@ -7,8 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TARGET_ROOTS = (
+    Path("packages/core/runtime-workflows"),
     Path("packages/core/runtime-server"),
+    Path("packages/families/flux2"),
     Path("packages/families/ltx"),
+    Path("packages/families/qwen-image"),
+    Path("packages/families/z-image"),
+    Path("packages/clients/runtime-cli"),
     Path("tests"),
 )
 

@@ -46,6 +46,7 @@ packages/
 
 tests/
   integration/...
+  tooling/...
   e2e/...
   fixtures/...
   runtime_test_support.py
@@ -63,6 +64,7 @@ That means:
 Root-level `tests/` should be reserved for:
 
 - integration tests spanning multiple packages
+- tooling and script coverage for repo-owned automation
 - end-to-end and workflow tests
 - shared fixtures and test support
 - legacy files that have not been migrated yet
@@ -94,9 +96,12 @@ Examples for this repo:
 - LTX generation helpers, audio processing, VAE loaders, prompt components:
   package-local unit tests under `packages/families/ltx/tests/unit/...`
 - runtime server request/response contracts and workflow HTTP behavior:
-  root integration tests under `tests/`
+  root integration tests under `tests/integration/`
 - CLI end-to-end generation behavior against the daemon:
-  root integration tests under `tests/`
+  root integration tests under `tests/integration/`
+- repo-owned script coverage for Gemini helpers, showcase runners, and runtime
+  home utilities:
+  `tests/tooling/`
 - shared image bytes, prompt scenarios, or reusable helper code:
   `tests/fixtures/` and `tests/runtime_test_support.py`
 

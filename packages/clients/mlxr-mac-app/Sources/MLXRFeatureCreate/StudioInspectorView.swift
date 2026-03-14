@@ -1,3 +1,6 @@
+// Transitional migration seam. Do not extend this inspector for new product
+// work; prefer the shell-mounted composer and runtime-led tune surfaces.
+
 import MLXRAppDomain
 import MLXRDesignSystem
 import SwiftUI

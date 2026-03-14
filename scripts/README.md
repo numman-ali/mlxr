@@ -4,12 +4,20 @@ This directory is reserved for project-owned automation and helper scripts.
 
 Keep scripts here only if they are part of this repo's actual implementation workflow.
 
+When adding a new script, keep two things obvious:
+
+- what class of work it belongs to
+- whether it is part of the default development loop or specialist tooling
+
+The flat namespace is intentional for now, so the README and top-of-file
+docstring need to do the classification work clearly.
+
 ## Core Harness
 
 - `dev.py`: the local development harness used by Codex for fix, verify, build, log inspection, and staged Mac app launch loops
 - `run_mypy.py`: the repo-owned mypy gate over packages, tests, and scripts
 - `run_unittests.py`: discovers both repo-level `tests/` and package-local `packages/*/*/tests/`
-- `check_type_escapes.py`: forbids broad type escapes in the covered runtime and test surfaces
+- `check_type_escapes.py`: forbids broad type escapes in the covered runtime and test surfaces; the current enforced scope is `runtime-server`, `runtime-workflows`, `flux2`, `ltx`, `qwen-image`, `z-image`, `runtime-cli`, and repo-level tests
 
 ## Runtime And Packaging Utilities
 
@@ -32,3 +40,12 @@ Keep scripts here only if they are part of this repo's actual implementation wor
 ## Repo Asset Generation
 
 - `generate_readme_assets.py`: regenerate the README logo, hero, showcase grid, and promo reel assets
+
+## Placement Rules
+
+- default dev-loop and repo-gate scripts belong in `Core Harness`
+- trusted local runtime utilities should stay narrow and explicit about side
+  effects
+- validation and showcase tools should stay clearly specialist and must not
+  quietly become the public product surface
+- any new script should be documented here in the same change that adds it

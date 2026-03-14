@@ -59,6 +59,29 @@ The app is intentionally:
   - feature surfaces
   - app shell
 
+## Canonical Extension Points
+
+If you are extending the app, prefer the current product path:
+
+- shell and routing in `MLXRAppShell`
+- shared draft and composer state in the app-domain and shell layers
+- project-first library and browser surfaces over the older gallery-era rails
+- runtime-led planning and submission through the runtime bridge
+
+Do not default to extending migration-only seams just because they still
+compile.
+
+Current migration-only examples:
+
+- `StudioScreen`
+- `StudioSidebarView`
+- `StudioInspectorView`
+- `StudioCanvasView`
+- `LibraryFilterRail`
+
+Those files are still present to support the cutover, but they are not the
+default home for new feature work.
+
 ## Development
 
 From the repo root:

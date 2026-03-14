@@ -17,9 +17,11 @@ from unittest.mock import Mock
 
 import numpy as np
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _load_script_module() -> types.ModuleType:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "ltx_debug_smoke.py"
+    script_path = REPO_ROOT / "scripts" / "ltx_debug_smoke.py"
     spec = importlib.util.spec_from_file_location("ltx_debug_smoke", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load scripts/ltx_debug_smoke.py")

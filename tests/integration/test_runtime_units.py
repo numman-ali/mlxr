@@ -63,6 +63,8 @@ from tests.runtime_test_support import (
     patched_ltx_video_generator,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class RuntimeUnitTests(unittest.TestCase):
     def _artifactized_portable_artifact(
@@ -854,12 +856,7 @@ class RuntimeUnitTests(unittest.TestCase):
                 backend._validate_reference_backend_compatibility(checkpoint_path)
 
     def test_ltx_generation_reference_import_root_points_to_repo_checkout(self) -> None:
-        expected = (
-            Path(__file__).resolve().parents[1]
-            / "references"
-            / "ecosystem"
-            / "mlx-video"
-        )
+        expected = REPO_ROOT / "references" / "ecosystem" / "mlx-video"
         self.assertEqual(_REFERENCE_MLX_VIDEO_ROOT, expected)
         self.assertTrue(_REFERENCE_MLX_VIDEO_ROOT.is_dir())
 

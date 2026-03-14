@@ -24,11 +24,11 @@ from mlxr.core.schemas import (
     SourceRegistrationRecord,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _load_script_module() -> types.ModuleType:
-    script_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "runtime_clone_home.py"
-    )
+    script_path = REPO_ROOT / "scripts" / "runtime_clone_home.py"
     spec = importlib.util.spec_from_file_location("runtime_clone_home", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to load scripts/runtime_clone_home.py")

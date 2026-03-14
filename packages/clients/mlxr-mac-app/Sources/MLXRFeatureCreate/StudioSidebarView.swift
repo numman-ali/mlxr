@@ -1,3 +1,6 @@
+// Transitional migration seam. Do not extend this sidebar for new product
+// work; prefer the shell-mounted composer and project-first library surfaces.
+
 import MLXRAppDomain
 import MLXRDesignSystem
 import SwiftUI
