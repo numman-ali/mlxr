@@ -10,7 +10,7 @@ struct LibraryViewerSheet: View {
     let collections: [CollectionRecord]
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onRemoveImportedAsset: @Sendable (String) async -> Void
-    let onOpenInStudio: (StudioOpenRequest) -> Void
+    let onSeedComposer: (ComposerSeedRequest) -> Void
     let onToggleFavorite: (String) -> Void
     let onToggleCollection: (String, String) -> Void
     let onShowAsset: (LibraryAsset) -> Void
@@ -161,8 +161,9 @@ struct LibraryViewerSheet: View {
             HStack(spacing: MLXRSpacing.sm) {
                 if asset.isImage {
                     Button("Edit") {
-                        onOpenInStudio(
-                            StudioOpenRequest(
+                        onSeedComposer(
+                            ComposerSeedRequest(
+                                workspaceId: asset.workspaceId,
                                 task: .imageEdit,
                                 prompt: asset.prompt,
                                 focusedAssetId: asset.id,
@@ -173,8 +174,9 @@ struct LibraryViewerSheet: View {
                     .buttonStyle(.borderedProminent)
 
                     Button("Animate") {
-                        onOpenInStudio(
-                            StudioOpenRequest(
+                        onSeedComposer(
+                            ComposerSeedRequest(
+                                workspaceId: asset.workspaceId,
                                 task: .videoConditionImage,
                                 prompt: asset.prompt,
                                 focusedAssetId: asset.id,
@@ -185,8 +187,9 @@ struct LibraryViewerSheet: View {
                     .buttonStyle(.bordered)
                 } else if asset.isVideo {
                     Button("Guide") {
-                        onOpenInStudio(
-                            StudioOpenRequest(
+                        onSeedComposer(
+                            ComposerSeedRequest(
+                                workspaceId: asset.workspaceId,
                                 task: .videoConditionVideo,
                                 prompt: asset.prompt,
                                 focusedAssetId: asset.id,
@@ -197,8 +200,9 @@ struct LibraryViewerSheet: View {
                     .buttonStyle(.borderedProminent)
 
                     Button("Retake") {
-                        onOpenInStudio(
-                            StudioOpenRequest(
+                        onSeedComposer(
+                            ComposerSeedRequest(
+                                workspaceId: asset.workspaceId,
                                 task: .videoRetake,
                                 prompt: asset.prompt,
                                 focusedAssetId: asset.id,
@@ -209,8 +213,9 @@ struct LibraryViewerSheet: View {
                     .buttonStyle(.bordered)
                 } else if asset.isAudio {
                     Button("Use as audio guide") {
-                        onOpenInStudio(
-                            StudioOpenRequest(
+                        onSeedComposer(
+                            ComposerSeedRequest(
+                                workspaceId: asset.workspaceId,
                                 task: .videoConditionAudio,
                                 prompt: asset.prompt,
                                 focusedAssetId: asset.id,
@@ -230,8 +235,9 @@ struct LibraryViewerSheet: View {
                         } else {
                             .imageEdit
                         }
-                    onOpenInStudio(
-                        StudioOpenRequest(
+                    onSeedComposer(
+                        ComposerSeedRequest(
+                            workspaceId: asset.workspaceId,
                             task: task,
                             prompt: asset.prompt,
                             focusedAssetId: asset.id,

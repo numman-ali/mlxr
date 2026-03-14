@@ -14,7 +14,7 @@ public struct LibraryWorkspaceView: View {
     private let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     private let onImportAssets: @Sendable ([URL]) async -> [ImportedAssetRecord]
     private let onRemoveImportedAsset: @Sendable (String) async -> Void
-    private let onOpenInStudio: (StudioOpenRequest) -> Void
+    private let onSeedComposer: (ComposerSeedRequest) -> Void
     private let onSelectWorkspace: (String) -> Void
     private let onCreateWorkspace: () -> WorkspaceRecord
     private let onToggleFavorite: (String) -> Void
@@ -47,7 +47,7 @@ public struct LibraryWorkspaceView: View {
         onMaterialize: @escaping @Sendable (LibraryAsset) async -> URL?,
         onImportAssets: @escaping @Sendable ([URL]) async -> [ImportedAssetRecord],
         onRemoveImportedAsset: @escaping @Sendable (String) async -> Void,
-        onOpenInStudio: @escaping (StudioOpenRequest) -> Void,
+        onSeedComposer: @escaping (ComposerSeedRequest) -> Void,
         onSelectWorkspace: @escaping (String) -> Void,
         onCreateWorkspace: @escaping () -> WorkspaceRecord,
         onToggleFavorite: @escaping (String) -> Void,
@@ -64,7 +64,7 @@ public struct LibraryWorkspaceView: View {
         self.onMaterialize = onMaterialize
         self.onImportAssets = onImportAssets
         self.onRemoveImportedAsset = onRemoveImportedAsset
-        self.onOpenInStudio = onOpenInStudio
+        self.onSeedComposer = onSeedComposer
         self.onSelectWorkspace = onSelectWorkspace
         self.onCreateWorkspace = onCreateWorkspace
         self.onToggleFavorite = onToggleFavorite
@@ -418,7 +418,11 @@ public struct LibraryWorkspaceView: View {
                 collections: collections,
                 onMaterialize: onMaterialize,
                 onRemoveImportedAsset: onRemoveImportedAsset,
-                onOpenInStudio: onOpenInStudio,
+                onSeedComposer: { request in
+                    onSeedComposer(request)
+                    selectPrimaryAsset(for: request.focusedAssetId ?? asset.id)
+                    viewerAssetId = nil
+                },
                 onToggleFavorite: onToggleFavorite,
                 onToggleCollection: onToggleCollection,
                 onShowAsset: { nextAsset in

@@ -1,7 +1,8 @@
 import Foundation
 
-public struct StudioOpenRequest: Identifiable, Sendable, Hashable {
+public struct ComposerSeedRequest: Identifiable, Sendable, Hashable {
     public let id: UUID
+    public var workspaceId: String?
     public var task: ProductTask
     public var prompt: String?
     public var focusedAssetId: String?
@@ -9,12 +10,14 @@ public struct StudioOpenRequest: Identifiable, Sendable, Hashable {
 
     public init(
         id: UUID = UUID(),
+        workspaceId: String? = nil,
         task: ProductTask,
         prompt: String? = nil,
         focusedAssetId: String? = nil,
         referenceAssetIds: [String] = []
     ) {
         self.id = id
+        self.workspaceId = workspaceId
         self.task = task
         self.prompt = prompt
         self.focusedAssetId = focusedAssetId

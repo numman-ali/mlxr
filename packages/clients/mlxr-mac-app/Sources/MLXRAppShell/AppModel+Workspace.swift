@@ -146,30 +146,32 @@ extension MLXRAppModel {
         }
     }
 
-    public func openStudio(
-        task: ProductTask,
-        focusedAssetId: String? = nil,
-        referenceAssetIds: [String] = [],
-        prompt: String? = nil
-    ) {
+    public func seedComposer(with request: ComposerSeedRequest) {
         ensureWorkspaceExists()
-        studioWorkspace.task = task
-        if let resolvedPrompt = prompt ?? focusedAssetId.flatMap({ assetId in
+        if let workspaceId = request.workspaceId, workspaces.contains(where: { $0.id == workspaceId }) {
+            selectWorkspace(workspaceId)
+        }
+        studioWorkspace.workspaceId = activeWorkspaceId
+        studioWorkspace.task = request.task
+        if let resolvedPrompt = request.prompt ?? request.focusedAssetId.flatMap({ assetId in
             libraryAssets.first(where: { $0.id == assetId })?.prompt
         }), !resolvedPrompt.isEmpty {
             studioWorkspace.prompt = resolvedPrompt
         }
-        if let focusedAssetId {
+        if let focusedAssetId = request.focusedAssetId {
             studioWorkspace.selectedAssetId = focusedAssetId
             studioWorkspace.preferredDisplayedAssetId = focusedAssetId
             markAssetUsed(focusedAssetId)
+        } else {
+            studioWorkspace.selectedAssetId = nil
+            studioWorkspace.preferredDisplayedAssetId = nil
         }
-        if !referenceAssetIds.isEmpty {
-            studioWorkspace.referenceAssetIds = referenceAssetIds
-            referenceAssetIds.forEach(markAssetUsed)
+        studioWorkspace.referenceAssetIds = request.referenceAssetIds
+        if !request.referenceAssetIds.isEmpty {
+            request.referenceAssetIds.forEach(markAssetUsed)
         }
         if studioWorkspace.selectedModelId.isEmpty {
-            studioWorkspace.selectedModelId = preferredDefaultModelId(for: task) ?? ""
+            studioWorkspace.selectedModelId = preferredDefaultModelId(for: request.task) ?? ""
         }
         syncWorkspaceDefaultsForTask()
     }
@@ -254,7 +256,7 @@ extension MLXRAppModel {
         sourceAssetIds: [String]
     ) -> WorkflowContextMetadata {
         WorkflowContextMetadata(
-            workspaceId: activeWorkspaceId,
+            workspaceId: studioWorkspace.workspaceId,
             collectionId: nil,
             runGroupId: UUID().uuidString,
             sourceAssetIds: sourceAssetIds,
@@ -310,7 +312,7 @@ extension MLXRAppModel {
     }
 
     public var currentStudioReferenceRequirements: [WorkflowReferenceRequirement] {
-        studioPlanResult?.readiness.referenceRequirements ?? []
+        referenceRequirements(for: studioWorkspace)
     }
 
     public func resolvedSettings(for draft: StudioWorkspaceDraft? = nil) -> StudioResolvedSettings {
@@ -352,7 +354,8 @@ extension MLXRAppModel {
     }
 
     public func referenceKind(for asset: LibraryAsset, draft: StudioWorkspaceDraft? = nil) -> WorkflowReferenceKind? {
-        let requirements = currentStudioReferenceRequirements
+        let current = draft ?? studioWorkspace
+        let requirements = referenceRequirements(for: current)
         guard !requirements.isEmpty else { return nil }
         let kind: WorkflowReferenceKind
         switch asset.kind {
@@ -619,8 +622,13 @@ extension MLXRAppModel {
     }
 
     private func normalizeWorkspaceReferences() {
-        let requirements = currentStudioReferenceRequirements
+        let requirements = referenceRequirements(for: studioWorkspace)
         let allowedKinds = Set(requirements.map(\.kind))
+        let anyReferenceAssetIds = Set(
+            libraryAssets
+                .filter { $0.referenceKind != nil }
+                .map(\.id)
+        )
         let compatibleAssetIds = Set(
             libraryAssets
                 .filter { asset in
@@ -632,7 +640,8 @@ extension MLXRAppModel {
         var referenceIds = studioWorkspace.referenceAssetIds.filter { compatibleAssetIds.contains($0) }
 
         if allowedKinds.isEmpty {
-            studioWorkspace.referenceAssetIds = []
+            let fallbackIds = studioWorkspace.referenceAssetIds.filter { anyReferenceAssetIds.contains($0) }
+            studioWorkspace.referenceAssetIds = Array(NSOrderedSet(array: fallbackIds)) as? [String] ?? fallbackIds
             return
         }
 
@@ -682,6 +691,72 @@ extension MLXRAppModel {
             trimmed.append(referenceId)
         }
         return trimmed
+    }
+
+    private func referenceRequirements(for draft: StudioWorkspaceDraft) -> [WorkflowReferenceRequirement] {
+        if let studioPlanResult, studioPlanMatchesDraft(studioPlanResult, draft: draft) {
+            return studioPlanResult.readiness.referenceRequirements
+        }
+        return fallbackReferenceRequirements(for: draft.task)
+    }
+
+    private func studioPlanMatchesDraft(
+        _ result: WorkflowPlanResult,
+        draft: StudioWorkspaceDraft
+    ) -> Bool {
+        result.plan.selectedTask == draft.task.rawValue
+            || result.presentation.selectedTask == draft.task.rawValue
+    }
+
+    private func fallbackReferenceRequirements(for task: ProductTask) -> [WorkflowReferenceRequirement] {
+        switch task {
+        case .imageEdit:
+            return [
+                WorkflowReferenceRequirement(
+                    kind: .image,
+                    minimumCount: 1,
+                    maximumCount: 1,
+                    acceptedRoles: ["reference"],
+                    description: "Choose at least one image to edit."
+                )
+            ]
+        case .videoConditionImage, .videoInterpolate:
+            return [
+                WorkflowReferenceRequirement(
+                    kind: .image,
+                    minimumCount: task == .videoInterpolate ? 2 : 1,
+                    maximumCount: task == .videoInterpolate ? 2 : 1,
+                    acceptedRoles: ["reference"],
+                    description: task == .videoInterpolate
+                        ? "Choose a start and end frame to blend."
+                        : "Choose an image to animate."
+                )
+            ]
+        case .videoConditionAudio:
+            return [
+                WorkflowReferenceRequirement(
+                    kind: .audio,
+                    minimumCount: 1,
+                    maximumCount: 1,
+                    acceptedRoles: ["reference"],
+                    description: "Choose an audio guide for the clip."
+                )
+            ]
+        case .videoConditionVideo, .videoRetake:
+            return [
+                WorkflowReferenceRequirement(
+                    kind: .video,
+                    minimumCount: 1,
+                    maximumCount: 1,
+                    acceptedRoles: ["reference"],
+                    description: task == .videoRetake
+                        ? "Choose the source video to retake."
+                        : "Choose a guide video."
+                )
+            ]
+        case .imageGenerate, .videoGenerate:
+            return []
+        }
     }
 
     private func studioFamilyExtensions(for draft: StudioWorkspaceDraft) -> JSONMap {

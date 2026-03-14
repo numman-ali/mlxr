@@ -13,7 +13,7 @@ public struct GalleryScreen: View {
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onImportAssets: @Sendable ([URL]) async -> [ImportedAssetRecord]
     let onRemoveImportedAsset: @Sendable (String) async -> Void
-    let onOpenInStudio: (StudioOpenRequest) -> Void
+    let onSeedComposer: (ComposerSeedRequest) -> Void
     let onSelectWorkspace: (String) -> Void
     let onCreateWorkspace: () -> WorkspaceRecord
     let onToggleFavorite: (String) -> Void
@@ -31,7 +31,7 @@ public struct GalleryScreen: View {
         onMaterialize: @escaping @Sendable (LibraryAsset) async -> URL?,
         onImportAssets: @escaping @Sendable ([URL]) async -> [ImportedAssetRecord],
         onRemoveImportedAsset: @escaping @Sendable (String) async -> Void,
-        onOpenInStudio: @escaping (StudioOpenRequest) -> Void,
+        onSeedComposer: @escaping (ComposerSeedRequest) -> Void,
         onSelectWorkspace: @escaping (String) -> Void,
         onCreateWorkspace: @escaping () -> WorkspaceRecord,
         onToggleFavorite: @escaping (String) -> Void,
@@ -48,7 +48,7 @@ public struct GalleryScreen: View {
         self.onMaterialize = onMaterialize
         self.onImportAssets = onImportAssets
         self.onRemoveImportedAsset = onRemoveImportedAsset
-        self.onOpenInStudio = onOpenInStudio
+        self.onSeedComposer = onSeedComposer
         self.onSelectWorkspace = onSelectWorkspace
         self.onCreateWorkspace = onCreateWorkspace
         self.onToggleFavorite = onToggleFavorite
@@ -68,7 +68,7 @@ public struct GalleryScreen: View {
             onMaterialize: onMaterialize,
             onImportAssets: onImportAssets,
             onRemoveImportedAsset: onRemoveImportedAsset,
-            onOpenInStudio: onOpenInStudio,
+            onSeedComposer: onSeedComposer,
             onSelectWorkspace: onSelectWorkspace,
             onCreateWorkspace: onCreateWorkspace,
             onToggleFavorite: onToggleFavorite,

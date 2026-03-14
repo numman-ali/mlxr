@@ -190,6 +190,20 @@ public struct WorkflowReferenceRequirement: Codable, Sendable, Hashable, Identif
     public var acceptedRoles: [String]
     public var description: String
 
+    public init(
+        kind: WorkflowReferenceKind,
+        minimumCount: Int,
+        maximumCount: Int? = nil,
+        acceptedRoles: [String] = [],
+        description: String
+    ) {
+        self.kind = kind
+        self.minimumCount = minimumCount
+        self.maximumCount = maximumCount
+        self.acceptedRoles = acceptedRoles
+        self.description = description
+    }
+
     public var id: String {
         let maximumLabel = maximumCount.map(String.init) ?? "many"
         return "\(kind.rawValue)-\(minimumCount)-\(maximumLabel)-\(description)"

@@ -603,6 +603,123 @@ func defaultImageModelPrefersZImageTurboWhenAvailable() async {
 
 @Test
 @MainActor
+func seedComposerRequestSwitchesWorkspaceAndFocusesAsset() {
+    let model = MLXRAppModel(runtime: MockRuntime())
+    let targetWorkspace = WorkspaceRecord(id: "project-2", title: "Project Two")
+    model.workspaces = [
+        WorkspaceRecord(id: "default-workspace", title: "New Project"),
+        targetWorkspace,
+    ]
+    model.importedAssets = [
+        ImportedAssetRecord(
+            id: "asset-1",
+            workspaceId: targetWorkspace.id,
+            title: "reference.png",
+            sourcePath: "/tmp/reference.png",
+            storageKey: "imports/reference.png",
+            mediaType: "image/png",
+            kind: .image,
+            importedAt: Date()
+        )
+    ]
+    model.studioWorkspace.prompt = "old prompt"
+    model.studioWorkspace.referenceAssetIds = ["old-asset"]
+    model.studioWorkspace.selectedAssetId = "old-asset"
+
+    model.seedComposer(
+        with: ComposerSeedRequest(
+            workspaceId: targetWorkspace.id,
+            task: .imageEdit,
+            prompt: "keep the violinist identity",
+            focusedAssetId: "asset-1",
+            referenceAssetIds: ["asset-1"]
+        )
+    )
+
+    #expect(model.activeWorkspaceId == targetWorkspace.id)
+    #expect(model.selectedLibraryWorkspaceId == targetWorkspace.id)
+    #expect(model.studioWorkspace.workspaceId == targetWorkspace.id)
+    #expect(model.studioWorkspace.task == .imageEdit)
+    #expect(model.studioWorkspace.prompt == "keep the violinist identity")
+    #expect(model.studioWorkspace.selectedAssetId == "asset-1")
+    #expect(model.studioWorkspace.preferredDisplayedAssetId == "asset-1")
+    #expect(model.studioWorkspace.referenceAssetIds == ["asset-1"])
+    #expect(model.assetRecords["asset-1"]?.lastUsedAt != nil)
+}
+
+@Test
+@MainActor
+func runContextUsesDraftWorkspaceInsteadOfGlobalActiveWorkspace() {
+    let model = MLXRAppModel(runtime: MockRuntime())
+    model.activeWorkspaceId = "default-workspace"
+    model.studioWorkspace.workspaceId = "project-2"
+
+    let context = model.prepareRunContext(
+        task: .imageGenerate,
+        title: "Sunset skyline",
+        sourceAssetIds: ["asset-1"]
+    )
+
+    #expect(context.workspaceId == "project-2")
+    #expect(context.intentLabel == "Sunset skyline")
+    #expect(context.sourceAssetIds == ["asset-1"])
+}
+
+@Test
+@MainActor
+func imageEditPlanningIntentKeepsSeededReferenceWithoutExistingPlan() async {
+    let mock = MockRuntime()
+    mock.supportedModels = [
+        SupportedModelDescriptor(
+            modelId: "flux2-klein-9b-local",
+            displayName: "FLUX.2 Klein 9B",
+            family: "flux2",
+            familyVariant: nil,
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.edit"],
+            provider: "huggingface",
+            sourceSummary: "black-forest-labs/FLUX.2-Klein",
+            license: nil,
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        )
+    ]
+    let model = MLXRAppModel(runtime: mock)
+    await model.refresh()
+    model.importedAssets = [
+        ImportedAssetRecord(
+            id: "asset-1",
+            workspaceId: "default-workspace",
+            title: "reference.png",
+            sourcePath: "/tmp/reference.png",
+            storageKey: "imports/reference.png",
+            mediaType: "image/png",
+            kind: .image,
+            importedAt: Date()
+        )
+    ]
+
+    model.seedComposer(
+        with: ComposerSeedRequest(
+            task: .imageEdit,
+            prompt: "edit the source image",
+            focusedAssetId: "asset-1",
+            referenceAssetIds: ["asset-1"]
+        )
+    )
+
+    let intent = model.studioPlanningIntent()
+
+    #expect(intent?.task == ProductTask.imageEdit.rawValue)
+    #expect(intent?.references.count == 1)
+    #expect(intent?.references.first?.kind == .image)
+}
+
+@Test
+@MainActor
 func refreshReconstructsRunGroupsFromJobContext() async {
     let now = Date()
     let artifact = OutputArtifactRecord(

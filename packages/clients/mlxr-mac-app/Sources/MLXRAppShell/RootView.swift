@@ -9,6 +9,8 @@ import MLXRActivityStrip
 import SwiftUI
 
 public struct MLXRMacAppRoot: View {
+    private static let visibleDestinations: [Destination] = [.home, .library, .models, .settings]
+
     @AppStorage("mlxr.mac-app.last-destination") private var lastDestinationRaw = Destination.home.rawValue
     @State private var appModel = MLXRAppModel()
     @State private var destination: Destination? = .home
@@ -41,6 +43,7 @@ public struct MLXRMacAppRoot: View {
             HStack(spacing: 0) {
                 NavRail(
                     selection: $destination,
+                    destinations: Self.visibleDestinations,
                     items: { dest in
                         NavRailItemConfig(
                             icon: dest.icon,
@@ -206,13 +209,8 @@ public struct MLXRMacAppRoot: View {
                 onRemoveImportedAsset: { assetId in
                     await appModel.removeImportedAsset(assetId: assetId)
                 },
-                onOpenInStudio: { request in
-                    openStudio(
-                        task: request.task,
-                        focusedAssetId: request.focusedAssetId,
-                        referenceAssetIds: request.referenceAssetIds,
-                        prompt: request.prompt
-                    )
+                onSeedComposer: { request in
+                    seedComposer(request)
                 },
                 onSelectWorkspace: { workspaceId in
                     appModel.selectWorkspace(workspaceId)
@@ -566,26 +564,21 @@ public struct MLXRMacAppRoot: View {
         }
     }
 
-    private func openStudio(
-        task: ProductTask,
-        focusedAssetId: String? = nil,
-        referenceAssetIds: [String] = [],
-        prompt: String? = nil
-    ) {
-        appModel.openStudio(
-            task: task,
-            focusedAssetId: focusedAssetId,
-            referenceAssetIds: referenceAssetIds,
-            prompt: prompt
-        )
-        withAnimation(MLXRMotion.snappy) {
-            destination = .studio
-        }
+    private func seedComposer(_ request: ComposerSeedRequest) {
+        appModel.seedComposer(with: request)
+        libraryFocusedWorkspaceId = request.workspaceId ?? appModel.activeWorkspaceId
+        libraryFocusedAssetId = nil
     }
 
     private func submitFromGlobalComposer() {
-        withAnimation(MLXRMotion.snappy) {
-            destination = .studio
+        let targetWorkspaceId = appModel.studioWorkspace.workspaceId
+        libraryFocusedWorkspaceId = targetWorkspaceId
+        libraryFocusedAssetId = nil
+
+        if destination != .library && destination != .studio {
+            withAnimation(MLXRMotion.snappy) {
+                destination = .library
+            }
         }
         Task {
             await appModel.submitCurrentWorkspace()
