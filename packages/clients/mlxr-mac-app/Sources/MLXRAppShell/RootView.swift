@@ -221,6 +221,9 @@ public struct MLXRMacAppRoot: View {
                     libraryFocusedWorkspaceId = workspace.id
                     return workspace
                 },
+                onSetWorkspaceCover: { workspaceId, assetId in
+                    appModel.setWorkspaceCoverAsset(workspaceId: workspaceId, assetId: assetId)
+                },
                 onToggleFavorite: { assetId in
                     appModel.toggleFavorite(assetId: assetId)
                 },

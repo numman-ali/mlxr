@@ -76,17 +76,20 @@ public struct CollectionRecord: Codable, Identifiable, Hashable, Sendable {
 public struct WorkspaceRecord: Codable, Identifiable, Hashable, Sendable {
     public var id: String
     public var title: String
+    public var coverAssetId: String?
     public var createdAt: Date
     public var lastOpenedAt: Date
 
     public init(
         id: String = UUID().uuidString,
         title: String,
+        coverAssetId: String? = nil,
         createdAt: Date = .now,
         lastOpenedAt: Date = .now
     ) {
         self.id = id
         self.title = title
+        self.coverAssetId = coverAssetId
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
     }

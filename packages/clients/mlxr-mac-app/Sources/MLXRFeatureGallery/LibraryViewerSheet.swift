@@ -11,6 +11,7 @@ struct LibraryViewerSheet: View {
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onRemoveImportedAsset: @Sendable (String) async -> Void
     let onSeedComposer: (ComposerSeedRequest) -> Void
+    let onSetProjectCover: (() -> Void)?
     let onToggleFavorite: (String) -> Void
     let onToggleCollection: (String, String) -> Void
     let onShowAsset: (LibraryAsset) -> Void
@@ -144,6 +145,11 @@ struct LibraryViewerSheet: View {
                     onToggleFavorite(asset.id)
                 }
                 .buttonStyle(.bordered)
+
+                if let onSetProjectCover {
+                    Button("Set as project cover", action: onSetProjectCover)
+                        .buttonStyle(.bordered)
+                }
 
                 if let previewURL {
                     Button("Reveal in Finder") {

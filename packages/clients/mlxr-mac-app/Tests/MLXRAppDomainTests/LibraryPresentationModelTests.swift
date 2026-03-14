@@ -228,6 +228,53 @@ func workspaceResolutionFallsBackToRunGroupImportedRecordAndDefaultWorkspace() {
     #expect(selectedWorkspaceA.filteredAssets.map { $0.id } == ["default-owned"])
 }
 
+@Test
+func projectSummaryPrefersExplicitWorkspaceCoverAsset() {
+    let now = Date(timeIntervalSince1970: 4_000)
+    let workspaces = [
+        WorkspaceRecord(
+            id: "workspace-a",
+            title: "Cover Test",
+            coverAssetId: "asset-older",
+            createdAt: now,
+            lastOpenedAt: now
+        )
+    ]
+    let assets = [
+        libraryAsset(
+            id: "asset-newer",
+            title: "Latest frame",
+            prompt: "A dramatic castle at dawn",
+            modelId: "z-image-turbo-local",
+            task: .imageGenerate,
+            createdAt: now.addingTimeInterval(30),
+            workspaceId: "workspace-a"
+        ),
+        libraryAsset(
+            id: "asset-older",
+            title: "Chosen cover",
+            prompt: "An ogre attacking a castle",
+            modelId: "z-image-turbo-local",
+            task: .imageGenerate,
+            createdAt: now,
+            workspaceId: "workspace-a"
+        ),
+    ]
+
+    let presentation = LibraryPresentationModel(
+        assets: assets,
+        workspaces: workspaces,
+        runGroups: [],
+        collections: [],
+        filters: LibraryFilterState(),
+        selectedWorkspaceId: "workspace-a",
+        defaultWorkspaceId: "workspace-a"
+    )
+
+    #expect(presentation.projectSummary(id: "workspace-a")?.heroAsset?.id == "asset-older")
+    #expect(presentation.projectSummary(id: "workspace-a")?.subtitle == "A dramatic castle at dawn")
+}
+
 private func libraryAsset(
     id: String,
     origin: LibraryAssetOrigin = .generated,

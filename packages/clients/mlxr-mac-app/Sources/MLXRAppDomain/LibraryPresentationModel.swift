@@ -188,8 +188,14 @@ public struct LibraryPresentationModel: Sendable {
         guard !workspaceAssets.isEmpty || workspace.id == selectedWorkspaceId else {
             return nil
         }
-        let heroAsset = workspaceAssets.sorted(by: sortComparator).first
-        let latestPrompt = heroAsset?.promptHeadline ?? heroAsset?.displayTitle ?? "No results yet"
+        let sortedAssets = workspaceAssets.sorted(by: sortComparator)
+        let latestAsset = sortedAssets.first
+        let heroAsset =
+            workspace.coverAssetId.flatMap { coverAssetId in
+                sortedAssets.first(where: { $0.id == coverAssetId })
+            }
+            ?? latestAsset
+        let latestPrompt = latestAsset?.promptHeadline ?? latestAsset?.displayTitle ?? "No results yet"
         let updatedAt = workspaceAssets
             .map { $0.lastUsedAt ?? $0.createdAt }
             .max()

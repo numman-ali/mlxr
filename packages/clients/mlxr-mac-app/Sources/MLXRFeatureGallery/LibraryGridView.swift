@@ -10,8 +10,8 @@ struct LibraryGridView: View {
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onGridMetricsChange: (Int) -> Void
 
-    private let minTileWidth: CGFloat = 220
-    private let maxTileWidth: CGFloat = 300
+    private let minTileWidth: CGFloat = 164
+    private let maxTileWidth: CGFloat = 228
     private let tileSpacing = MLXRSpacing.md
 
     var body: some View {
@@ -78,107 +78,60 @@ private struct LibraryTileView: View {
     let onSelect: () -> Void
     let onOpen: () -> Void
 
-    private let thumbnailAspectRatio: CGFloat = 4.0 / 5.0
+    private let thumbnailAspectRatio: CGFloat = 1
 
     var body: some View {
-        GlassCardInteractive {
-            VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
+        MediaTileSurface(
+            isSelected: isSelected,
+            cornerRadius: MLXRRadius.md,
+            action: onOpen
+        ) {
+            ZStack(alignment: .topTrailing) {
                 LibraryAssetThumbnailView(
                     asset: group.primaryAsset,
                     onMaterialize: onMaterialize
                 )
-                .frame(maxWidth: .infinity)
+                .frame(width: width, height: width)
                 .aspectRatio(thumbnailAspectRatio, contentMode: .fill)
-                .overlay(alignment: .topLeading) {
-                    HStack(spacing: MLXRSpacing.xs) {
-                        StatusPill(
-                            label: group.primaryAsset.isImported ? "Imported" : group.primaryAsset.task?.title ?? "Generated",
-                            tint: group.primaryAsset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary
-                        )
-                        if group.assetCount > 1 {
-                            StatusPill(label: "\(group.assetCount) in set", tint: MLXRColor.brandSecondary)
-                        }
-                        if let runState = group.runState {
-                            StatusPill(label: label(for: runState), tint: tint(for: runState))
-                        }
-                    }
-                    .padding(MLXRSpacing.sm)
-                }
-                .overlay(alignment: .topTrailing) {
+                .clipped()
+
+                VStack(alignment: .trailing, spacing: MLXRSpacing.xs) {
                     if group.primaryAsset.isFavorite {
                         Image(systemName: "star.fill")
                             .foregroundStyle(MLXRColor.brandWarm)
-                            .padding(MLXRSpacing.sm)
+                            .padding(.top, MLXRSpacing.sm)
+                            .padding(.trailing, MLXRSpacing.sm)
                     }
-                }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(group.title)
-                        .font(MLXRType.titleSmall)
-                        .foregroundStyle(MLXRColor.textPrimary)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer()
 
-                    Text(group.summary)
-                        .font(MLXRType.bodySmall)
-                        .foregroundStyle(MLXRColor.textSecondary)
-                        .lineLimit(2)
-
-                    if let filename = group.primaryAsset.filename {
-                        Text(filename)
+                    if group.assetCount > 1 {
+                        Text("\(group.assetCount)")
                             .font(MLXRType.captionLarge)
-                            .foregroundStyle(MLXRColor.textTertiary)
-                            .lineLimit(1)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(MLXRColor.textPrimary)
+                            .padding(.horizontal, MLXRSpacing.sm)
+                            .padding(.vertical, MLXRSpacing.xs)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .padding(.trailing, MLXRSpacing.sm)
+                            .padding(.bottom, MLXRSpacing.sm)
                     }
-                }
-                .frame(height: 92, alignment: .topLeading)
-            }
-            .frame(width: width, alignment: .leading)
-            .overlay(alignment: .topTrailing) {
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(MLXRColor.brandPrimary)
-                        .padding(MLXRSpacing.sm)
                 }
             }
         }
         .frame(width: width, alignment: .leading)
-        .contentShape(RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous))
-        .onTapGesture(count: 2) {
-            onSelect()
-            onOpen()
-        }
-        .onTapGesture {
-            onSelect()
-        }
         .contextMenu {
             Button("Open") { onOpen() }
             Button("Select") { onSelect() }
         }
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private func tint(for state: RunGroupState) -> Color {
-        switch state {
-        case .queued:
-            MLXRColor.brandWarm
-        case .running:
-            MLXRColor.brandPrimary
-        case .completed:
-            MLXRColor.brandSecondary
-        case .failed:
-            MLXRColor.brandDanger
-        case .cancelled:
-            MLXRColor.textTertiary
-        }
-    }
-
-    private func label(for state: RunGroupState) -> String {
-        switch state {
-        case .queued: "Queued"
-        case .running: "Running"
-        case .completed: "Completed"
-        case .failed: "Failed"
-        case .cancelled: "Cancelled"
+    private var accessibilityLabel: String {
+        if group.assetCount > 1 {
+            "\(group.title), \(group.assetCount) items"
+        } else {
+            group.title
         }
     }
 }

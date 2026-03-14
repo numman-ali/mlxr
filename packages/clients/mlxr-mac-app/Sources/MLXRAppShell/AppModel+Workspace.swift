@@ -468,6 +468,13 @@ extension MLXRAppModel {
         ensureWorkspaceExists()
     }
 
+    public func setWorkspaceCoverAsset(workspaceId: String, assetId: String) {
+        updateWorkspace(id: workspaceId) { workspace in
+            workspace.coverAssetId = assetId
+            workspace.lastOpenedAt = .now
+        }
+    }
+
     public func showLibraryBrowser() {
         selectedLibraryWorkspaceId = nil
     }
@@ -853,16 +860,16 @@ extension MLXRAppModel {
         if studioWorkspace.workspaceId != activeWorkspaceId {
             studioWorkspace.workspaceId = activeWorkspaceId
         }
-        if let index = workspaces.firstIndex(where: { $0.id == activeWorkspaceId }) {
-            workspaces[index].lastOpenedAt = .now
+        updateWorkspace(id: activeWorkspaceId) { workspace in
+            workspace.lastOpenedAt = .now
         }
     }
 
     private func renameWorkspaceIfPlaceholder(workspaceId: String, using title: String) {
-        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
+        guard let workspace = workspaces.first(where: { $0.id == workspaceId }) else {
             return
         }
-        let currentTitle = workspaces[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentTitle = workspace.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard currentTitle == "Current Workspace" || currentTitle == "New Project" else {
             return
         }
@@ -878,6 +885,20 @@ extension MLXRAppModel {
             let truncated = String(normalized[..<cutoff]).trimmingCharacters(in: .whitespacesAndNewlines)
             headline = "\(truncated)…"
         }
-        workspaces[index].title = headline
+        updateWorkspace(id: workspaceId) { updatedWorkspace in
+            updatedWorkspace.title = headline
+        }
+    }
+
+    private func updateWorkspace(
+        id workspaceId: String,
+        mutate: (inout WorkspaceRecord) -> Void
+    ) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
+            return
+        }
+        var updatedWorkspace = workspaces[index]
+        mutate(&updatedWorkspace)
+        workspaces[index] = updatedWorkspace
     }
 }

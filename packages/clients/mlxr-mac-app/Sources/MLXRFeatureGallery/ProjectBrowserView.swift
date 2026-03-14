@@ -8,8 +8,8 @@ struct ProjectBrowserView: View {
     let onOpenProject: (String) -> Void
     let onCreateProject: () -> Void
 
-    private let minCardWidth: CGFloat = 280
-    private let maxCardWidth: CGFloat = 360
+    private let minCardWidth: CGFloat = 220
+    private let maxCardWidth: CGFloat = 280
 
     var body: some View {
         if projects.isEmpty {
@@ -80,18 +80,20 @@ private struct ProjectCardView: View {
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onOpen: () -> Void
 
-    private let heroAspectRatio: CGFloat = 16.0 / 10.0
+    private let heroAspectRatio: CGFloat = 1
 
     var body: some View {
-        GlassCardInteractive {
-            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
-                ZStack(alignment: .topLeading) {
+        MediaTileSurface(isSelected: project.isActive, cornerRadius: MLXRRadius.lg, action: onOpen) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
+                ZStack(alignment: .topTrailing) {
                     if let heroAsset = project.heroAsset {
                         LibraryAssetThumbnailView(asset: heroAsset, onMaterialize: onMaterialize)
+                            .frame(width: width, height: width)
                             .aspectRatio(heroAspectRatio, contentMode: .fill)
                     } else {
                         RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)
                             .fill(MLXRColor.surfaceCard)
+                            .frame(width: width, height: width)
                             .aspectRatio(heroAspectRatio, contentMode: .fill)
                             .overlay {
                                 VStack(spacing: MLXRSpacing.xs) {
@@ -116,9 +118,9 @@ private struct ProjectCardView: View {
                     Text(project.title)
                         .font(MLXRType.titleSmall)
                         .foregroundStyle(MLXRColor.textPrimary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                     Text(project.subtitle)
-                        .font(MLXRType.bodySmall)
+                        .font(MLXRType.captionLarge)
                         .foregroundStyle(MLXRColor.textSecondary)
                         .lineLimit(2)
                 }
@@ -129,33 +131,9 @@ private struct ProjectCardView: View {
                         StatusPill(label: "\(project.runGroupCount) sets", tint: MLXRColor.brandWarm)
                     }
                 }
-
-                HStack(spacing: MLXRSpacing.md) {
-                    metric(label: "Images", value: project.imageCount)
-                    metric(label: "Videos", value: project.videoCount)
-                    metric(label: "Audio", value: project.audioCount)
-                }
-
-                Button("Open Project", action: onOpen)
-                    .buttonStyle(.borderedProminent)
             }
             .frame(width: width, alignment: .leading)
         }
         .frame(width: width, alignment: .leading)
-        .contentShape(RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous))
-        .onTapGesture(count: 2, perform: onOpen)
-        .onTapGesture(perform: onOpen)
-    }
-
-    private func metric(label: String, value: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
-                .font(MLXRType.captionSmall)
-                .foregroundStyle(MLXRColor.textTertiary)
-            Text("\(value)")
-                .font(MLXRType.bodyLarge)
-                .fontWeight(.semibold)
-                .foregroundStyle(MLXRColor.textPrimary)
-        }
     }
 }

@@ -16,6 +16,7 @@ public struct GalleryScreen: View {
     let onSeedComposer: (ComposerSeedRequest) -> Void
     let onSelectWorkspace: (String) -> Void
     let onCreateWorkspace: () -> WorkspaceRecord
+    let onSetWorkspaceCover: (String, String) -> Void
     let onToggleFavorite: (String) -> Void
     let onToggleCollection: (String, String) -> Void
     let onCreateCollection: (String) -> Void
@@ -34,6 +35,7 @@ public struct GalleryScreen: View {
         onSeedComposer: @escaping (ComposerSeedRequest) -> Void,
         onSelectWorkspace: @escaping (String) -> Void,
         onCreateWorkspace: @escaping () -> WorkspaceRecord,
+        onSetWorkspaceCover: @escaping (String, String) -> Void,
         onToggleFavorite: @escaping (String) -> Void,
         onToggleCollection: @escaping (String, String) -> Void,
         onCreateCollection: @escaping (String) -> Void
@@ -51,6 +53,7 @@ public struct GalleryScreen: View {
         self.onSeedComposer = onSeedComposer
         self.onSelectWorkspace = onSelectWorkspace
         self.onCreateWorkspace = onCreateWorkspace
+        self.onSetWorkspaceCover = onSetWorkspaceCover
         self.onToggleFavorite = onToggleFavorite
         self.onToggleCollection = onToggleCollection
         self.onCreateCollection = onCreateCollection
@@ -71,6 +74,7 @@ public struct GalleryScreen: View {
             onSeedComposer: onSeedComposer,
             onSelectWorkspace: onSelectWorkspace,
             onCreateWorkspace: onCreateWorkspace,
+            onSetWorkspaceCover: onSetWorkspaceCover,
             onToggleFavorite: onToggleFavorite,
             onToggleCollection: onToggleCollection,
             onCreateCollection: onCreateCollection

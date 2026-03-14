@@ -31,7 +31,6 @@ struct LibraryAssetThumbnailView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous))
         .task(id: asset.id) {
-            guard previewImage == nil else { return }
             previewImage = await LibraryThumbnailStore.shared.thumbnail(
                 for: asset,
                 maxPixelSize: 640,
