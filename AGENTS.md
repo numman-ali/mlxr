@@ -59,6 +59,8 @@ Tests should mirror ownership too:
 - package-specific unit tests live under the package root at `packages/.../tests/unit/`
 - top-level `tests/` is reserved for integration, e2e, shared fixtures, and legacy test files that have not been migrated yet
 - do not add new package-specific unit coverage to giant root-level monolithic test files when a package-local unit test home exists
+- do not add new package-owned unit tests to root `tests/` unless there is a
+  documented reason the package cannot host them
 
 When moving files or updating imports, keep both layers clean:
 
@@ -79,6 +81,29 @@ That means:
 Humans may inspect or edit files, but the default operating model is still agent-executed end to end. Avoid shaping the repo around a human manually hopping between editor, formatter, test runner, logs, and build commands.
 
 Fresh Codex sessions should not require a custom startup prompt to know where to start or how to continue.
+
+## Clean Worktree And Local State
+
+Treat `git status` as part of the startup protocol, not as a courtesy glance.
+
+The worktree should be clean by default. Local-only state is not repo truth.
+
+That includes:
+
+- `.claude/` and other local agent state
+- `tmp/` receipts and ad hoc runtime homes
+- caches such as `__pycache__/`, `.mypy_cache/`, `.pytest_cache/`, and `.ruff_cache/`
+- local build outputs
+- local reference mirrors and cloned upstream checkouts
+
+Rules:
+
+- do not commit local-only state
+- do not treat untracked local state as implementation truth
+- do not rely on files under `tmp/` or other ignored paths unless a tracked doc
+  explicitly points at them as a receipt
+- if `git status` is noisy for repo-tracked reasons, fix that before claiming a
+  clean starting point
 
 ## Startup Protocol
 
@@ -196,6 +221,21 @@ These are defaults, not frozen truths. If evidence changes them, update the docs
 - Do not use file-level validation bypasses such as `# mypy: ignore-errors` as a shortcut. If typing is broken, fix the typing, narrow the seam, add the needed stubs or protocols, or delete the dead code.
 - Do not hide validation debt behind broad suppressions. Per-line ignores must be rare, specific, and justified by a real upstream typing gap, not by local convenience.
 
+## Transitional Seams And Placeholder Packages
+
+Do not build new work on migration-only seams, fallback routes, or placeholder
+packages unless the task is explicitly about cleanup, cutover, or activating
+that seam.
+
+Practical rule:
+
+- if a surface is described as fallback-only, migration-only,
+  compatibility-only, or planned, treat it as non-default by default
+- prefer the current canonical product path and current canonical package owner
+  over older seams that still compile for transition reasons
+- if you are unsure whether something is transitional or canonical, check the
+  matching product doc or package README before extending it
+
 ## Mandatory Dev Loop
 
 Every non-trivial code change should follow this loop:
@@ -209,6 +249,14 @@ Every non-trivial code change should follow this loop:
 7. Commit only from a green state.
 
 The default quality gate for this repo is the local harness, not intuition.
+
+Validation contract:
+
+- `pre-commit` is fast local hygiene
+- `uv run python scripts/dev.py verify` is the real acceptance gate unless a
+  narrower repo-owned lane is explicitly justified for the task
+- do not treat a successful lightweight hook run as equivalent to a green
+  `verify`
 
 ## Done Definition
 
@@ -241,6 +289,13 @@ Any new agent should read these in this order after `AGENTS.md` and `MEMORY.md`,
 If the task is host-specific:
 
 - read [07-ltx-integration-seams.md](docs/research/07-ltx-integration-seams.md)
+
+If the task is first-party Mac-app-specific:
+
+- read [mac-app-product-spec.md](docs/mac-app-product-spec.md)
+- read [mac-app-runtime-contract.md](docs/mac-app-runtime-contract.md)
+- read [00-master-plan.md](docs/working/unified-studio/00-master-plan.md)
+- read the relevant stage docs under [docs/working/unified-studio/](docs/working/unified-studio/)
 
 If the task is performance-specific:
 
