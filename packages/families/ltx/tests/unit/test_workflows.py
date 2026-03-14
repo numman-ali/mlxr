@@ -629,6 +629,140 @@ class LTXWorkflowStrategyTests(unittest.TestCase):
         ):
             strategy.to_job_request(context, intent, plan)
 
+    def test_generate_presentation_exposes_video_subworkflows_and_duration_controls(
+        self,
+    ) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=[
+                "video.generate",
+                "video.condition.image",
+                "video.condition.video",
+                "video.condition.audio",
+                "video.interpolate",
+                "video.retake",
+            ],
+            conditioning={"image": True, "video": True, "audio": True, "lora": True},
+            pipeline_variants=["distilled_two_stage", "two_stage"],
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="dog in a park",
+            output=JobOutputPolicy(artifact_format="mp4"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(presentation.primary_mode, "video")
+        self.assertEqual(
+            [item.task for item in presentation.subworkflows],
+            [
+                "video.generate",
+                "video.condition.image",
+                "video.condition.audio",
+                "video.condition.video",
+                "video.interpolate",
+                "video.retake",
+            ],
+        )
+        self.assertEqual(
+            [item.task for item in presentation.subworkflows if item.default],
+            ["video.generate"],
+        )
+        self.assertEqual(
+            [option.label for option in presentation.controls.duration_presets],
+            ["4s", "8s", "12s"],
+        )
+
+    def test_audio_conditioned_presentation_exposes_audio_slot(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.condition.audio"],
+            conditioning={"image": False, "video": False, "audio": True, "lora": False},
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="dog barking",
+            task="video.condition.audio",
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(len(presentation.reference_slots), 1)
+        self.assertEqual(presentation.reference_slots[0].slot_id, "audio-guide")
+        self.assertTrue(presentation.reference_slots[0].required)
+
+    def test_video_guidance_presentation_exposes_video_and_lora_slots(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.condition.video"],
+            conditioning={"image": False, "video": True, "audio": False, "lora": True},
+            pipeline_variants=["distilled_two_stage"],
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="guide the motion",
+            task="video.condition.video",
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(
+            [slot.slot_id for slot in presentation.reference_slots],
+            ["guide-video", "control-lora"],
+        )
+
+    def test_interpolation_presentation_exposes_start_and_end_frame_slots(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.condition.image", "video.interpolate"],
+            conditioning={"image": True, "video": False, "audio": False, "lora": False},
+            pipeline_variants=["two_stage"],
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-dev-local",
+            prompt="blend between frames",
+            task="video.interpolate",
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(
+            [slot.slot_id for slot in presentation.reference_slots],
+            ["start-frame", "end-frame"],
+        )
+        self.assertTrue(
+            all(slot.maximum_count == 1 for slot in presentation.reference_slots)
+        )
+
+    def test_retake_presentation_exposes_source_video_slot(self) -> None:
+        strategy = LTXWorkflowStrategy()
+        context = _context(
+            tasks=["video.generate", "video.retake"],
+            conditioning={"image": False, "video": True, "audio": False, "lora": False},
+        )
+        intent = WorkflowIntent(
+            model_id="ltx-2.3-fast-local",
+            prompt="retake the middle beat",
+            task="video.retake",
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(len(presentation.reference_slots), 1)
+        self.assertEqual(presentation.reference_slots[0].slot_id, "source-video")
+        self.assertTrue(presentation.reference_slots[0].required)
+
 
 if __name__ == "__main__":
     unittest.main()

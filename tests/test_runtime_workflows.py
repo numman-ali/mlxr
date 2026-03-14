@@ -47,6 +47,8 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(result.plan.selected_task, "video.generate")
                 self.assertEqual(result.plan.family, "ltx")
                 self.assertEqual(result.plan.pipeline_variant, "distilled_two_stage")
+                self.assertEqual(result.presentation.primary_mode, "video")
+                self.assertEqual(result.presentation.selected_task, "video.generate")
 
     def test_workflow_plan_selects_one_stage_for_dev_checkpoint_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -160,6 +162,10 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 result = response_model(response, WorkflowPlanResult)
                 self.assertEqual(result.plan.selected_task, "video.condition.image")
+                self.assertEqual(
+                    [slot.slot_id for slot in result.presentation.reference_slots],
+                    ["start-frame"],
+                )
 
     def test_workflow_plan_selects_audio_conditioning_when_audio_reference_exists(
         self,
@@ -189,6 +195,10 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 result = response_model(response, WorkflowPlanResult)
                 self.assertEqual(result.plan.selected_task, "video.condition.audio")
+                self.assertEqual(
+                    [slot.slot_id for slot in result.presentation.reference_slots],
+                    ["audio-guide"],
+                )
 
     def test_workflow_plan_keeps_image_reference_when_audio_and_image_exist(
         self,
@@ -225,6 +235,13 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(
                     sorted(reference.kind for reference in result.plan.references),
                     ["audio", "image"],
+                )
+                self.assertEqual(
+                    result.presentation.selected_task, "video.condition.audio"
+                )
+                self.assertEqual(
+                    [slot.slot_id for slot in result.presentation.reference_slots],
+                    ["audio-guide"],
                 )
 
     def test_workflow_plan_rejects_unsupported_lora_reference(self) -> None:
@@ -656,6 +673,10 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 result = response_model(response, WorkflowPlanResult)
                 self.assertEqual(result.plan.selected_task, "video.interpolate")
                 self.assertEqual(result.plan.pipeline_variant, "two_stage")
+                self.assertEqual(
+                    [slot.slot_id for slot in result.presentation.reference_slots],
+                    ["start-frame", "end-frame"],
+                )
 
     def test_workflow_run_forwards_interpolation_task_to_two_stage_pipeline(
         self,
@@ -868,6 +889,10 @@ class RuntimeWorkflowTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 result = response_model(response, WorkflowPlanResult)
                 self.assertEqual(result.plan.selected_task, "video.retake")
+                self.assertEqual(
+                    [slot.slot_id for slot in result.presentation.reference_slots],
+                    ["source-video"],
+                )
 
     def test_workflow_run_forwards_retake_video_and_window_params(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

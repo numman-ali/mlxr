@@ -68,17 +68,26 @@ public struct MLXRMacAppRoot: View {
                             .padding(.bottom, MLXRSpacing.md)
                     }
                 }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if shouldShowGlobalComposer {
+                        globalComposerInset
+                    }
+                }
             }
         }
         .task {
             await appModel.refresh()
             appModel.syncWorkspaceDefaultsForTask()
+            appModel.scheduleStudioPlan()
             chooseInitialDestinationIfNeeded()
         }
         .onChange(of: destination?.rawValue) { _, newValue in
             if let newValue {
                 lastDestinationRaw = newValue
             }
+        }
+        .onChange(of: appModel.studioWorkspace) { _, _ in
+            appModel.scheduleStudioPlan()
         }
     }
 
@@ -97,10 +106,10 @@ public struct MLXRMacAppRoot: View {
                 recentAssets: appModel.recentLibraryAssets,
                 hasWorkspaceDraft: appModel.hasWorkspaceDraft,
                 onCreateImage: {
-                    openStudio(task: .imageGenerate)
+                    appModel.selectComposerTask(.imageGenerate)
                 },
                 onCreateVideo: {
-                    openStudio(task: .videoGenerate)
+                    appModel.selectComposerTask(.videoGenerate)
                 },
                 onOpenModels: {
                     withAnimation(MLXRMotion.snappy) {
@@ -141,7 +150,6 @@ public struct MLXRMacAppRoot: View {
                 planningError: appModel.studioPlanError,
                 isPlanning: appModel.isPlanningStudio,
                 resolvedSettings: appModel.resolvedSettings(),
-                isBusy: appModel.studioWorkspace.task.category == .image ? appModel.isSubmittingImage : appModel.isSubmittingVideo,
                 error: appModel.studioWorkspace.task.category == .image ? appModel.imageError : appModel.videoError,
                 onDismissError: {
                     if appModel.studioWorkspace.task.category == .image {
@@ -159,16 +167,6 @@ public struct MLXRMacAppRoot: View {
                 onSyncWorkspaceDefaults: {
                     appModel.syncWorkspaceDefaultsForTask()
                 },
-                onPlanWorkspace: {
-                    appModel.scheduleStudioPlan()
-                },
-                onPrepareRunContext: { task, title, sourceAssetIds in
-                    return appModel.prepareRunContext(
-                        task: task,
-                        title: title,
-                        sourceAssetIds: sourceAssetIds
-                    )
-                },
                 onImportAssets: { urls in
                     await appModel.importExternalAssets(from: urls)
                 },
@@ -177,12 +175,6 @@ public struct MLXRMacAppRoot: View {
                 },
                 onQueueInstall: { modelId in
                     await appModel.queueModelInstall(modelId: modelId)
-                },
-                onSubmitImage: { request in
-                    await appModel.submitImage(request)
-                },
-                onSubmitVideo: { request in
-                    await appModel.submitVideo(request)
                 }
             )
 
@@ -310,6 +302,53 @@ public struct MLXRMacAppRoot: View {
         }
     }
 
+    private var globalComposerInset: some View {
+        GlobalComposerBar(
+            workspace: $appModel.studioWorkspace,
+            mode: appModel.composerMode,
+            availableModes: appModel.composerAvailableModes,
+            subworkflows: appModel.composerSubworkflowOptions(for: appModel.composerMode),
+            qualityOptions: appModel.composerPresentation?.controls.qualityPresets ?? [],
+            aspectOptions: appModel.composerPresentation?.controls.aspectPresets ?? [],
+            durationOptions: appModel.composerPresentation?.controls.durationPresets ?? [],
+            variationOptions: appModel.composerPresentation?.controls.variationCounts ?? [],
+            selectedModelName: appModel.composerSelectedModelName,
+            runtimeStatusLabel: appModel.composerRuntimeStatusLabel,
+            isPlanning: appModel.isPlanningStudio,
+            isBusy: appModel.isSubmittingImage || appModel.isSubmittingVideo,
+            canSubmit: appModel.canSubmitCurrentWorkspace(),
+            disabledReason: appModel.currentWorkspaceSubmitDisabledReason(),
+            showsOpenStudioAction: destination != .studio,
+            onSelectMode: { mode in
+                appModel.selectComposerMode(mode)
+            },
+            onSelectTask: { task in
+                appModel.selectComposerTask(task)
+            },
+            onSelectQuality: { value in
+                appModel.selectComposerQuality(value)
+            },
+            onSelectAspect: { value in
+                appModel.selectComposerAspect(value)
+            },
+            onSelectDuration: { value in
+                appModel.selectComposerDuration(value)
+            },
+            onSelectVariation: { count in
+                appModel.selectComposerVariationCount(count)
+            },
+            onSubmit: submitFromGlobalComposer,
+            onOpenStudio: {
+                withAnimation(MLXRMotion.snappy) {
+                    destination = .studio
+                }
+            }
+        )
+        .padding(.horizontal, MLXRSpacing.xl)
+        .padding(.bottom, MLXRSpacing.lg)
+        .background(Color.clear)
+    }
+
     private var activityOverlay: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 120)
@@ -362,6 +401,17 @@ public struct MLXRMacAppRoot: View {
         !appModel.hasBootstrapped
             && appModel.bootstrapError == nil
             && appModel.globalError == nil
+    }
+
+    private var shouldShowGlobalComposer: Bool {
+        guard !shouldShowBootstrapOverlay else { return false }
+        guard !appModel.hasPendingModelSetup else { return false }
+        switch destination ?? .home {
+        case .home, .library, .studio:
+            return true
+        case .models, .settings:
+            return false
+        }
     }
 
     private var onboardingOverlay: some View {
@@ -479,18 +529,22 @@ public struct MLXRMacAppRoot: View {
     }
 
     private func chooseInitialDestinationIfNeeded() {
-        if appModel.hasWorkspaceDraft {
-            destination = .studio
+        if appModel.hasPendingModelSetup {
+            destination = .models
             return
         }
-        if !appModel.hasModelsReady && !appModel.hasContent {
+        if !appModel.hasModelsReady {
             destination = .home
             return
         }
-        if let stored = Destination(rawValue: lastDestinationRaw) {
-            destination = stored == .home ? .studio : stored
+        if appModel.hasContent {
+            if let stored = Destination(rawValue: lastDestinationRaw), stored != .studio {
+                destination = stored
+            } else {
+                destination = .library
+            }
         } else {
-            destination = .studio
+            destination = .home
         }
     }
 
@@ -508,6 +562,15 @@ public struct MLXRMacAppRoot: View {
         )
         withAnimation(MLXRMotion.snappy) {
             destination = .studio
+        }
+    }
+
+    private func submitFromGlobalComposer() {
+        withAnimation(MLXRMotion.snappy) {
+            destination = .studio
+        }
+        Task {
+            await appModel.submitCurrentWorkspace()
         }
     }
 }

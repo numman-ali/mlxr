@@ -5,10 +5,15 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanPresentation,
     WorkflowPlanReadiness,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.presentation import (
+    image_presentation,
+    subworkflow,
+)
 from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import family_extensions
@@ -109,6 +114,25 @@ class ZImageWorkflowStrategy(FamilyWorkflowStrategy):
             intent=intent,
             plan=plan,
             requirements=[],
+        )
+
+    def presentation(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+        readiness: WorkflowPlanReadiness,
+    ) -> WorkflowPlanPresentation:
+        return image_presentation(
+            selected_task=plan.selected_task,
+            subworkflows=[
+                subworkflow(
+                    task="image.generate",
+                    label="Generate from text",
+                    mode="image",
+                    selected_task=plan.selected_task,
+                )
+            ],
         )
 
 

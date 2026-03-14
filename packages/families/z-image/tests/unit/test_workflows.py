@@ -133,6 +133,32 @@ class ZImageWorkflowAndOptionsTests(unittest.TestCase):
             request.extensions["workflow"]["selected_task"], "image.generate"
         )
 
+    def test_presentation_exposes_single_generate_subworkflow(self) -> None:
+        strategy = ZImageWorkflowStrategy()
+        context = _context()
+        intent = WorkflowIntent(
+            model_id="z-image-turbo-local",
+            prompt="bookstore",
+            output=JobOutputPolicy(artifact_format="png"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(presentation.primary_mode, "image")
+        self.assertEqual(presentation.selected_task, "image.generate")
+        self.assertEqual(len(presentation.subworkflows), 1)
+        self.assertEqual(presentation.subworkflows[0].label, "Generate from text")
+        self.assertTrue(presentation.subworkflows[0].default)
+        self.assertEqual(presentation.reference_slots, [])
+        self.assertEqual(
+            [option.value for option in presentation.controls.aspect_presets],
+            ["square", "landscape", "portrait", "story"],
+        )
+        self.assertEqual(presentation.controls.duration_presets, [])
+        self.assertEqual(presentation.controls.variation_counts, [1, 2, 4])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,8 +14,10 @@ from mlxr.core.schemas import (
     WorkflowContextMetadata,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanPresentation,
     WorkflowPlanReadiness,
     WorkflowPlanResult,
+    WorkflowPresentationSubworkflow,
     WorkflowReference,
     WorkflowReferenceRequirement,
 )
@@ -61,6 +63,18 @@ class _FakePlanner:
                     )
                 ],
                 allowed_output_formats=["png"],
+            ),
+            presentation=WorkflowPlanPresentation(
+                primary_mode="image",
+                selected_task=intent.task or "image.generate",
+                subworkflows=[
+                    WorkflowPresentationSubworkflow(
+                        task="image.generate",
+                        label="Generate from text",
+                        mode="image",
+                        default=True,
+                    )
+                ],
             ),
         )
 
@@ -145,6 +159,8 @@ class WorkflowContextTests(unittest.TestCase):
         self.assertEqual(plan.readiness.allowed_output_formats, ["png"])
         self.assertEqual(len(plan.readiness.reference_requirements), 1)
         self.assertEqual(plan.readiness.reference_requirements[0].kind, "image")
+        self.assertEqual(plan.presentation.primary_mode, "image")
+        self.assertEqual(plan.presentation.selected_task, "image.generate")
 
     def test_run_carries_workflow_context_into_job_request(self) -> None:
         manager = _FakeJobManager()

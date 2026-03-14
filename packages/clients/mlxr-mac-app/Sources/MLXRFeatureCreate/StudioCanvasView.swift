@@ -1,4 +1,3 @@
-import AppKit
 import AVKit
 import MLXRAppDomain
 import MLXRDesignSystem
@@ -6,7 +5,6 @@ import SwiftUI
 
 struct StudioCanvasView: View {
     let task: ProductTask
-    @Binding var prompt: String
     let selectedAsset: LibraryAsset?
     let selectedAssetURL: URL?
     let referenceAssets: [LibraryAsset]
@@ -17,13 +15,8 @@ struct StudioCanvasView: View {
     @Binding var focusedResultAssetId: String?
     let planningError: String?
     let onDismissPlanningError: () -> Void
-    let isBusy: Bool
     let error: String?
     let onDismissError: () -> Void
-    let suggestions: [String]
-    let canSubmit: Bool
-    let submitDisabledReason: String?
-    let onSubmit: () -> Void
     let onUseFocusedAssetAsReference: () -> Void
     let onEditAsset: (LibraryAsset) -> Void
     let onAnimateAsset: (LibraryAsset) -> Void
@@ -63,38 +56,6 @@ struct StudioCanvasView: View {
 
                 if !currentRunGroupAssets.isEmpty {
                     resultFilmstrip
-                }
-            }
-
-            GlassCard(
-                title: "Prompt",
-                subtitle: "Describe the result you want. Stay here while it runs and the outputs will land in this same workspace."
-            ) {
-                PromptComposer(
-                    text: $prompt,
-                    placeholder: "Describe what you want to make or change…",
-                    suggestions: suggestions
-                )
-                if let submitDisabledReason, !canSubmit {
-                    Text(submitDisabledReason)
-                        .font(MLXRType.captionLarge)
-                        .foregroundStyle(MLXRColor.textTertiary)
-                }
-                HStack {
-                    Spacer()
-                    Button {
-                        onSubmit()
-                    } label: {
-                        HStack(spacing: MLXRSpacing.xs) {
-                            if isBusy {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text(isBusy ? "Working…" : task.title)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canSubmit)
                 }
             }
         }
@@ -207,8 +168,8 @@ private struct StudioPreviewView: View {
 
     var body: some View {
         Group {
-            if asset.isImage, let image = NSImage(contentsOf: url) {
-                MediaHero(image: image, dominantHue: dominantHue(from: image))
+            if asset.isImage {
+                ImageCanvasPreview(url: url)
             } else if asset.isVideo {
                 VideoCanvasPreview(url: url)
             } else {

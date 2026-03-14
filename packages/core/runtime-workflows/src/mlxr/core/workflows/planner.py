@@ -49,10 +49,12 @@ class WorkflowPlanner:
         context = WorkflowPlanningContext(model=model, capability=capability)
         plan = strategy.plan(context, intent)
         readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
         return WorkflowPlanResult(
             capability=capability,
             plan=plan,
             readiness=readiness,
+            presentation=presentation,
         )
 
     def job_request_for_plan(

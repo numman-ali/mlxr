@@ -221,6 +221,54 @@ class QwenImageWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not support workflow task"):
             strategy.plan(context, intent)
 
+    def test_generate_presentation_exposes_generate_and_edit_choices(self) -> None:
+        strategy = QwenImageWorkflowStrategy()
+        context = _context(tasks=["image.generate", "image.edit"])
+        intent = WorkflowIntent(
+            model_id="qwen-image-local",
+            prompt="poster with bilingual typography",
+            output=JobOutputPolicy(artifact_format="png"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(presentation.primary_mode, "image")
+        self.assertEqual(
+            [item.task for item in presentation.subworkflows],
+            ["image.generate", "image.edit"],
+        )
+        self.assertEqual(
+            [item.task for item in presentation.subworkflows if item.default],
+            ["image.generate"],
+        )
+        self.assertEqual(presentation.reference_slots, [])
+
+    def test_edit_presentation_requires_source_image_slot(self) -> None:
+        strategy = QwenImageWorkflowStrategy()
+        context = _context(tasks=["image.generate", "image.edit"])
+        intent = WorkflowIntent(
+            model_id="qwen-image-local",
+            prompt="preserve the face but move the scene to dusk",
+            task="image.edit",
+            output=JobOutputPolicy(artifact_format="png"),
+        )
+
+        plan = strategy.plan(context, intent)
+        readiness = strategy.readiness(context, intent, plan)
+        presentation = strategy.presentation(context, intent, plan, readiness)
+
+        self.assertEqual(
+            [item.task for item in presentation.subworkflows if item.default],
+            ["image.edit"],
+        )
+        self.assertEqual(len(presentation.reference_slots), 1)
+        self.assertEqual(presentation.reference_slots[0].slot_id, "source-image")
+        self.assertTrue(presentation.reference_slots[0].required)
+        self.assertEqual(presentation.reference_slots[0].minimum_count, 1)
+        self.assertTrue(presentation.reference_slots[0].allows_multiple)
+
 
 if __name__ == "__main__":
     unittest.main()

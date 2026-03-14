@@ -196,6 +196,78 @@ public struct WorkflowReferenceRequirement: Codable, Sendable, Hashable, Identif
     }
 }
 
+public struct WorkflowPresentationControlOption: Codable, Sendable, Hashable, Identifiable {
+    public var value: String
+    public var label: String
+    public var `default`: Bool
+
+    public var id: String { value }
+}
+
+public struct WorkflowPresentationControls: Codable, Sendable, Hashable {
+    public var qualityPresets: [WorkflowPresentationControlOption]
+    public var aspectPresets: [WorkflowPresentationControlOption]
+    public var durationPresets: [WorkflowPresentationControlOption]
+    public var variationCounts: [Int]
+
+    public init(
+        qualityPresets: [WorkflowPresentationControlOption] = [],
+        aspectPresets: [WorkflowPresentationControlOption] = [],
+        durationPresets: [WorkflowPresentationControlOption] = [],
+        variationCounts: [Int] = []
+    ) {
+        self.qualityPresets = qualityPresets
+        self.aspectPresets = aspectPresets
+        self.durationPresets = durationPresets
+        self.variationCounts = variationCounts
+    }
+}
+
+public struct WorkflowPresentationSubworkflow: Codable, Sendable, Hashable, Identifiable {
+    public var task: String
+    public var label: String
+    public var mode: String
+    public var `default`: Bool
+
+    public var id: String { task }
+}
+
+public struct WorkflowPresentationReferenceSlot: Codable, Sendable, Hashable, Identifiable {
+    public var slotId: String
+    public var label: String
+    public var kind: WorkflowReferenceKind
+    public var description: String?
+    public var required: Bool
+    public var minimumCount: Int
+    public var maximumCount: Int?
+    public var acceptedRoles: [String]
+    public var allowsMultiple: Bool
+
+    public var id: String { slotId }
+}
+
+public struct WorkflowPlanPresentation: Codable, Sendable, Hashable {
+    public var primaryMode: String
+    public var selectedTask: String
+    public var subworkflows: [WorkflowPresentationSubworkflow]
+    public var referenceSlots: [WorkflowPresentationReferenceSlot]
+    public var controls: WorkflowPresentationControls
+
+    public init(
+        primaryMode: String,
+        selectedTask: String,
+        subworkflows: [WorkflowPresentationSubworkflow] = [],
+        referenceSlots: [WorkflowPresentationReferenceSlot] = [],
+        controls: WorkflowPresentationControls = .init()
+    ) {
+        self.primaryMode = primaryMode
+        self.selectedTask = selectedTask
+        self.subworkflows = subworkflows
+        self.referenceSlots = referenceSlots
+        self.controls = controls
+    }
+}
+
 public struct WorkflowPlanReadiness: Codable, Sendable, Hashable {
     public var ready: Bool
     public var blockingIssues: [String]
@@ -235,6 +307,10 @@ public struct WorkflowPlanResult: Codable, Sendable, Hashable {
     public var capability: CapabilityDescriptor
     public var plan: WorkflowPlan
     public var readiness: WorkflowPlanReadiness
+    public var presentation: WorkflowPlanPresentation = .init(
+        primaryMode: "image",
+        selectedTask: "image.generate"
+    )
 }
 
 public struct JobRequest: Codable, Sendable, Hashable {

@@ -5,12 +5,19 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanPresentation,
     WorkflowPlanReadiness,
+    WorkflowPresentationReferenceSlot,
     WorkflowReference,
     WorkflowReferenceRequirement,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.presentation import (
+    slot,
+    subworkflow,
+    video_presentation,
+)
 from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import (
@@ -361,6 +368,56 @@ class LTXWorkflowStrategy(FamilyWorkflowStrategy):
             requirements=_reference_requirements_for_task(plan.selected_task),
         )
 
+    def presentation(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+        readiness: WorkflowPlanReadiness,
+    ) -> WorkflowPlanPresentation:
+        return video_presentation(
+            selected_task=plan.selected_task,
+            subworkflows=[
+                subworkflow(
+                    task="video.generate",
+                    label="Generate from text",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="video.condition.image",
+                    label="Animate an image",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="video.condition.audio",
+                    label="Use audio as a guide",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="video.condition.video",
+                    label="Use video as a guide",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="video.interpolate",
+                    label="Blend between frames",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="video.retake",
+                    label="Retake a clip",
+                    mode="video",
+                    selected_task=plan.selected_task,
+                ),
+            ],
+            reference_slots=_reference_slots_for_task(plan.selected_task),
+        )
+
 
 def _references_by_kind(
     references: tuple[WorkflowReference, ...],
@@ -493,6 +550,88 @@ def _reference_requirements_for_task(
                 minimum_count=1,
                 maximum_count=1,
                 description="Choose exactly one source video to retake.",
+            )
+        ]
+    return []
+
+
+def _reference_slots_for_task(task: str) -> list[WorkflowPresentationReferenceSlot]:
+    if task == "video.condition.image":
+        return [
+            slot(
+                slot_id="start-frame",
+                label="Start Frame",
+                kind="image",
+                description="Choose at least one image to animate.",
+                required=True,
+                minimum_count=1,
+                allows_multiple=True,
+            )
+        ]
+    if task == "video.condition.audio":
+        return [
+            slot(
+                slot_id="audio-guide",
+                label="Audio Guide",
+                kind="audio",
+                description="Choose exactly one audio asset to drive the clip.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
+            )
+        ]
+    if task == "video.condition.video":
+        return [
+            slot(
+                slot_id="guide-video",
+                label="Guide Video",
+                kind="video",
+                description="Choose exactly one guide video.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
+            ),
+            slot(
+                slot_id="control-lora",
+                label="Control LoRA",
+                kind="lora",
+                description="Choose exactly one compatible control LoRA.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
+            ),
+        ]
+    if task == "video.interpolate":
+        return [
+            slot(
+                slot_id="start-frame",
+                label="Start Frame",
+                kind="image",
+                description="Choose the first keyframe for interpolation.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
+            ),
+            slot(
+                slot_id="end-frame",
+                label="End Frame",
+                kind="image",
+                description="Choose the ending keyframe for interpolation.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
+            ),
+        ]
+    if task == "video.retake":
+        return [
+            slot(
+                slot_id="source-video",
+                label="Source Video",
+                kind="video",
+                description="Choose exactly one source video to retake.",
+                required=True,
+                minimum_count=1,
+                maximum_count=1,
             )
         ]
     return []

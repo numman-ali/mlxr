@@ -79,6 +79,66 @@ class WorkflowPlanReadiness(BaseModel):
     allowed_output_formats: list[str] = Field(default_factory=list)
 
 
+class WorkflowPresentationControlOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+    label: str
+    default: bool = False
+
+
+class WorkflowPresentationControls(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    quality_presets: list[WorkflowPresentationControlOption] = Field(
+        default_factory=list
+    )
+    aspect_presets: list[WorkflowPresentationControlOption] = Field(
+        default_factory=list
+    )
+    duration_presets: list[WorkflowPresentationControlOption] = Field(
+        default_factory=list
+    )
+    variation_counts: list[int] = Field(default_factory=list)
+
+
+class WorkflowPresentationSubworkflow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task: str
+    label: str
+    mode: Literal["image", "video", "audio"]
+    default: bool = False
+
+
+class WorkflowPresentationReferenceSlot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slot_id: str
+    label: str
+    kind: Literal["image", "video", "audio", "lora"]
+    description: str | None = None
+    required: bool = False
+    minimum_count: int = 0
+    maximum_count: int | None = None
+    accepted_roles: list[str] = Field(default_factory=list)
+    allows_multiple: bool = False
+
+
+class WorkflowPlanPresentation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    primary_mode: Literal["image", "video", "audio"]
+    selected_task: str
+    subworkflows: list[WorkflowPresentationSubworkflow] = Field(default_factory=list)
+    reference_slots: list[WorkflowPresentationReferenceSlot] = Field(
+        default_factory=list
+    )
+    controls: WorkflowPresentationControls = Field(
+        default_factory=WorkflowPresentationControls
+    )
+
+
 class WorkflowPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,6 +161,12 @@ class WorkflowPlanResult(BaseModel):
     capability: CapabilityDescriptor
     plan: WorkflowPlan
     readiness: WorkflowPlanReadiness = Field(default_factory=WorkflowPlanReadiness)
+    presentation: WorkflowPlanPresentation = Field(
+        default_factory=lambda: WorkflowPlanPresentation(
+            primary_mode="image",
+            selected_task="image.generate",
+        )
+    )
 
 
 class WorkflowRunRequest(BaseModel):

@@ -5,12 +5,18 @@ from mlxr.core.schemas import (
     JobRequest,
     WorkflowIntent,
     WorkflowPlan,
+    WorkflowPlanPresentation,
     WorkflowPlanReadiness,
     WorkflowReference,
     WorkflowReferenceRequirement,
     WorkflowStageSpec,
 )
 from mlxr.core.workflows import FamilyWorkflowStrategy, WorkflowPlanningContext
+from mlxr.core.workflows.presentation import (
+    image_presentation,
+    slot,
+    subworkflow,
+)
 from mlxr.core.workflows.readiness import build_plan_readiness
 
 from .family_options import family_extensions
@@ -123,6 +129,47 @@ class Flux2WorkflowStrategy(FamilyWorkflowStrategy):
             intent=intent,
             plan=plan,
             requirements=requirements,
+        )
+
+    def presentation(
+        self,
+        context: WorkflowPlanningContext,
+        intent: WorkflowIntent,
+        plan: WorkflowPlan,
+        readiness: WorkflowPlanReadiness,
+    ) -> WorkflowPlanPresentation:
+        reference_slots = (
+            [
+                slot(
+                    slot_id="source-image",
+                    label="Source image",
+                    kind="image",
+                    description="Choose at least one image to edit.",
+                    required=True,
+                    minimum_count=1,
+                    allows_multiple=True,
+                )
+            ]
+            if plan.selected_task == "image.edit"
+            else []
+        )
+        return image_presentation(
+            selected_task=plan.selected_task,
+            subworkflows=[
+                subworkflow(
+                    task="image.generate",
+                    label="Generate from text",
+                    mode="image",
+                    selected_task=plan.selected_task,
+                ),
+                subworkflow(
+                    task="image.edit",
+                    label="Edit an existing image",
+                    mode="image",
+                    selected_task=plan.selected_task,
+                ),
+            ],
+            reference_slots=reference_slots,
         )
 
 

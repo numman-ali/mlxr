@@ -3,6 +3,7 @@ import MLXRDesignSystem
 import SwiftUI
 
 struct StudioSidebarView: View {
+    let showsWorkflowCard: Bool
     let workflows: [StudioWorkflowOption]
     let allowedReferenceKinds: Set<WorkflowReferenceKind>
     @Binding var selectedTask: ProductTask
@@ -15,12 +16,14 @@ struct StudioSidebarView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
-                GlassCard(
-                    title: "What do you want to do?",
-                    subtitle: "Start with a verb, not a technical pipeline."
-                ) {
-                    ForEach(workflows) { workflow in
-                        workflowRow(workflow)
+                if showsWorkflowCard {
+                    GlassCard(
+                        title: "What do you want to do?",
+                        subtitle: "Start with a verb, not a technical pipeline."
+                    ) {
+                        ForEach(workflows) { workflow in
+                            workflowRow(workflow)
+                        }
                     }
                 }
 
