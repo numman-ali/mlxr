@@ -13,6 +13,8 @@ public struct MLXRMacAppRoot: View {
     @State private var appModel = MLXRAppModel()
     @State private var destination: Destination? = .home
     @State private var isActivityPresented = false
+    @State private var libraryFocusedWorkspaceId: String?
+    @State private var libraryFocusedAssetId: String?
 
     public init() {}
 
@@ -117,20 +119,28 @@ public struct MLXRMacAppRoot: View {
                     }
                 },
                 onOpenLibrary: {
+                    appModel.showLibraryBrowser()
+                    libraryFocusedWorkspaceId = nil
+                    libraryFocusedAssetId = nil
                     withAnimation(MLXRMotion.snappy) {
                         destination = .library
                     }
                 },
                 onContinueAsset: { asset in
-                    openStudio(
-                        task: asset.isAudio ? .videoConditionAudio : asset.isVideo ? .videoRetake : .imageEdit,
-                        focusedAssetId: asset.id,
-                        referenceAssetIds: [asset.id]
-                    )
+                    libraryFocusedWorkspaceId = asset.workspaceId ?? appModel.activeWorkspaceId
+                    libraryFocusedAssetId = asset.id
+                    if let workspaceId = libraryFocusedWorkspaceId {
+                        appModel.selectWorkspace(workspaceId)
+                    }
+                    withAnimation(MLXRMotion.snappy) {
+                        destination = .library
+                    }
                 },
                 onResumeWorkspace: {
+                    libraryFocusedWorkspaceId = appModel.activeWorkspaceId
+                    libraryFocusedAssetId = nil
                     withAnimation(MLXRMotion.snappy) {
-                        destination = .studio
+                        destination = .library
                     }
                 }
             )
@@ -180,6 +190,10 @@ public struct MLXRMacAppRoot: View {
 
         case .library:
             GalleryScreen(
+                workspaces: appModel.workspaces,
+                activeWorkspaceId: appModel.activeWorkspaceId,
+                focusedWorkspaceId: libraryFocusedWorkspaceId ?? appModel.selectedLibraryWorkspaceId,
+                focusedAssetId: libraryFocusedAssetId,
                 assets: appModel.libraryAssets,
                 runGroups: appModel.runGroups,
                 collections: appModel.collections,
@@ -199,6 +213,15 @@ public struct MLXRMacAppRoot: View {
                         referenceAssetIds: request.referenceAssetIds,
                         prompt: request.prompt
                     )
+                },
+                onSelectWorkspace: { workspaceId in
+                    appModel.selectWorkspace(workspaceId)
+                    libraryFocusedWorkspaceId = workspaceId
+                },
+                onCreateWorkspace: {
+                    let workspace = appModel.createWorkspace()
+                    libraryFocusedWorkspaceId = workspace.id
+                    return workspace
                 },
                 onToggleFavorite: { assetId in
                     appModel.toggleFavorite(assetId: assetId)
@@ -543,6 +566,7 @@ public struct MLXRMacAppRoot: View {
             } else {
                 destination = .library
             }
+            libraryFocusedWorkspaceId = appModel.selectedLibraryWorkspaceId
         } else {
             destination = .home
         }

@@ -1,4 +1,3 @@
-import AppKit
 import MLXRAppDomain
 import MLXRDesignSystem
 import SwiftUI
@@ -84,7 +83,7 @@ private struct LibraryTileView: View {
     var body: some View {
         GlassCardInteractive {
             VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
-                LibraryThumbnailView(
+                LibraryAssetThumbnailView(
                     asset: group.primaryAsset,
                     onMaterialize: onMaterialize
                 )
@@ -180,53 +179,6 @@ private struct LibraryTileView: View {
         case .completed: "Completed"
         case .failed: "Failed"
         case .cancelled: "Cancelled"
-        }
-    }
-}
-
-private struct LibraryThumbnailView: View {
-    let asset: LibraryAsset
-    let onMaterialize: @Sendable (LibraryAsset) async -> URL?
-
-    @State private var previewImage: NSImage?
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
-                .fill(MLXRColor.surfaceCard)
-
-            if let previewImage {
-                Image(nsImage: previewImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                VStack(spacing: MLXRSpacing.xs) {
-                    Image(systemName: icon)
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(MLXRColor.textSecondary)
-                    Text(asset.kind.rawValue.capitalized)
-                        .font(MLXRType.captionSmall)
-                        .foregroundStyle(MLXRColor.textTertiary)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous))
-        .task(id: asset.id) {
-            guard previewImage == nil else { return }
-            previewImage = await LibraryThumbnailStore.shared.thumbnail(
-                for: asset,
-                maxPixelSize: 640,
-                materialize: onMaterialize
-            )
-        }
-    }
-
-    private var icon: String {
-        switch asset.kind {
-        case .image: "photo.fill"
-        case .video: "film.fill"
-        case .audio: "waveform"
-        case .other: "doc.fill"
         }
     }
 }

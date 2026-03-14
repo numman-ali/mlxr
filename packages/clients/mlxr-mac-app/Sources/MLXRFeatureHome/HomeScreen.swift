@@ -108,8 +108,8 @@ public struct HomeScreen: View {
 
     private var quickActions: some View {
         GlassCard(
-            title: "Start in Studio",
-            subtitle: "The fastest path is still the clearest one: choose what you want to make, then stay in the same workspace while it runs."
+            title: "Start a project",
+            subtitle: "Choose what you want to make, then stay with the same project while the results land."
         ) {
             HStack(spacing: MLXRSpacing.md) {
                 actionButton(
@@ -140,7 +140,7 @@ public struct HomeScreen: View {
     private var setupCard: some View {
         GlassCard(
             title: "Start with recommended models",
-            subtitle: "Install the starter rows once, then use them everywhere in Studio and Library."
+            subtitle: "Install the starter rows once, then use them everywhere in Home and Library."
         ) {
             HStack {
                 VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
@@ -161,10 +161,10 @@ public struct HomeScreen: View {
     private var resumeCard: some View {
         GlassCard(
             title: "Resume your workspace",
-            subtitle: "Your last draft is still waiting in Studio, so you can keep iterating without rebuilding the setup."
+            subtitle: "Your last draft is still waiting in Library, so you can keep iterating without rebuilding the setup."
         ) {
             HStack(spacing: MLXRSpacing.md) {
-                Button("Resume workspace", action: onResumeWorkspace)
+                Button("Open project", action: onResumeWorkspace)
                     .buttonStyle(.borderedProminent)
                 Button("Browse library", action: onOpenLibrary)
                     .buttonStyle(.bordered)

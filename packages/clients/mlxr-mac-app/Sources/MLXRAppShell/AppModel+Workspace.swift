@@ -132,6 +132,7 @@ extension MLXRAppModel {
                 AppPresentationState(
                     hasCompletedModelSetup: hasCompletedOnboarding,
                     activeWorkspaceId: activeWorkspaceId,
+                    selectedLibraryWorkspaceId: selectedLibraryWorkspaceId,
                     workspaces: workspaces,
                     collections: collections,
                     runGroups: runGroups,
@@ -448,6 +449,26 @@ extension MLXRAppModel {
         collections.insert(CollectionRecord(title: normalized), at: 0)
     }
 
+    @discardableResult
+    public func createWorkspace(named title: String? = nil) -> WorkspaceRecord {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedTitle = (trimmed?.isEmpty == false ? trimmed : nil) ?? "New Project"
+        let workspace = WorkspaceRecord(title: resolvedTitle)
+        workspaces.insert(workspace, at: 0)
+        selectWorkspace(workspace.id)
+        return workspace
+    }
+
+    public func selectWorkspace(_ workspaceId: String) {
+        activeWorkspaceId = workspaceId
+        selectedLibraryWorkspaceId = workspaceId
+        ensureWorkspaceExists()
+    }
+
+    public func showLibraryBrowser() {
+        selectedLibraryWorkspaceId = nil
+    }
+
     public func toggleAsset(_ assetId: String, in collectionId: String) {
         var record = assetRecords[assetId] ?? AssetRecord(id: assetId)
         if record.collectionIds.contains(collectionId) {
@@ -481,6 +502,10 @@ extension MLXRAppModel {
             runGroups[index].variationCount = max(runGroups[index].variationCount, variationCount)
             studioWorkspace.lastActiveRunGroupId = runGroupId
             lastSubmittedJobId = jobId
+            renameWorkspaceIfPlaceholder(
+                workspaceId: runGroups[index].workspaceId,
+                using: context?.intentLabel ?? title
+            )
             return
         }
 
@@ -501,6 +526,10 @@ extension MLXRAppModel {
         runGroups.insert(group, at: 0)
         studioWorkspace.lastActiveRunGroupId = runGroupId
         lastSubmittedJobId = jobId
+        renameWorkspaceIfPlaceholder(
+            workspaceId: group.workspaceId,
+            using: context?.intentLabel ?? title
+        )
     }
 
     func syncRunGroupsFromJobs() {
@@ -744,7 +773,7 @@ extension MLXRAppModel {
 
     private func ensureWorkspaceExists() {
         if workspaces.contains(where: { $0.id == activeWorkspaceId }) == false {
-            workspaces.append(WorkspaceRecord(id: activeWorkspaceId, title: "Current Workspace"))
+            workspaces.append(WorkspaceRecord(id: activeWorkspaceId, title: "New Project"))
         }
         if studioWorkspace.workspaceId != activeWorkspaceId {
             studioWorkspace.workspaceId = activeWorkspaceId
@@ -752,5 +781,28 @@ extension MLXRAppModel {
         if let index = workspaces.firstIndex(where: { $0.id == activeWorkspaceId }) {
             workspaces[index].lastOpenedAt = .now
         }
+    }
+
+    private func renameWorkspaceIfPlaceholder(workspaceId: String, using title: String) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
+            return
+        }
+        let currentTitle = workspaces[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard currentTitle == "Current Workspace" || currentTitle == "New Project" else {
+            return
+        }
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return
+        }
+        let headline: String
+        if normalized.count <= 48 {
+            headline = normalized
+        } else {
+            let cutoff = normalized.index(normalized.startIndex, offsetBy: 45)
+            let truncated = String(normalized[..<cutoff]).trimmingCharacters(in: .whitespacesAndNewlines)
+            headline = "\(truncated)…"
+        }
+        workspaces[index].title = headline
     }
 }

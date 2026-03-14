@@ -295,6 +295,7 @@ public struct StudioWorkspaceDraft: Codable, Hashable, Sendable {
 public struct AppPresentationState: Codable, Hashable, Sendable {
     public var hasCompletedModelSetup: Bool
     public var activeWorkspaceId: String
+    public var selectedLibraryWorkspaceId: String?
     public var workspaces: [WorkspaceRecord]
     public var collections: [CollectionRecord]
     public var runGroups: [RunGroupRecord]
@@ -305,6 +306,7 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case hasCompletedModelSetup
         case activeWorkspaceId
+        case selectedLibraryWorkspaceId
         case workspaces
         case collections
         case runGroups
@@ -316,7 +318,8 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
     public init(
         hasCompletedModelSetup: Bool = false,
         activeWorkspaceId: String = "default-workspace",
-        workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")],
+        selectedLibraryWorkspaceId: String? = nil,
+        workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "New Project")],
         collections: [CollectionRecord] = [],
         runGroups: [RunGroupRecord] = [],
         dismissedActivityRunGroupIds: [String] = [],
@@ -325,6 +328,7 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
     ) {
         self.hasCompletedModelSetup = hasCompletedModelSetup
         self.activeWorkspaceId = activeWorkspaceId
+        self.selectedLibraryWorkspaceId = selectedLibraryWorkspaceId
         self.workspaces = workspaces
         self.collections = collections
         self.runGroups = runGroups
@@ -340,9 +344,11 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         activeWorkspaceId =
             try container.decodeIfPresent(String.self, forKey: .activeWorkspaceId)
             ?? "default-workspace"
+        selectedLibraryWorkspaceId =
+            try container.decodeIfPresent(String.self, forKey: .selectedLibraryWorkspaceId)
         workspaces =
             try container.decodeIfPresent([WorkspaceRecord].self, forKey: .workspaces)
-            ?? [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")]
+            ?? [WorkspaceRecord(id: "default-workspace", title: "New Project")]
         collections =
             try container.decodeIfPresent([CollectionRecord].self, forKey: .collections)
             ?? []

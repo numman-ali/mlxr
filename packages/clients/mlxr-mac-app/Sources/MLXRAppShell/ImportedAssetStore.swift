@@ -37,7 +37,11 @@ public struct ImportedAssetStore {
             .sorted { $0.importedAt > $1.importedAt }
     }
 
-    func importFiles(at urls: [URL], existing: [ImportedAssetRecord]) throws -> [ImportedAssetRecord] {
+    func importFiles(
+        at urls: [URL],
+        existing: [ImportedAssetRecord],
+        workspaceId: String?
+    ) throws -> [ImportedAssetRecord] {
         guard !urls.isEmpty else { return existing }
         var records = existing
 
@@ -54,6 +58,7 @@ public struct ImportedAssetStore {
 
             let record = ImportedAssetRecord(
                 id: UUID().uuidString,
+                workspaceId: workspaceId,
                 title: url.lastPathComponent,
                 sourcePath: url.path(),
                 storageKey: fileName,

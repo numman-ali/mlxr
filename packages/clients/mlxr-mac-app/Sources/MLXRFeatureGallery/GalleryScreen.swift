@@ -3,6 +3,10 @@ import SwiftUI
 
 @MainActor
 public struct GalleryScreen: View {
+    let workspaces: [WorkspaceRecord]
+    let activeWorkspaceId: String
+    let focusedWorkspaceId: String?
+    let focusedAssetId: String?
     let assets: [LibraryAsset]
     let runGroups: [RunGroupRecord]
     let collections: [CollectionRecord]
@@ -10,11 +14,17 @@ public struct GalleryScreen: View {
     let onImportAssets: @Sendable ([URL]) async -> [ImportedAssetRecord]
     let onRemoveImportedAsset: @Sendable (String) async -> Void
     let onOpenInStudio: (StudioOpenRequest) -> Void
+    let onSelectWorkspace: (String) -> Void
+    let onCreateWorkspace: () -> WorkspaceRecord
     let onToggleFavorite: (String) -> Void
     let onToggleCollection: (String, String) -> Void
     let onCreateCollection: (String) -> Void
 
     public init(
+        workspaces: [WorkspaceRecord],
+        activeWorkspaceId: String,
+        focusedWorkspaceId: String?,
+        focusedAssetId: String?,
         assets: [LibraryAsset],
         runGroups: [RunGroupRecord],
         collections: [CollectionRecord],
@@ -22,10 +32,16 @@ public struct GalleryScreen: View {
         onImportAssets: @escaping @Sendable ([URL]) async -> [ImportedAssetRecord],
         onRemoveImportedAsset: @escaping @Sendable (String) async -> Void,
         onOpenInStudio: @escaping (StudioOpenRequest) -> Void,
+        onSelectWorkspace: @escaping (String) -> Void,
+        onCreateWorkspace: @escaping () -> WorkspaceRecord,
         onToggleFavorite: @escaping (String) -> Void,
         onToggleCollection: @escaping (String, String) -> Void,
         onCreateCollection: @escaping (String) -> Void
     ) {
+        self.workspaces = workspaces
+        self.activeWorkspaceId = activeWorkspaceId
+        self.focusedWorkspaceId = focusedWorkspaceId
+        self.focusedAssetId = focusedAssetId
         self.assets = assets
         self.runGroups = runGroups
         self.collections = collections
@@ -33,6 +49,8 @@ public struct GalleryScreen: View {
         self.onImportAssets = onImportAssets
         self.onRemoveImportedAsset = onRemoveImportedAsset
         self.onOpenInStudio = onOpenInStudio
+        self.onSelectWorkspace = onSelectWorkspace
+        self.onCreateWorkspace = onCreateWorkspace
         self.onToggleFavorite = onToggleFavorite
         self.onToggleCollection = onToggleCollection
         self.onCreateCollection = onCreateCollection
@@ -40,6 +58,10 @@ public struct GalleryScreen: View {
 
     public var body: some View {
         LibraryWorkspaceView(
+            workspaces: workspaces,
+            activeWorkspaceId: activeWorkspaceId,
+            focusedWorkspaceId: focusedWorkspaceId,
+            focusedAssetId: focusedAssetId,
             assets: assets,
             runGroups: runGroups,
             collections: collections,
@@ -47,6 +69,8 @@ public struct GalleryScreen: View {
             onImportAssets: onImportAssets,
             onRemoveImportedAsset: onRemoveImportedAsset,
             onOpenInStudio: onOpenInStudio,
+            onSelectWorkspace: onSelectWorkspace,
+            onCreateWorkspace: onCreateWorkspace,
             onToggleFavorite: onToggleFavorite,
             onToggleCollection: onToggleCollection,
             onCreateCollection: onCreateCollection

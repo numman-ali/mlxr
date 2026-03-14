@@ -46,7 +46,10 @@ public final class MLXRAppModel {
     public var activeWorkspaceId = "default-workspace" {
         didSet { persistPresentationState() }
     }
-    public var workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")] {
+    public var selectedLibraryWorkspaceId: String? {
+        didSet { persistPresentationState() }
+    }
+    public var workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "New Project")] {
         didSet { persistPresentationState() }
     }
     public var collections: [CollectionRecord] = [] {
@@ -132,6 +135,7 @@ public final class MLXRAppModel {
             let presentation = try workspaceStateStore.load()
             hasCompletedOnboarding = presentation.hasCompletedModelSetup
             activeWorkspaceId = presentation.activeWorkspaceId
+            selectedLibraryWorkspaceId = presentation.selectedLibraryWorkspaceId
             workspaces = presentation.workspaces
             collections = presentation.collections
             runGroups = presentation.runGroups

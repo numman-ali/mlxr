@@ -59,6 +59,7 @@ public enum LibraryAssetFilter: String, CaseIterable, Identifiable, Sendable {
 
 public struct ImportedAssetRecord: Codable, Identifiable, Hashable, Sendable {
     public var id: String
+    public var workspaceId: String?
     public var title: String
     public var sourcePath: String
     public var storageKey: String
@@ -68,6 +69,7 @@ public struct ImportedAssetRecord: Codable, Identifiable, Hashable, Sendable {
 
     public init(
         id: String,
+        workspaceId: String? = nil,
         title: String,
         sourcePath: String,
         storageKey: String,
@@ -76,6 +78,7 @@ public struct ImportedAssetRecord: Codable, Identifiable, Hashable, Sendable {
         importedAt: Date
     ) {
         self.id = id
+        self.workspaceId = workspaceId
         self.title = title
         self.sourcePath = sourcePath
         self.storageKey = storageKey
@@ -100,6 +103,7 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
     public var job: JobRecord?
     public var importedAsset: ImportedAssetRecord?
     public var runGroupId: String?
+    public var workspaceId: String?
     public var collectionIds: [String]
     public var isFavorite: Bool
     public var lastUsedAt: Date?
@@ -119,6 +123,7 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
         job: JobRecord?,
         importedAsset: ImportedAssetRecord?,
         runGroupId: String? = nil,
+        workspaceId: String? = nil,
         collectionIds: [String] = [],
         isFavorite: Bool = false,
         lastUsedAt: Date? = nil
@@ -137,6 +142,7 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
         self.job = job
         self.importedAsset = importedAsset
         self.runGroupId = runGroupId
+        self.workspaceId = workspaceId
         self.collectionIds = collectionIds
         self.isFavorite = isFavorite
         self.lastUsedAt = lastUsedAt
@@ -244,6 +250,7 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
                 job: entry.job,
                 importedAsset: nil,
                 runGroupId: entry.job.request.context?.runGroupId,
+                workspaceId: entry.job.request.context?.workspaceId,
                 collectionIds: metadata?.collectionIds ?? [],
                 isFavorite: metadata?.isFavorite ?? false,
                 lastUsedAt: metadata?.lastUsedAt
@@ -272,6 +279,7 @@ public struct LibraryAsset: Identifiable, Hashable, Sendable {
                 job: nil,
                 importedAsset: record,
                 runGroupId: nil,
+                workspaceId: record.workspaceId,
                 collectionIds: metadata?.collectionIds ?? [],
                 isFavorite: metadata?.isFavorite ?? false,
                 lastUsedAt: metadata?.lastUsedAt

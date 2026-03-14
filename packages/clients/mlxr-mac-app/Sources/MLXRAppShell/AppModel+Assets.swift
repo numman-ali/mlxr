@@ -27,7 +27,11 @@ extension MLXRAppModel {
     public func importExternalAssets(from urls: [URL]) async -> [ImportedAssetRecord] {
         guard !urls.isEmpty else { return [] }
         do {
-            let updated = try importedAssetStore.importFiles(at: urls, existing: importedAssets)
+            let updated = try importedAssetStore.importFiles(
+                at: urls,
+                existing: importedAssets,
+                workspaceId: activeWorkspaceId
+            )
             let existingIds = Set(importedAssets.map { $0.id })
             let createdIds = Set(updated.map { $0.id }).subtracting(existingIds)
             importedAssets = updated
