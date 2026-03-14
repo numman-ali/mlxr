@@ -23,7 +23,7 @@ Review gate:
 
 - [ ] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI.
 - [ ] Confirm all eight reference frames still support the chosen IA and interaction model.
-- [ ] Keep `00-unified-studio-master-plan.md` aligned with the latest locked decisions.
+- [ ] Keep `00-master-plan.md` aligned with the latest locked decisions.
 - [ ] Keep `07-stage-acceptance-and-review-checklists.md` aligned with the validation and review gate.
 - [ ] Keep this todo hub updated when stage scope changes.
 - [ ] Preserve runtime-parity rules: no host-owned readiness, capability, or run-acceptance truth.

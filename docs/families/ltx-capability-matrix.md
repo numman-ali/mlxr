@@ -279,7 +279,7 @@ If the repo priority is “highest quality achievable on Mac,” the next target
 should not be more distilled-only polishing. But it also should not be layering
 new non-distilled claims on top of donor runtime code that still powers the
 current proving slice. The next target is the owned-substrate migration
-described in [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md),
+described in [16-owned-substrate-migration-plan.md](../research/16-owned-substrate-migration-plan.md),
 followed immediately by the upstream full-checkpoint two-stage family.
 
 Recommended order:
