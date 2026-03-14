@@ -44,8 +44,13 @@ public struct ActivityCenterButton: View {
     }
 
     public var body: some View {
-        Button {
-            isPresented.toggle()
+        let button = Button {
+            switch presentation {
+            case .toolbar:
+                isPresented.toggle()
+            case .rail:
+                onOpenLibrary()
+            }
         } label: {
             Group {
                 switch presentation {
@@ -110,20 +115,29 @@ public struct ActivityCenterButton: View {
             }
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $isPresented, attachmentAnchor: .point(.bottomTrailing)) {
-            ActivityCenterPanel(
-                activeJobs: activeJobs,
-                recentJobs: recentJobs,
-                activePhases: activePhases,
-                onCancelJob: onCancelJob,
-                onOpenLibrary: {
-                    isPresented = false
-                    onOpenLibrary()
-                }
-            )
-            .frame(width: 380, height: 420)
-            .padding(MLXRSpacing.lg)
-            .background(MLXRColor.canvasRaised)
+
+        Group {
+            switch presentation {
+            case .toolbar:
+                button
+                    .popover(isPresented: $isPresented, attachmentAnchor: .point(.bottomTrailing)) {
+                        ActivityCenterPanel(
+                            activeJobs: activeJobs,
+                            recentJobs: recentJobs,
+                            activePhases: activePhases,
+                            onCancelJob: onCancelJob,
+                            onOpenLibrary: {
+                                isPresented = false
+                                onOpenLibrary()
+                            }
+                        )
+                        .frame(width: 380, height: 420)
+                        .padding(MLXRSpacing.lg)
+                        .background(MLXRColor.canvasRaised)
+                    }
+            case .rail:
+                button
+            }
         }
     }
 }

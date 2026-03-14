@@ -1,4 +1,3 @@
-import MLXRActivityStrip
 import MLXRAppDomain
 import MLXRDesignSystem
 import MLXRFeatureCreate
@@ -6,6 +5,7 @@ import MLXRFeatureGallery
 import MLXRFeatureHome
 import MLXRFeatureSettings
 import MLXRFeatureToolkit
+import MLXRActivityStrip
 import SwiftUI
 
 public struct MLXRMacAppRoot: View {
@@ -33,21 +33,7 @@ public struct MLXRMacAppRoot: View {
                             badge: badge(for: dest)
                         )
                     },
-                    footer: AnyView(
-                        ActivityCenterButton(
-                            jobs: appModel.jobs,
-                            activePhases: appModel.activeJobPhases,
-                            onCancelJob: { jobId in
-                                await appModel.cancelJob(jobId: jobId)
-                            },
-                            onOpenLibrary: {
-                                withAnimation(MLXRMotion.snappy) {
-                                    destination = .library
-                                }
-                            },
-                            presentation: .rail
-                        )
-                    )
+                    footer: AnyView(railFooter)
                 )
 
                 VStack(spacing: 0) {
@@ -56,14 +42,9 @@ public struct MLXRMacAppRoot: View {
                             appModel.dismissGlobalError()
                         }
                         .padding(.horizontal, MLXRSpacing.lg)
-                        .padding(.top, MLXRSpacing.sm)
-                        .padding(.bottom, MLXRSpacing.sm)
+                            .padding(.top, MLXRSpacing.sm)
+                            .padding(.bottom, MLXRSpacing.sm)
                     }
-
-                    shellUtilityBar
-                        .padding(.horizontal, MLXRSpacing.lg)
-                        .padding(.top, MLXRSpacing.md)
-                        .padding(.bottom, MLXRSpacing.sm)
 
                     destinationContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -297,14 +278,66 @@ public struct MLXRMacAppRoot: View {
         }
     }
 
-    private var shellUtilityBar: some View {
-        HStack {
-            StatusPill(
-                label: appModel.runtimeStatus == nil ? "Connecting" : "Local runtime ready",
-                tint: appModel.runtimeStatus == nil ? MLXRColor.brandWarm : MLXRColor.brandSecondary
+    private var railFooter: some View {
+        VStack(spacing: MLXRSpacing.sm) {
+            Button {
+                withAnimation(MLXRMotion.snappy) {
+                    destination = .settings
+                }
+            } label: {
+                VStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(runtimeRailTint)
+                            .frame(width: 8, height: 8)
+                        Text(runtimeRailLabel)
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundStyle(MLXRColor.textSecondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(width: 60)
+                    .background(
+                        RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
+                            .fill(MLXRColor.surfaceHover)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
+                                    .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                            )
+                    )
+                }
+            }
+            .buttonStyle(.plain)
+
+            ActivityCenterButton(
+                jobs: appModel.jobs,
+                activePhases: appModel.activeJobPhases,
+                onCancelJob: { jobId in
+                    await appModel.cancelJob(jobId: jobId)
+                },
+                onOpenLibrary: {
+                    withAnimation(MLXRMotion.snappy) {
+                        destination = .library
+                    }
+                },
+                presentation: .rail
             )
-            Spacer()
         }
+    }
+
+    private var runtimeRailTint: Color {
+        if appModel.runtimeProcessDied {
+            return MLXRColor.brandDanger
+        }
+        return appModel.runtimeStatus == nil ? MLXRColor.brandWarm : MLXRColor.brandSecondary
+    }
+
+    private var runtimeRailLabel: String {
+        if appModel.runtimeProcessDied {
+            return "Down"
+        }
+        return appModel.runtimeStatus == nil ? "Boot" : "Ready"
     }
 
     private var shouldShowBootstrapOverlay: Bool {
