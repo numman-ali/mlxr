@@ -12,8 +12,8 @@ Use this before calling a milestone “ready to publish.”
 ## Public Truth
 
 - `README.md` explains what `MLXR` is in plain English
-- [current-status.md](/Users/numman/Repos/mlxr/docs/current-status.md) is current
-- [roadmap.md](/Users/numman/Repos/mlxr/docs/roadmap.md) is current
+- [current-status.md](./current-status.md) is current
+- [roadmap.md](./roadmap.md) is current
 - family capability docs match the actual runtime truth
 - promoted, supported-but-unpromoted, blocked, and planned rows are not mixed
 
@@ -37,6 +37,7 @@ Use this before calling a milestone “ready to publish.”
 
 - the first Mac app is positioned as a thin client over the runtime
 - `ltx-desktop` compatibility is clearly separate from the first-party app
-- `MLXR Studio` is clearly separate from the simple first-party app
+- the first-party Mac app is clearly on the unified-studio path rather than a
+  “simple app first, Studio later” split
 - prompt enhancement is positioned truthfully as optional host-side UX unless
   and until the runtime contract changes

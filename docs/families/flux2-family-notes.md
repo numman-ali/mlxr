@@ -2,7 +2,7 @@
 
 Status: active family note. The first owned `klein` runtime slice is now real,
 and the matrix of what is green versus still open lives in
-`23-flux2-capability-matrix.md`.
+`flux2-capability-matrix.md`.
 
 ## Recommendation
 

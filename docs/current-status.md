@@ -87,9 +87,9 @@ are:
 
 ## Pointers
 
-- [roadmap.md](/Users/numman/Repos/mlxr/docs/roadmap.md)
-- [open-source-release-checklist.md](/Users/numman/Repos/mlxr/docs/open-source-release-checklist.md)
-- [cli-ergonomics.md](/Users/numman/Repos/mlxr/docs/cli-ergonomics.md)
-- [mac-app-product-spec.md](/Users/numman/Repos/mlxr/docs/mac-app-product-spec.md)
-- [mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
-- [working/mac-app-runtime-parity.md](/Users/numman/Repos/mlxr/docs/working/mac-app-runtime-parity.md)
+- [roadmap.md](./roadmap.md)
+- [open-source-release-checklist.md](./open-source-release-checklist.md)
+- [cli-ergonomics.md](./cli-ergonomics.md)
+- [mac-app-product-spec.md](./mac-app-product-spec.md)
+- [mac-app-runtime-contract.md](./mac-app-runtime-contract.md)
+- [working/mac-app-runtime-parity.md](./working/mac-app-runtime-parity.md)

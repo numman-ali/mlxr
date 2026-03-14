@@ -11,7 +11,7 @@ runtime contract.
 
 The durable boundary rules now live in:
 
-- [mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
+- [mac-app-runtime-contract.md](../mac-app-runtime-contract.md)
 
 This file is for active tranche execution only.
 

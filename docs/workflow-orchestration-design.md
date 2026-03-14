@@ -119,7 +119,9 @@ That usually means:
 4. expose fail-closed boundaries early
 5. add optional branches only after the first slice is validated
 
-Use [docs/family-bringup/README.md](/Users/numman/Repos/mlxr/docs/family-bringup/README.md) for the repeated bring-up workflow and `.agents/skills/family-bringup/` when the task is specifically family onboarding or workflow reshaping.
+Use [docs/family-bringup/README.md](./family-bringup/README.md) for the
+repeated bring-up workflow and `.agents/skills/family-bringup/` when the task
+is specifically family onboarding or workflow reshaping.
 
 ## Non-Goals
 

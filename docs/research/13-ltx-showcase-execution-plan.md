@@ -9,8 +9,8 @@ It exists so a fresh session can resume the work without reconstructing the plan
 For the full upstream surface and owned-substrate sequencing, read this
 alongside:
 
-- [18-ltx-reference-map.md](18-ltx-reference-map.md)
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+- [ltx-reference-map.md](../families/ltx-reference-map.md)
+- [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
 
 The goal is:
 

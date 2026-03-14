@@ -14,10 +14,10 @@ Its job is simple:
 
 Use this together with:
 
-- [11-ltx-capability-matrix.md](11-ltx-capability-matrix.md)
-- [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
-- [17-multimodal-inference-engine.md](17-multimodal-inference-engine.md)
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+- [ltx-capability-matrix.md](./ltx-capability-matrix.md)
+- [owned-substrate-migration-plan.md](../research/16-owned-substrate-migration-plan.md)
+- [multimodal-inference-engine.md](../research/17-multimodal-inference-engine.md)
+- [ltx-compatibility-checklist.md](./ltx-compatibility-checklist.md)
 
 ## Reference precedence
 

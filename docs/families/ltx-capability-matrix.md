@@ -15,9 +15,9 @@ Use it to answer six questions clearly:
 
 Read this together with:
 
-- [18-ltx-reference-map.md](18-ltx-reference-map.md) for the authoritative
+- [ltx-reference-map.md](./ltx-reference-map.md) for the authoritative
   upstream reference per subsystem
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md) for
+- [ltx-compatibility-checklist.md](./ltx-compatibility-checklist.md) for
   the exhaustive implementation and validation checklist
 
 This matrix is capability-first. Resolution, clip length, and throughput promotion happen only after a capability row is green at the safe and coherence rungs.

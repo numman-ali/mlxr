@@ -10,9 +10,9 @@ official `LTX-2`, it should appear here even if the answer is still â€œplanned.â
 
 Use this with:
 
-- [11-ltx-capability-matrix.md](11-ltx-capability-matrix.md) for the current
+- [ltx-capability-matrix.md](./ltx-capability-matrix.md) for the current
   public truth
-- [18-ltx-reference-map.md](18-ltx-reference-map.md) for the authoritative
+- [ltx-reference-map.md](./ltx-reference-map.md) for the authoritative
   source of each subsystem
 
 ## Status keys

@@ -5,8 +5,8 @@ Status: research recommendation for the next shared execution substrate in `MLXR
 This document is one part of the canonical LTX ownership set. Read it alongside:
 
 - [16-owned-substrate-migration-plan.md](16-owned-substrate-migration-plan.md)
-- [18-ltx-reference-map.md](18-ltx-reference-map.md)
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+- [ltx-reference-map.md](../families/ltx-reference-map.md)
+- [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
 
 Current progress note:
 
@@ -67,7 +67,7 @@ What the repo does **not** have yet is a shared repo-owned inference substrate b
 
 Today the clearest prompt-side leak is the LTX backend importing external LM and VLM code directly:
 
-- [`packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py)
+- [`packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py`](../../packages/families/ltx/src/mlxr/families/ltx/_prompt_encoding_backend/runtime.py)
 
 That import pattern is acceptable as a temporary bridge, but it is the wrong end state if the goal is:
 
@@ -90,9 +90,9 @@ The parts worth borrowing conceptually are:
 
 The best donor surfaces live in:
 
-- [`references/official/mlx-lm/mlx_lm/utils.py`](/Users/numman/Repos/mlxr/references/official/mlx-lm/mlx_lm/utils.py)
-- [`references/official/mlx-lm/mlx_lm/generate.py`](/Users/numman/Repos/mlxr/references/official/mlx-lm/mlx_lm/generate.py)
-- [`references/official/mlx-lm/mlx_lm/models/cache.py`](/Users/numman/Repos/mlxr/references/official/mlx-lm/mlx_lm/models/cache.py)
+- [`references/official/mlx-lm/mlx_lm/utils.py`](../../references/official/mlx-lm/mlx_lm/utils.py)
+- [`references/official/mlx-lm/mlx_lm/generate.py`](../../references/official/mlx-lm/mlx_lm/generate.py)
+- [`references/official/mlx-lm/mlx_lm/models/cache.py`](../../references/official/mlx-lm/mlx_lm/models/cache.py)
 
 But `mlx-lm` remains text-first in ways that matter:
 
@@ -124,9 +124,9 @@ In practice, `mlx-vlm` is mostly:
 
 Useful reference points:
 
-- [`references/ecosystem/mlx-vlm/mlx_vlm/utils.py`](/Users/numman/Repos/mlxr/references/ecosystem/mlx-vlm/mlx_vlm/utils.py)
-- [`references/ecosystem/mlx-vlm/mlx_vlm/generate.py`](/Users/numman/Repos/mlxr/references/ecosystem/mlx-vlm/mlx_vlm/generate.py)
-- [`references/ecosystem/mlx-vlm/mlx_vlm/models/base.py`](/Users/numman/Repos/mlxr/references/ecosystem/mlx-vlm/mlx_vlm/models/base.py)
+- [`references/ecosystem/mlx-vlm/mlx_vlm/utils.py`](../../references/ecosystem/mlx-vlm/mlx_vlm/utils.py)
+- [`references/ecosystem/mlx-vlm/mlx_vlm/generate.py`](../../references/ecosystem/mlx-vlm/mlx_vlm/generate.py)
+- [`references/ecosystem/mlx-vlm/mlx_vlm/models/base.py`](../../references/ecosystem/mlx-vlm/mlx_vlm/models/base.py)
 
 That makes `mlx-vlm` valuable as research input, but it also exposes the main limitations `MLXR` should avoid:
 
@@ -198,7 +198,7 @@ Owns profiled native extensions only after benchmark proof:
 
 This matches the seam already reserved in:
 
-- [`docs/adr/0005-mlx-extension-and-upstream-roadmap.md`](/Users/numman/Repos/mlxr/docs/adr/0005-mlx-extension-and-upstream-roadmap.md)
+- [`docs/adr/0005-mlx-extension-and-upstream-roadmap.md`](../adr/0005-mlx-extension-and-upstream-roadmap.md)
 
 ### `packages/core/runtime-kernels/`
 
@@ -249,8 +249,8 @@ The engine needs a shared architecture registry that can:
 
 This is the same real problem solved today by:
 
-- [`references/official/mlx-lm/mlx_lm/utils.py`](/Users/numman/Repos/mlxr/references/official/mlx-lm/mlx_lm/utils.py)
-- [`references/ecosystem/mlx-vlm/mlx_vlm/utils.py`](/Users/numman/Repos/mlxr/references/ecosystem/mlx-vlm/mlx_vlm/utils.py)
+- [`references/official/mlx-lm/mlx_lm/utils.py`](../../references/official/mlx-lm/mlx_lm/utils.py)
+- [`references/ecosystem/mlx-vlm/mlx_vlm/utils.py`](../../references/ecosystem/mlx-vlm/mlx_vlm/utils.py)
 
 Current recommendation:
 
@@ -459,7 +459,7 @@ The likely direction is:
 
 Relevant current schema:
 
-- [`packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py`](/Users/numman/Repos/mlxr/packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py)
+- [`packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py`](../../packages/core/shared-schemas/src/mlxr/core/schemas/workflows.py)
 
 ## Multimodal Content Schema
 
@@ -510,7 +510,7 @@ That is sufficient for the current LTX proving path, but it is not the right fin
 
 The long-term direction should stay aligned with:
 
-- [`docs/workflow-orchestration-design.md`](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
+- [`docs/workflow-orchestration-design.md`](../workflow-orchestration-design.md)
 
 Specifically:
 
@@ -547,8 +547,8 @@ Today the runtime direction is:
 
 Relevant current sources:
 
-- [`docs/adr/0004-worker-process-topology.md`](/Users/numman/Repos/mlxr/docs/adr/0004-worker-process-topology.md)
-- [`packages/core/runtime-server/src/mlxr/core/server/worker.py`](/Users/numman/Repos/mlxr/packages/core/runtime-server/src/mlxr/core/server/worker.py)
+- [`docs/adr/0004-worker-process-topology.md`](../adr/0004-worker-process-topology.md)
+- [`packages/core/runtime-server/src/mlxr/core/server/worker.py`](../../packages/core/runtime-server/src/mlxr/core/server/worker.py)
 
 The current per-job subprocess path is a good default for heavy media generation, but it is a poor fit for interactive text and VLM serving because those workloads want:
 
@@ -620,7 +620,7 @@ Start with:
 
 This is already compatible with the repo's current architecture doctrine and optimization playbook:
 
-- [`docs/research/05-optimization-playbook.md`](/Users/numman/Repos/mlxr/docs/research/05-optimization-playbook.md)
+- [`docs/research/05-optimization-playbook.md`](../research/05-optimization-playbook.md)
 
 ### Tier 2: Targeted `fast.metal_kernel` Prototypes
 
@@ -660,10 +660,10 @@ The memory-policy part matters too. The engine should own policy for:
 
 Useful references:
 
-- [`references/official/mlx/docs/src/dev/extensions.rst`](/Users/numman/Repos/mlxr/references/official/mlx/docs/src/dev/extensions.rst)
-- [`references/official/mlx/docs/src/dev/custom_metal_kernels.rst`](/Users/numman/Repos/mlxr/references/official/mlx/docs/src/dev/custom_metal_kernels.rst)
-- [`references/official/mlx-c/README.md`](/Users/numman/Repos/mlxr/references/official/mlx-c/README.md)
-- [`references/official/mlx-lm/mlx_lm/generate.py`](/Users/numman/Repos/mlxr/references/official/mlx-lm/mlx_lm/generate.py)
+- [`references/official/mlx/docs/src/dev/extensions.rst`](../../references/official/mlx/docs/src/dev/extensions.rst)
+- [`references/official/mlx/docs/src/dev/custom_metal_kernels.rst`](../../references/official/mlx/docs/src/dev/custom_metal_kernels.rst)
+- [`references/official/mlx-c/README.md`](../../references/official/mlx-c/README.md)
+- [`references/official/mlx-lm/mlx_lm/generate.py`](../../references/official/mlx-lm/mlx_lm/generate.py)
 
 ## Quantization Strategy
 
@@ -765,8 +765,8 @@ Good candidate validating families:
 
 This stays aligned with the cross-family validation pressure already recorded in:
 
-- [`docs/research/02-model-research-matrix.md`](/Users/numman/Repos/mlxr/docs/research/02-model-research-matrix.md)
-- [`docs/research/09-open-questions-and-validation-plan.md`](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md)
+- [`docs/research/02-model-research-matrix.md`](../research/02-model-research-matrix.md)
+- [`docs/research/09-open-questions-and-validation-plan.md`](../research/09-open-questions-and-validation-plan.md)
 
 ## Validation Ladder
 
@@ -816,7 +816,7 @@ This document is primarily about a shared text and multimodal understanding engi
 
 Relevant current path:
 
-- [`packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py`](/Users/numman/Repos/mlxr/packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py)
+- [`packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py`](../../packages/families/ltx/src/mlxr/families/ltx/_generation_backend/runtime_helpers.py)
 
 Current recommendation:
 

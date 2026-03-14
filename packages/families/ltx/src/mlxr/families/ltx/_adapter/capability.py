@@ -299,7 +299,7 @@ def convert(
                     "distilled_lora",
                 ],
             },
-            "capability_matrix_doc": "docs/research/11-ltx-capability-matrix.md",
+            "capability_matrix_doc": "docs/families/ltx-capability-matrix.md",
         },
     )
     record = PortableArtifactRecord(

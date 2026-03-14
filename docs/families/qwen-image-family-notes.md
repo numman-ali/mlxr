@@ -4,7 +4,7 @@ Status: in progress research note for the first editing-capable image family
 candidate after the `Z-Image` bring-up.
 
 For the current repo truth by row, read
-[26-qwen-image-capability-matrix.md](26-qwen-image-capability-matrix.md)
+[qwen-image-capability-matrix.md](./qwen-image-capability-matrix.md)
 together with this note.
 
 ## Recommendation

@@ -73,5 +73,5 @@ Current runtime notes:
   not quality-promoted yet; current real receipts collapse too strongly toward
   the later reference image instead of blending the sources
 
-See [23-flux2-capability-matrix.md](/Users/numman/Repos/mlxr/docs/families/flux2-capability-matrix.md)
+See [flux2-capability-matrix.md](../../../docs/families/flux2-capability-matrix.md)
 for the family truth table and current validation receipts.

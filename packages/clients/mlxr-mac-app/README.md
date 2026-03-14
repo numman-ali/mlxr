@@ -99,8 +99,8 @@ peekaboo see --app MLXRMacApp --json --annotate
 
 Reference plan:
 
-- [docs/mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
-- [docs/working/mac-app-runtime-parity.md](/Users/numman/Repos/mlxr/docs/working/mac-app-runtime-parity.md)
+- [docs/mac-app-runtime-contract.md](../../../docs/mac-app-runtime-contract.md)
+- [docs/working/mac-app-runtime-parity.md](../../../docs/working/mac-app-runtime-parity.md)
 
 The app expects the repo-local Python runtime path by default:
 

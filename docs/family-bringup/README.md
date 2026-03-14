@@ -15,17 +15,17 @@ Use it when we need to decide:
 
 ## What To Read First
 
-1. [workflow-orchestration-design.md](/Users/numman/Repos/mlxr/docs/workflow-orchestration-design.md)
-2. [technical-design.md](/Users/numman/Repos/mlxr/docs/technical-design.md)
-3. [phased-delivery-plan.md](/Users/numman/Repos/mlxr/docs/phased-delivery-plan.md)
-4. [09-open-questions-and-validation-plan.md](/Users/numman/Repos/mlxr/docs/research/09-open-questions-and-validation-plan.md)
+1. [workflow-orchestration-design.md](../workflow-orchestration-design.md)
+2. [technical-design.md](../technical-design.md)
+3. [phased-delivery-plan.md](../phased-delivery-plan.md)
+4. [09-open-questions-and-validation-plan.md](../research/09-open-questions-and-validation-plan.md)
 
 Then use:
 
-- [checklist.md](/Users/numman/Repos/mlxr/docs/family-bringup/checklist.md)
-- [template.md](/Users/numman/Repos/mlxr/docs/family-bringup/template.md)
-- [evaluation-framework.md](/Users/numman/Repos/mlxr/docs/family-bringup/evaluation-framework.md) when deciding whether a base model, adapter, or quality claim is actually proven
-- [debugging-decision-tree.md](/Users/numman/Repos/mlxr/docs/family-bringup/debugging-decision-tree.md) when the family runs but the result is wrong, unstable, or mismatched between probe and CLI/runtime paths
+- [checklist.md](./checklist.md)
+- [template.md](./template.md)
+- [evaluation-framework.md](./evaluation-framework.md) when deciding whether a base model, adapter, or quality claim is actually proven
+- [debugging-decision-tree.md](./debugging-decision-tree.md) when the family runs but the result is wrong, unstable, or mismatched between probe and CLI/runtime paths
 
 ## Default Sequence
 

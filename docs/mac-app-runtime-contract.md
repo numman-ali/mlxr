@@ -106,6 +106,6 @@ The Mac app should not:
 
 ## Related Docs
 
-- [Mac app product spec](/Users/numman/Repos/mlxr/docs/mac-app-product-spec.md)
-- [Mac app runtime hardening plan](/Users/numman/Repos/mlxr/docs/working/mac-app-runtime-parity.md)
-- [Unified studio master plan](/Users/numman/Repos/mlxr/docs/working/unified-studio/00-master-plan.md)
+- [Mac app product spec](./mac-app-product-spec.md)
+- [Mac app runtime hardening plan](./working/mac-app-runtime-parity.md)
+- [Unified studio master plan](./working/unified-studio/00-master-plan.md)

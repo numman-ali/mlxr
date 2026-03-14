@@ -17,8 +17,8 @@ bringing `LTX` back onto a repo-owned substrate.
 
 Use it together with:
 
-- [18-ltx-reference-map.md](18-ltx-reference-map.md)
-- [19-ltx-compatibility-checklist.md](19-ltx-compatibility-checklist.md)
+- [ltx-reference-map.md](../families/ltx-reference-map.md)
+- [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
 - [17-multimodal-inference-engine.md](17-multimodal-inference-engine.md)
 
 ## Current Truth

@@ -175,11 +175,11 @@ The app should not:
 
 The durable boundary rules for that split live in:
 
-- [mac-app-runtime-contract.md](/Users/numman/Repos/mlxr/docs/mac-app-runtime-contract.md)
+- [mac-app-runtime-contract.md](./mac-app-runtime-contract.md)
 
 The current redesign implementation plan lives in:
 
-- [working/unified-studio/00-master-plan.md](/Users/numman/Repos/mlxr/docs/working/unified-studio/00-master-plan.md)
+- [working/unified-studio/00-master-plan.md](./working/unified-studio/00-master-plan.md)
 
 ## Repo Placement
 

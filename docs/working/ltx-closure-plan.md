@@ -10,9 +10,9 @@ surface in `MLXR`.
 It exists to keep the work ordered, evidence-driven, and resistant to
 capability drift. Use it together with:
 
-- [ltx-capability-matrix.md](/Users/numman/Repos/mlxr/docs/families/ltx-capability-matrix.md)
-- [ltx-compatibility-checklist.md](/Users/numman/Repos/mlxr/docs/families/ltx-compatibility-checklist.md)
-- [ltx-reference-map.md](/Users/numman/Repos/mlxr/docs/families/ltx-reference-map.md)
+- [ltx-capability-matrix.md](../families/ltx-capability-matrix.md)
+- [ltx-compatibility-checklist.md](../families/ltx-compatibility-checklist.md)
+- [ltx-reference-map.md](../families/ltx-reference-map.md)
 
 ## Current truthful boundary
 

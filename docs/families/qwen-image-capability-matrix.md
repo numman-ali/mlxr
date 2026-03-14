@@ -16,9 +16,9 @@ Use it to answer six questions clearly:
 
 Read this together with:
 
-- [21-qwen-image-family-candidate.md](21-qwen-image-family-candidate.md) for
+- [qwen-image-family-notes.md](./qwen-image-family-notes.md) for
   the broader family rationale and source notes
-- [24-qwen-edit-and-showcase-todo.md](24-qwen-edit-and-showcase-todo.md) for
+- [qwen-bring-up-todo.md](../working/qwen-bring-up-todo.md) for
   the current evaluation and polish backlog
 
 ## Status labels
