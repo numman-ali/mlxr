@@ -10,13 +10,14 @@ let package = Package(
     products: [
         .library(name: "MLXRDesignSystem", targets: ["MLXRDesignSystem"]),
         .library(name: "MLXRAppDomain", targets: ["MLXRAppDomain"]),
+        .library(name: "MLXRRecipes", targets: ["MLXRRecipes"]),
         .library(name: "MLXRRuntimeBridge", targets: ["MLXRRuntimeBridge"]),
-        .library(name: "MLXRFeatureImages", targets: ["MLXRFeatureImages"]),
-        .library(name: "MLXRFeatureVideo", targets: ["MLXRFeatureVideo"]),
-        .library(name: "MLXRFeatureModels", targets: ["MLXRFeatureModels"]),
-        .library(name: "MLXRFeatureLibrary", targets: ["MLXRFeatureLibrary"]),
-        .library(name: "MLXRFeatureJobs", targets: ["MLXRFeatureJobs"]),
+        .library(name: "MLXRFeatureHome", targets: ["MLXRFeatureHome"]),
+        .library(name: "MLXRFeatureCreate", targets: ["MLXRFeatureCreate"]),
+        .library(name: "MLXRFeatureGallery", targets: ["MLXRFeatureGallery"]),
+        .library(name: "MLXRFeatureToolkit", targets: ["MLXRFeatureToolkit"]),
         .library(name: "MLXRFeatureSettings", targets: ["MLXRFeatureSettings"]),
+        .library(name: "MLXRActivityStrip", targets: ["MLXRActivityStrip"]),
         .library(name: "MLXRAppShell", targets: ["MLXRAppShell"]),
         .executable(name: "MLXRMacApp", targets: ["MLXRMacApp"]),
     ],
@@ -29,6 +30,10 @@ let package = Package(
         .target(name: "MLXRDesignSystem"),
         .target(name: "MLXRAppDomain"),
         .target(
+            name: "MLXRRecipes",
+            dependencies: ["MLXRAppDomain"]
+        ),
+        .target(
             name: "MLXRRuntimeBridge",
             dependencies: [
                 "MLXRAppDomain",
@@ -40,23 +45,19 @@ let package = Package(
             ]
         ),
         .target(
-            name: "MLXRFeatureImages",
+            name: "MLXRFeatureHome",
+            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRecipes", "MLXRRuntimeBridge"]
+        ),
+        .target(
+            name: "MLXRFeatureCreate",
+            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRecipes", "MLXRRuntimeBridge"]
+        ),
+        .target(
+            name: "MLXRFeatureGallery",
             dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
         ),
         .target(
-            name: "MLXRFeatureVideo",
-            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
-        ),
-        .target(
-            name: "MLXRFeatureModels",
-            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
-        ),
-        .target(
-            name: "MLXRFeatureLibrary",
-            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
-        ),
-        .target(
-            name: "MLXRFeatureJobs",
+            name: "MLXRFeatureToolkit",
             dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
         ),
         .target(
@@ -64,17 +65,22 @@ let package = Package(
             dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
         ),
         .target(
+            name: "MLXRActivityStrip",
+            dependencies: ["MLXRDesignSystem", "MLXRAppDomain", "MLXRRuntimeBridge"]
+        ),
+        .target(
             name: "MLXRAppShell",
             dependencies: [
                 "MLXRDesignSystem",
                 "MLXRAppDomain",
+                "MLXRRecipes",
                 "MLXRRuntimeBridge",
-                "MLXRFeatureImages",
-                "MLXRFeatureVideo",
-                "MLXRFeatureModels",
-                "MLXRFeatureLibrary",
-                "MLXRFeatureJobs",
+                "MLXRFeatureHome",
+                "MLXRFeatureCreate",
+                "MLXRFeatureGallery",
+                "MLXRFeatureToolkit",
                 "MLXRFeatureSettings",
+                "MLXRActivityStrip",
             ]
         ),
         .executableTarget(name: "MLXRMacApp", dependencies: ["MLXRAppShell"]),

@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .jobs import JobOutputPolicy, JobSubmitResult
+from .jobs import JobOutputPolicy, JobSubmitResult, WorkflowContextMetadata
 from .models import CapabilityDescriptor
 
 
@@ -40,6 +40,7 @@ class WorkflowIntent(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     output: JobOutputPolicy = Field(default_factory=JobOutputPolicy)
     preferences: WorkflowPreferences = Field(default_factory=WorkflowPreferences)
+    context: WorkflowContextMetadata | None = None
     extensions: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")

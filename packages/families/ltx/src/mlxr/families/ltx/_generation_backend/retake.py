@@ -188,7 +188,7 @@ def generate_retake(
         video_encoder = host._ensure_vae_encoder(imports)
         source_video_latent = video_encoder(video_sample)
         mx.eval(source_video_latent)
-    video_encoder = None
+    del video_encoder
     host._vae_encoder = None
     mx.clear_cache()
 

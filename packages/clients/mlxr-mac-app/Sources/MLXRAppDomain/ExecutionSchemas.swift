@@ -88,6 +88,31 @@ public struct WorkflowPreferences: Codable, Sendable, Hashable {
     }
 }
 
+public struct WorkflowContextMetadata: Codable, Sendable, Hashable {
+    public var workspaceId: String?
+    public var collectionId: String?
+    public var runGroupId: String?
+    public var sourceAssetIds: [String]
+    public var intentLabel: String?
+    public var presetId: String?
+
+    public init(
+        workspaceId: String? = nil,
+        collectionId: String? = nil,
+        runGroupId: String? = nil,
+        sourceAssetIds: [String] = [],
+        intentLabel: String? = nil,
+        presetId: String? = nil
+    ) {
+        self.workspaceId = workspaceId
+        self.collectionId = collectionId
+        self.runGroupId = runGroupId
+        self.sourceAssetIds = sourceAssetIds
+        self.intentLabel = intentLabel
+        self.presetId = presetId
+    }
+}
+
 public struct JobOutputPolicy: Codable, Sendable, Hashable {
     public var artifactFormat: String?
     public var destinationMode: OutputDestinationMode
@@ -116,6 +141,7 @@ public struct WorkflowIntent: Codable, Sendable, Hashable {
     public var params: JSONMap
     public var output: JobOutputPolicy
     public var preferences: WorkflowPreferences
+    public var context: WorkflowContextMetadata?
     public var extensions: JSONMap
 
     public init(
@@ -127,6 +153,7 @@ public struct WorkflowIntent: Codable, Sendable, Hashable {
         params: JSONMap = [:],
         output: JobOutputPolicy = .init(),
         preferences: WorkflowPreferences = .init(),
+        context: WorkflowContextMetadata? = nil,
         extensions: JSONMap = [:]
     ) {
         self.modelId = modelId
@@ -137,6 +164,7 @@ public struct WorkflowIntent: Codable, Sendable, Hashable {
         self.params = params
         self.output = output
         self.preferences = preferences
+        self.context = context
         self.extensions = extensions
     }
 }
@@ -179,6 +207,7 @@ public struct JobRequest: Codable, Sendable, Hashable {
     public var inputs: JSONMap
     public var params: JSONMap
     public var output: JobOutputPolicy
+    public var context: WorkflowContextMetadata?
     public var extensions: JSONMap
 }
 

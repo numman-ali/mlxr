@@ -4,12 +4,20 @@ import MLXRDesignSystem
 import MLXRRuntimeBridge
 import SwiftUI
 
-public struct ModelsScreen: View {
+public struct ModelsWorkspaceView: View {
+    private enum Panel: String, CaseIterable, Identifiable {
+        case models = "Models"
+        case packs = "Packs"
+
+        var id: String { rawValue }
+    }
+
     private let runtimeStatus: RuntimeStatusSnapshot?
     private let catalog: CatalogSnapshot
     private let installOperations: [ModelInstallOperationRecord]
     private let previews: [String: SupportedModelPreview]
     private let installedDetails: [String: InstalledModelDetails]
+    private let packs: [PackRecord]
     private let error: String?
     private let onDismissError: () -> Void
     private let onLoadPreview: @Sendable (String) async -> Void
@@ -19,6 +27,7 @@ public struct ModelsScreen: View {
     private let onRemove: @Sendable (String) async -> Void
 
     @State private var selectedInstalledModelId: String?
+    @State private var selectedPanel: Panel = .models
 
     public init(
         runtimeStatus: RuntimeStatusSnapshot?,
@@ -26,6 +35,7 @@ public struct ModelsScreen: View {
         installOperations: [ModelInstallOperationRecord],
         previews: [String: SupportedModelPreview],
         installedDetails: [String: InstalledModelDetails],
+        packs: [PackRecord],
         error: String?,
         onDismissError: @escaping () -> Void,
         onLoadPreview: @escaping @Sendable (String) async -> Void,
@@ -39,6 +49,7 @@ public struct ModelsScreen: View {
         self.installOperations = installOperations
         self.previews = previews
         self.installedDetails = installedDetails
+        self.packs = packs
         self.error = error
         self.onDismissError = onDismissError
         self.onLoadPreview = onLoadPreview
@@ -71,9 +82,20 @@ public struct ModelsScreen: View {
                     subtitle: "Hugging Face is the source. MLXR is the installed home the app manages for you."
                 )
 
-                availableSection
-                installQueueSection
-                installedSection
+                Picker("Panel", selection: $selectedPanel) {
+                    ForEach(Panel.allCases) { panel in
+                        Text(panel.rawValue).tag(panel)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if selectedPanel == .models {
+                    availableSection
+                    installQueueSection
+                    installedSection
+                } else {
+                    packsSection
+                }
             }
             .padding(28)
         }
@@ -232,6 +254,29 @@ public struct ModelsScreen: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+    }
+
+    private var packsSection: some View {
+        SectionCard(
+            title: "Packs",
+            subtitle: "Friendly wrappers for the family-local style, motion, and control options used in Studio."
+        ) {
+            ForEach(packs) { pack in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(pack.title)
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                        Spacer()
+                        StatusPill(label: pack.category.rawValue, tint: MLXRTheme.secondaryAccent)
+                    }
+                    Text(pack.summary)
+                        .foregroundStyle(.secondary)
+                    DetailRow(label: "Family", value: pack.family)
+                    DetailRow(label: "Tasks", value: pack.tasks.map(\.title).joined(separator: ", "))
+                }
+                .padding(.vertical, 4)
             }
         }
     }

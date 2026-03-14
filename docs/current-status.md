@@ -1,6 +1,6 @@
 # MLXR Current Status
 
-Last updated: 2026-03-12
+Last updated: 2026-03-14
 
 ## Snapshot
 
@@ -31,7 +31,7 @@ What is not true yet:
 | `mlxr` CLI | real | first-party thin client with `generate`, `serve`, `doctor`, `models`, and `feedback` |
 | `ltx-desktop` adapter | planned | compatibility seam, not yet implemented |
 | Comfy adapter | planned | thin runtime-backed adapter, not yet implemented |
-| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a top-level `Models` screen, guided first-run installs, runtime-backed model queueing, and a real dev `.app` bundle path for macOS/Peekaboo testing |
+| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a persistent `Studio` draft, reusable `Library`, grouped asset sets, guided model installs, and a real dev `.app` bundle path for macOS/Peekaboo testing |
 | Embedded first-party access | planned later | Swift-side host boundary work |
 
 ## Family Truth
@@ -69,7 +69,7 @@ If someone asks what to use today, the clean answers are:
 The project direction is now:
 
 1. make the runtime and CLI public, legible, and trustworthy
-2. harden the simple native Mac app, especially the new model-management flow, into the first user-facing product
+2. harden the simple native Mac app, especially the new studio, library, and model-management flows, into the first user-facing product
 3. keep desktop and Comfy as thin client or compatibility tracks
 4. treat a future `MLXR Studio` as a separate longer-term product
 

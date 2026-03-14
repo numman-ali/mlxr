@@ -4,9 +4,9 @@ import SwiftUI
 @main
 struct MLXRMacApp: App {
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("MLXR") {
             MLXRMacAppRoot()
-                .frame(minWidth: 1120, minHeight: 760)
+                .frame(minWidth: 1200, minHeight: 800)
         }
         .windowResizability(.contentSize)
     }

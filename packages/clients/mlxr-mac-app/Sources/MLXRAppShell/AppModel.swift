@@ -3,21 +3,63 @@ import MLXRAppDomain
 import MLXRRuntimeBridge
 import Observation
 
+private struct AppRefreshSnapshot {
+    let status: RuntimeStatusSnapshot
+    let supportedModels: [SupportedModelDescriptor]
+    let installedModels: [ModelRecord]
+    let capabilities: [CapabilityDescriptor]
+    let jobs: [JobRecord]
+    let installOperations: [ModelInstallOperationRecord]
+}
+
+private struct CatalogRefreshSnapshot {
+    let supportedModels: [SupportedModelDescriptor]
+    let installedModels: [ModelRecord]
+    let capabilities: [CapabilityDescriptor]
+}
+
 @MainActor
 @Observable
 public final class MLXRAppModel {
+    private static let minimumFullRefreshInterval: TimeInterval = 1.5
+    private static let minimumJobsRefreshInterval: TimeInterval = 1
+    private static let deferredJobsRefreshIntervalNanoseconds: UInt64 = 750_000_000
+    private static let healthMonitorIntervalNanoseconds: UInt64 = 15_000_000_000
+
     // -- State --
     public var runtimeStatus: RuntimeStatusSnapshot?
     public var catalog = CatalogSnapshot(supportedModels: [], installedModels: [], capabilities: [])
     public var jobs: [JobRecord] = []
+    public var importedAssets: [ImportedAssetRecord] = []
     public var installOperations: [ModelInstallOperationRecord] = []
     public var modelPreviews: [String: SupportedModelPreview] = [:]
     public var installedModelDetails: [String: InstalledModelDetails] = [:]
+    public var lastSubmittedJobId: String?
     public var isRefreshing = false
     public var isSubmittingImage = false
     public var isSubmittingVideo = false
     public var promptHelperMode: PromptHelperMode = .suggest
-    public var hasCompletedOnboarding = false
+    public var hasCompletedOnboarding = false {
+        didSet { persistPresentationState() }
+    }
+    public var activeWorkspaceId = "default-workspace" {
+        didSet { persistPresentationState() }
+    }
+    public var workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "Current Workspace")] {
+        didSet { persistPresentationState() }
+    }
+    public var collections: [CollectionRecord] = [] {
+        didSet { persistPresentationState() }
+    }
+    public var runGroups: [RunGroupRecord] = [] {
+        didSet { persistPresentationState() }
+    }
+    public var assetRecords: [String: AssetRecord] = [:] {
+        didSet { persistPresentationState() }
+    }
+    public var studioWorkspace = StudioWorkspaceDraft() {
+        didSet { persistPresentationState() }
+    }
 
     // Per-surface inline errors (shown where the user is working).
     public var imageError: String?
@@ -37,6 +79,12 @@ public final class MLXRAppModel {
     let runtime: RuntimeServing?
 
     @ObservationIgnored
+    let importedAssetStore: ImportedAssetStore
+
+    @ObservationIgnored
+    let workspaceStateStore: WorkspaceStateStore
+
+    @ObservationIgnored
     private var eventTasks: [String: Task<Void, Never>] = [:]
 
     @ObservationIgnored
@@ -45,7 +93,44 @@ public final class MLXRAppModel {
     @ObservationIgnored
     var installMonitorTask: Task<Void, Never>?
 
+    @ObservationIgnored
+    private var refreshTask: Task<AppRefreshSnapshot, Error>?
+
+    @ObservationIgnored
+    private var jobsRefreshTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var lastFullRefreshAt: Date?
+
+    @ObservationIgnored
+    private var lastJobsRefreshAt: Date?
+
+    @ObservationIgnored
+    private var observedJobIds: Set<String> = []
+
     public init(runtime: RuntimeServing? = nil) {
+        let store = ImportedAssetStore()
+        self.importedAssetStore = store
+        let workspaceStateStore = WorkspaceStateStore()
+        self.workspaceStateStore = workspaceStateStore
+        do {
+            importedAssets = try store.load()
+        } catch {
+            importedAssets = []
+            settingsError = error.localizedDescription
+        }
+        do {
+            let presentation = try workspaceStateStore.load()
+            hasCompletedOnboarding = presentation.hasCompletedModelSetup
+            activeWorkspaceId = presentation.activeWorkspaceId
+            workspaces = presentation.workspaces
+            collections = presentation.collections
+            runGroups = presentation.runGroups
+            assetRecords = Dictionary(uniqueKeysWithValues: presentation.assets.map { ($0.id, $0) })
+            studioWorkspace = presentation.workspaceDraft
+        } catch {
+            settingsError = error.localizedDescription
+        }
         if let runtime {
             self.runtime = runtime
             return
@@ -54,7 +139,6 @@ public final class MLXRAppModel {
             let client = try RuntimeClient()
             self.runtime = client
             startHealthMonitor(client: client)
-            startInstallMonitor(client: client)
         } catch {
             self.runtime = nil
             self.bootstrapError = error.localizedDescription
@@ -65,6 +149,7 @@ public final class MLXRAppModel {
         eventTasks.values.forEach { $0.cancel() }
         healthMonitorTask?.cancel()
         installMonitorTask?.cancel()
+        jobsRefreshTask?.cancel()
     }
 
     // MARK: - Derived State
@@ -89,17 +174,39 @@ public final class MLXRAppModel {
         installOperations.filter { !$0.phase.isTerminal }.count
     }
 
+    public var hasWorkspaceDraft: Bool {
+        studioWorkspace.hasMeaningfulState
+    }
+
+    public var activeWorkspace: WorkspaceRecord? {
+        workspaces.first(where: { $0.id == activeWorkspaceId })
+    }
+
     // MARK: - Refresh
 
     public func refresh() async {
+        await performFullRefresh(force: false)
+    }
+
+    func performFullRefresh(force: Bool) async {
         guard let runtime else {
             globalError = bootstrapError ?? "The MLXR runtime bridge is not available."
             return
         }
-        isRefreshing = true
-        defer { isRefreshing = false }
+        if let refreshTask {
+            _ = try? await refreshTask.value
+            return
+        }
+        if
+            !force,
+            let lastFullRefreshAt,
+            Date().timeIntervalSince(lastFullRefreshAt) < Self.minimumFullRefreshInterval
+        {
+            return
+        }
 
-        do {
+        isRefreshing = true
+        let task = Task<AppRefreshSnapshot, Error> {
             async let status = runtime.status()
             async let supportedModels = runtime.listSupportedModels()
             async let installedModels = runtime.listModels()
@@ -107,7 +214,14 @@ public final class MLXRAppModel {
             async let jobs = runtime.listJobs()
             async let installOperations = runtime.listModelInstalls()
 
-            let (resolvedStatus, resolvedSupportedModels, resolvedInstalledModels, resolvedCapabilities, resolvedJobs, resolvedInstallOperations) = try await (
+            let (
+                resolvedStatus,
+                resolvedSupportedModels,
+                resolvedInstalledModels,
+                resolvedCapabilities,
+                resolvedJobs,
+                resolvedInstallOperations
+            ) = try await (
                 status,
                 supportedModels,
                 installedModels,
@@ -116,22 +230,40 @@ public final class MLXRAppModel {
                 installOperations
             )
 
-            runtimeStatus = resolvedStatus
-            catalog = CatalogSnapshot(
+            return AppRefreshSnapshot(
+                status: resolvedStatus,
                 supportedModels: resolvedSupportedModels,
                 installedModels: resolvedInstalledModels,
-                capabilities: resolvedCapabilities
+                capabilities: resolvedCapabilities,
+                jobs: resolvedJobs.sorted { $0.updatedAt > $1.updatedAt },
+                installOperations: resolvedInstallOperations.sorted { $0.updatedAt > $1.updatedAt }
             )
-            self.jobs = resolvedJobs.sorted { $0.updatedAt > $1.updatedAt }
-            self.installOperations = resolvedInstallOperations.sorted { $0.updatedAt > $1.updatedAt }
+        }
+        refreshTask = task
+        defer {
+            refreshTask = nil
+            isRefreshing = false
+        }
+
+        do {
+            let snapshot = try await task.value
+            runtimeStatus = snapshot.status
+            applyCatalogSnapshot(
+                CatalogRefreshSnapshot(
+                    supportedModels: snapshot.supportedModels,
+                    installedModels: snapshot.installedModels,
+                    capabilities: snapshot.capabilities
+                )
+            )
+            jobs = snapshot.jobs
+            syncObservedJobs()
+            syncRunGroupsFromJobs()
+            installOperations = snapshot.installOperations
+            syncInstallMonitor()
             globalError = nil
             bootstrapError = nil
             runtimeProcessDied = false
-            if catalog.recommendedInstalledItems.isEmpty {
-                await loadSetupPreviewsIfNeeded()
-            } else {
-                hasCompletedOnboarding = true
-            }
+            lastFullRefreshAt = Date()
         } catch {
             globalError = error.localizedDescription
         }
@@ -179,7 +311,7 @@ public final class MLXRAppModel {
         guard let runtime else { return }
         do {
             _ = try await runtime.cancel(jobId: jobId)
-            await refreshJobsOnly()
+            await refreshJobsOnly(force: true)
         } catch {
             globalError = error.localizedDescription
         }
@@ -262,22 +394,94 @@ public final class MLXRAppModel {
             throw RuntimeBridgeError.featureUnavailable("The runtime bridge is unavailable.")
         }
         let result = try await runtime.run(intent: intent)
-        await refreshJobsOnly()
+        if let runGroupId = intent.context?.runGroupId {
+            recordSubmittedJob(result.submit.jobId, in: runGroupId)
+        } else {
+            lastSubmittedJobId = result.submit.jobId
+        }
+        await refreshJobsOnly(force: true)
         observe(jobId: result.submit.jobId)
     }
 
-    private func refreshJobsOnly() async {
+    func refreshCatalogOnly(force _: Bool = false) async {
         guard let runtime else { return }
+        if let refreshTask {
+            _ = try? await refreshTask.value
+            return
+        }
+
+        do {
+            async let supportedModels = runtime.listSupportedModels()
+            async let installedModels = runtime.listModels()
+            async let capabilities = runtime.listCapabilities()
+
+            let snapshot = try await CatalogRefreshSnapshot(
+                supportedModels: supportedModels,
+                installedModels: installedModels,
+                capabilities: capabilities
+            )
+            applyCatalogSnapshot(snapshot)
+            modelsError = nil
+        } catch {
+            modelsError = error.localizedDescription
+        }
+    }
+
+    private func applyCatalogSnapshot(_ snapshot: CatalogRefreshSnapshot) {
+        catalog = CatalogSnapshot(
+            supportedModels: snapshot.supportedModels,
+            installedModels: snapshot.installedModels,
+            capabilities: snapshot.capabilities
+        )
+        if catalog.recommendedInstalledItems.isEmpty {
+            Task { await self.loadSetupPreviewsIfNeeded() }
+        } else {
+            hasCompletedOnboarding = true
+        }
+    }
+
+    private func refreshJobsOnly(force: Bool = false) async {
+        guard let runtime else { return }
+        if
+            !force,
+            let lastJobsRefreshAt,
+            Date().timeIntervalSince(lastJobsRefreshAt) < Self.minimumJobsRefreshInterval
+        {
+            return
+        }
+
         do {
             jobs = try await runtime.listJobs().sorted { $0.updatedAt > $1.updatedAt }
+            lastJobsRefreshAt = Date()
+            syncObservedJobs()
+            syncRunGroupsFromJobs()
         } catch {
             globalError = error.localizedDescription
         }
     }
 
+    private func scheduleJobsRefresh(immediate: Bool) {
+        if immediate {
+            jobsRefreshTask?.cancel()
+        } else if jobsRefreshTask != nil {
+            return
+        }
+
+        jobsRefreshTask = Task { [weak self] in
+            if !immediate {
+                try? await Task.sleep(nanoseconds: Self.deferredJobsRefreshIntervalNanoseconds)
+            }
+            guard let self else { return }
+            await self.refreshJobsOnly(force: immediate)
+            await MainActor.run {
+                self.jobsRefreshTask = nil
+            }
+        }
+    }
+
     private func observe(jobId: String) {
-        eventTasks[jobId]?.cancel()
         guard let runtime else { return }
+        guard eventTasks[jobId] == nil else { return }
         eventTasks[jobId] = Task { [weak self] in
             guard let self else { return }
             do {
@@ -286,16 +490,28 @@ public final class MLXRAppModel {
                         if let phase = event.phase {
                             self.activeJobPhases[jobId] = phase
                         }
-                        if event.kind == .jobCompleted || event.kind == .jobFailed || event.kind == .jobCancelled {
+                        let isTerminalEvent =
+                            event.kind == .jobCompleted
+                            || event.kind == .jobFailed
+                            || event.kind == .jobCancelled
+                        if isTerminalEvent {
                             self.activeJobPhases.removeValue(forKey: jobId)
                         }
+                        if isTerminalEvent || event.kind == .jobArtifactReady {
+                            self.scheduleJobsRefresh(immediate: true)
+                        } else if event.kind == .jobAccepted || event.kind == .jobPhaseChanged {
+                            self.scheduleJobsRefresh(immediate: false)
+                        }
                     }
-                    await self.refreshJobsOnly()
                 }
             } catch {
                 _ = await MainActor.run {
                     self.activeJobPhases.removeValue(forKey: jobId)
                 }
+            }
+            await MainActor.run {
+                self.eventTasks.removeValue(forKey: jobId)
+                self.observedJobIds.remove(jobId)
             }
         }
     }
@@ -305,8 +521,14 @@ public final class MLXRAppModel {
     private func startHealthMonitor(client: RuntimeClient) {
         healthMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                try? await Task.sleep(nanoseconds: Self.healthMonitorIntervalNanoseconds)
                 guard let self else { return }
+                let shouldCheck = await MainActor.run {
+                    self.runtimeStatus?.launchedByApp == true
+                }
+                if !shouldCheck {
+                    continue
+                }
                 let dead = await client.isRuntimeProcessDead
                 await MainActor.run {
                     if dead && !self.runtimeProcessDied {
@@ -340,6 +562,7 @@ public final class MLXRAppModel {
             params: params,
             output: JobOutputPolicy(artifactFormat: request.artifactFormat),
             preferences: WorkflowPreferences(quality: request.quality),
+            context: request.context,
             extensions: namespacedExtensions(for: request.modelId, familyExtensions: request.familyExtensions)
         )
     }
@@ -386,6 +609,7 @@ public final class MLXRAppModel {
             params: params,
             output: JobOutputPolicy(artifactFormat: request.artifactFormat),
             preferences: WorkflowPreferences(quality: request.quality),
+            context: request.context,
             extensions: namespacedExtensions(for: request.modelId, familyExtensions: familyExtensions)
         )
     }
@@ -500,5 +724,21 @@ public final class MLXRAppModel {
             }
             return refs
         }
+    }
+
+    private func syncObservedJobs() {
+        let activeIds = Set(jobs.filter { !$0.state.isTerminal }.map(\.jobId))
+
+        for jobId in observedJobIds.subtracting(activeIds) {
+            eventTasks[jobId]?.cancel()
+            eventTasks.removeValue(forKey: jobId)
+            activeJobPhases.removeValue(forKey: jobId)
+        }
+
+        for jobId in activeIds.subtracting(observedJobIds) {
+            observe(jobId: jobId)
+        }
+
+        observedJobIds = activeIds
     }
 }

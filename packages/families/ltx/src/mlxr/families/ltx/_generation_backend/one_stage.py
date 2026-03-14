@@ -309,7 +309,7 @@ def generate_one_stage(
         mx.eval(latents)
     denoise_duration_ms = _elapsed_ms(started)
     host._transformer = None
-    transformer = None
+    del transformer
     mx.clear_cache()
 
     decode_started = time.perf_counter()

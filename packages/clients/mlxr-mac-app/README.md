@@ -15,28 +15,32 @@ The app is intentionally:
 - SwiftUI-first
 - a thin client over the shared runtime daemon
 - separate from the `ltx-desktop` compatibility adapter
-- smaller than the longer-term `MLXR Studio` vision
+- already moving toward a real studio workflow instead of separate technical forms
 
 ## What It Covers
 
-- `Images`
-  - `image.generate`
-  - `image.edit`
-- `Video`
-  - `video.generate`
-  - `video.condition.image`
-  - `video.condition.audio`
-  - `video.condition.video`
-  - `video.interpolate`
-  - `video.retake`
+- `Home`
+  - startup actions
+  - recent assets
+  - model and runtime readiness
+- `Studio`
+  - image generation and editing
+  - video generation, animation, audio-conditioned, guided-video, interpolation, and retake flows
+  - model-aware presets and advanced controls behind disclosure
+  - persistent workspace draft that survives navigation
 - `Library`
-  - runtime output browsing and preview
-- `Jobs`
-  - active and completed job visibility
+  - generated outputs plus imported assets
+  - run-group-aware asset sets
+  - preview, reuse, and continue-in-studio actions
+- `Models`
+  - curated installs
+  - first-run starter-model setup
+  - install queue
+  - installed model details and removal
 - `Settings`
   - runtime status
-  - curated installs
   - advanced import
+  - diagnostics and log discovery
 
 ## Architecture
 

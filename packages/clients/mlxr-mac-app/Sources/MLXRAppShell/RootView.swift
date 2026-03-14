@@ -1,45 +1,101 @@
+import MLXRActivityStrip
 import MLXRAppDomain
 import MLXRDesignSystem
-import MLXRFeatureImages
-import MLXRFeatureJobs
-import MLXRFeatureLibrary
-import MLXRFeatureModels
+import MLXRFeatureCreate
+import MLXRFeatureGallery
+import MLXRFeatureHome
 import MLXRFeatureSettings
-import MLXRFeatureVideo
+import MLXRFeatureToolkit
 import SwiftUI
 
 public struct MLXRMacAppRoot: View {
+    @AppStorage("mlxr.mac-app.last-destination") private var lastDestinationRaw = Destination.home.rawValue
     @State private var appModel = MLXRAppModel()
-    @State private var selectedSurface: ProductSurface? = .images
+    @State private var destination: Destination? = .home
 
     public init() {}
 
     public var body: some View {
         ZStack {
-            mainContent
-
-            // Onboarding overlay
-            if !appModel.hasCompletedOnboarding && !appModel.hasBootstrapped {
+            if shouldShowBootstrapOverlay {
                 onboardingOverlay
+                    .zIndex(200)
                     .transition(.opacity)
             }
-        }
-        .animation(MLXRAnimation.gentle, value: appModel.hasCompletedOnboarding)
-        .task {
-            await appModel.refresh()
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { appModel.hasPendingModelSetup },
-                set: { newValue in
-                    if !newValue {
-                        appModel.completeModelSetup()
+
+            HStack(spacing: 0) {
+                NavRail(
+                    selection: $destination,
+                    items: { dest in
+                        NavRailItemConfig(
+                            icon: dest.icon,
+                            label: dest.title,
+                            badge: badge(for: dest)
+                        )
+                    },
+                    footer: AnyView(
+                        ActivityCenterButton(
+                            jobs: appModel.jobs,
+                            activePhases: appModel.activeJobPhases,
+                            onCancelJob: { jobId in
+                                await appModel.cancelJob(jobId: jobId)
+                            },
+                            onOpenLibrary: {
+                                withAnimation(MLXRMotion.snappy) {
+                                    destination = .library
+                                }
+                            },
+                            presentation: .rail
+                        )
+                    )
+                )
+
+                VStack(spacing: 0) {
+                    if let error = appModel.globalError {
+                        InlineErrorBanner(error) {
+                            appModel.dismissGlobalError()
+                        }
+                        .padding(.horizontal, MLXRSpacing.lg)
+                        .padding(.top, MLXRSpacing.sm)
+                        .padding(.bottom, MLXRSpacing.sm)
+                    }
+
+                    shellUtilityBar
+                        .padding(.horizontal, MLXRSpacing.lg)
+                        .padding(.top, MLXRSpacing.md)
+                        .padding(.bottom, MLXRSpacing.sm)
+
+                    destinationContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    if appModel.runtimeProcessDied {
+                        runtimeDeadBanner
+                            .padding(.horizontal, MLXRSpacing.lg)
+                            .padding(.bottom, MLXRSpacing.md)
                     }
                 }
-            )
-        ) {
-            FirstRunModelSetupView(
-                models: appModel.catalog.recommendedAvailableItems,
+            }
+        }
+        .task {
+            await appModel.refresh()
+            appModel.syncWorkspaceDefaultsForTask()
+            chooseInitialDestinationIfNeeded()
+        }
+        .onChange(of: destination?.rawValue) { _, newValue in
+            if let newValue {
+                lastDestinationRaw = newValue
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { appModel.hasPendingModelSetup },
+            set: { newValue in
+                if !newValue {
+                    appModel.completeModelSetup()
+                }
+            }
+        )) {
+            StarterModelSetupView(
+                catalog: appModel.catalog,
                 previews: appModel.modelPreviews,
                 onLoadPreview: { modelId in
                     await appModel.loadPreviewIfNeeded(modelId: modelId)
@@ -49,281 +105,332 @@ public struct MLXRMacAppRoot: View {
                 },
                 onComplete: {
                     appModel.completeModelSetup()
-                    selectedSurface = .models
+                },
+                onSkip: {
+                    appModel.completeModelSetup()
+                }
+            )
+            .interactiveDismissDisabled()
+        }
+    }
+
+    @ViewBuilder
+    private var destinationContent: some View {
+        switch destination ?? .home {
+        case .home:
+            HomeScreen(
+                runtimeReady: appModel.hasBootstrapped,
+                hasModels: appModel.hasModelsReady,
+                hasContent: appModel.hasContent,
+                installedModelCount: appModel.catalog.installedItems.count,
+                activeJobCount: appModel.activeJobCount,
+                queuedInstallCount: appModel.activeInstallCount,
+                totalCreations: appModel.totalCreationCount,
+                recentAssets: appModel.recentLibraryAssets,
+                hasWorkspaceDraft: appModel.hasWorkspaceDraft,
+                onCreateImage: {
+                    openStudio(task: .imageGenerate)
+                },
+                onCreateVideo: {
+                    openStudio(task: .videoGenerate)
+                },
+                onOpenModels: {
+                    withAnimation(MLXRMotion.snappy) {
+                        destination = .models
+                    }
+                },
+                onOpenLibrary: {
+                    withAnimation(MLXRMotion.snappy) {
+                        destination = .library
+                    }
+                },
+                onContinueAsset: { asset in
+                    openStudio(
+                        task: asset.isAudio ? .videoConditionAudio : asset.isVideo ? .videoRetake : .imageEdit,
+                        focusedAssetId: asset.id,
+                        referenceAssetIds: [asset.id]
+                    )
+                },
+                onResumeWorkspace: {
+                    withAnimation(MLXRMotion.snappy) {
+                        destination = .studio
+                    }
+                }
+            )
+
+        case .studio:
+            StudioScreen(
+                workspace: $appModel.studioWorkspace,
+                catalog: appModel.catalog,
+                libraryAssets: appModel.libraryAssets,
+                installOperations: appModel.installOperations,
+                jobs: appModel.jobs,
+                activePhases: appModel.activeJobPhases,
+                currentRunGroup: appModel.currentRunGroup,
+                currentRunGroupAssets: appModel.currentRunGroupAssets,
+                packs: appModel.packCatalog,
+                isBusy: appModel.studioWorkspace.task.category == .image ? appModel.isSubmittingImage : appModel.isSubmittingVideo,
+                error: appModel.studioWorkspace.task.category == .image ? appModel.imageError : appModel.videoError,
+                onDismissError: {
+                    if appModel.studioWorkspace.task.category == .image {
+                        appModel.dismissImageError()
+                    } else {
+                        appModel.dismissVideoError()
+                    }
+                },
+                onResetDraft: {
+                    appModel.resetStudioDraft()
+                },
+                onSyncWorkspaceDefaults: {
+                    appModel.syncWorkspaceDefaultsForTask()
+                },
+                onPrepareRunContext: { task, title, sourceAssetIds, variationCount in
+                    let runGroup = appModel.createRunGroup(
+                        task: task,
+                        title: title.isEmpty ? task.title : title,
+                        sourceAssetIds: sourceAssetIds,
+                        variationCount: variationCount
+                    )
+                    return WorkflowContextMetadata(
+                        workspaceId: appModel.activeWorkspaceId,
+                        collectionId: nil,
+                        runGroupId: runGroup.id,
+                        sourceAssetIds: sourceAssetIds,
+                        intentLabel: task.title,
+                        presetId: appModel.studioWorkspace.aspectPreset.rawValue.lowercased()
+                    )
+                },
+                onImportAssets: { urls in
+                    await appModel.importExternalAssets(from: urls)
+                },
+                onResolveAssetURL: { asset in
+                    await appModel.resolvedURL(for: asset)
+                },
+                onQueueInstall: { modelId in
+                    await appModel.queueModelInstall(modelId: modelId)
+                },
+                onSubmitImage: { request in
+                    await appModel.submitImage(request)
+                },
+                onSubmitVideo: { request in
+                    await appModel.submitVideo(request)
+                }
+            )
+
+        case .library:
+            GalleryScreen(
+                assets: appModel.libraryAssets,
+                runGroups: appModel.runGroups,
+                collections: appModel.collections,
+                onMaterialize: { asset in
+                    await appModel.resolvedURL(for: asset)
+                },
+                onImportAssets: { urls in
+                    await appModel.importExternalAssets(from: urls)
+                },
+                onRemoveImportedAsset: { assetId in
+                    await appModel.removeImportedAsset(assetId: assetId)
+                },
+                onOpenInStudio: { request in
+                    openStudio(
+                        task: request.task,
+                        focusedAssetId: request.focusedAssetId,
+                        referenceAssetIds: request.referenceAssetIds,
+                        prompt: request.prompt
+                    )
+                },
+                onToggleFavorite: { assetId in
+                    appModel.toggleFavorite(assetId: assetId)
+                },
+                onToggleCollection: { assetId, collectionId in
+                    appModel.toggleAsset(assetId, in: collectionId)
+                },
+                onCreateCollection: { title in
+                    appModel.createCollection(named: title)
+                }
+            )
+
+        case .models:
+            ToolkitScreen(
+                runtimeStatus: appModel.runtimeStatus,
+                catalog: appModel.catalog,
+                installOperations: appModel.installOperations,
+                modelPreviews: appModel.modelPreviews,
+                installedModelDetails: appModel.installedModelDetails,
+                packs: appModel.packCatalog,
+                error: appModel.modelsError,
+                onDismissError: { appModel.dismissModelsError() },
+                onQueueInstall: { modelId in
+                    await appModel.queueModelInstall(modelId: modelId)
+                },
+                onCancelInstall: { operationId in
+                    await appModel.cancelModelInstall(operationId: operationId)
+                },
+                onRemoveModel: { modelId in
+                    await appModel.removeInstalledModel(modelId: modelId)
+                },
+                onLoadPreview: { modelId in
+                    await appModel.loadPreviewIfNeeded(modelId: modelId)
+                },
+                onLoadDetails: { modelId in
+                    await appModel.loadInstalledModelDetails(modelId: modelId)
+                }
+            )
+
+        case .settings:
+            SettingsScreen(
+                runtimeStatus: appModel.runtimeStatus,
+                bootstrapError: appModel.bootstrapError,
+                error: appModel.settingsError,
+                onDismissError: { appModel.dismissSettingsError() },
+                promptHelperMode: $appModel.promptHelperMode,
+                onRefresh: {
+                    await appModel.refresh()
+                },
+                onInspectImport: { draft in
+                    try await appModel.inspectAdvancedImport(draft)
+                },
+                onRunImport: { draft in
+                    try await appModel.runAdvancedImport(draft)
                 }
             )
         }
     }
 
-    // MARK: - Main Content
-
-    private var mainContent: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            ZStack(alignment: .top) {
-                AdaptiveBackground()
-
-                detailContent
-                    .animation(MLXRAnimation.spring, value: selectedSurface)
-
-                // Global error toast
-                if let error = appModel.globalError {
-                    VStack {
-                        InlineErrorBanner(error) {
-                            withAnimation(MLXRAnimation.snappy) {
-                                appModel.dismissGlobalError()
-                            }
-                        }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 8)
-                        Spacer()
-                    }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(100)
-                }
-
-                // Runtime process died warning
-                if appModel.runtimeProcessDied {
-                    VStack {
-                        Spacer()
-                        runtimeDeadBanner
-                            .padding(20)
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(99)
-                }
-            }
-            .animation(MLXRAnimation.snappy, value: appModel.globalError != nil)
-            .animation(MLXRAnimation.snappy, value: appModel.runtimeProcessDied)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await appModel.refresh() }
-                    } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                            .symbolEffect(.rotate, isActive: appModel.isRefreshing)
-                    }
-                    .disabled(appModel.isRefreshing)
-                    .keyboardShortcut("r", modifiers: .command)
-                }
-            }
-        }
-    }
-
-    // MARK: - Sidebar
-
-    private var sidebar: some View {
-        List(ProductSurface.allCases, selection: $selectedSurface) { surface in
-            SidebarItem(
-                title: surface.title,
-                systemImage: icon(for: surface),
-                badge: badge(for: surface),
-                isActive: selectedSurface == surface
+    private var shellUtilityBar: some View {
+        HStack {
+            StatusPill(
+                label: appModel.runtimeStatus == nil ? "Connecting" : "Local runtime ready",
+                tint: appModel.runtimeStatus == nil ? MLXRColor.brandWarm : MLXRColor.brandSecondary
             )
-            .tag(surface)
-        }
-        .navigationTitle("MLXR")
-    }
-
-    // MARK: - Detail Content
-
-    private var detailContent: some View {
-        Group {
-            switch selectedSurface ?? .images {
-            case .images:
-                ImagesScreen(
-                    catalog: appModel.catalog,
-                    isBusy: appModel.isSubmittingImage,
-                    installOperations: appModel.installOperations,
-                    error: appModel.imageError,
-                    onDismissError: { appModel.dismissImageError() },
-                    onInstall: { modelId in
-                        await appModel.queueModelInstall(modelId: modelId)
-                    },
-                    onSubmit: { request in
-                        await appModel.submitImage(request)
-                    }
-                )
-            case .video:
-                VideoScreen(
-                    catalog: appModel.catalog,
-                    isBusy: appModel.isSubmittingVideo,
-                    installOperations: appModel.installOperations,
-                    error: appModel.videoError,
-                    onDismissError: { appModel.dismissVideoError() },
-                    onInstall: { modelId in
-                        await appModel.queueModelInstall(modelId: modelId)
-                    },
-                    onSubmit: { request in
-                        await appModel.submitVideo(request)
-                    }
-                )
-            case .models:
-                ModelsScreen(
-                    runtimeStatus: appModel.runtimeStatus,
-                    catalog: appModel.catalog,
-                    installOperations: appModel.installOperations,
-                    previews: appModel.modelPreviews,
-                    installedDetails: appModel.installedModelDetails,
-                    error: appModel.modelsError,
-                    onDismissError: { appModel.dismissModelsError() },
-                    onLoadPreview: { modelId in
-                        await appModel.loadPreviewIfNeeded(modelId: modelId)
-                    },
-                    onInstall: { modelId in
-                        await appModel.queueModelInstall(modelId: modelId)
-                    },
-                    onCancelInstall: { operationId in
-                        await appModel.cancelModelInstall(operationId: operationId)
-                    },
-                    onLoadDetails: { modelId in
-                        await appModel.loadInstalledModelDetails(modelId: modelId)
-                    },
-                    onRemove: { modelId in
-                        await appModel.removeInstalledModel(modelId: modelId)
-                    }
-                )
-            case .library:
-                LibraryScreen(
-                    entries: appModel.libraryEntries,
-                    onMaterialize: { artifact in
-                        await appModel.cachedOutputURL(for: artifact)
-                    }
-                )
-            case .jobs:
-                JobsScreen(
-                    jobs: appModel.jobs,
-                    activePhases: appModel.activeJobPhases,
-                    onCancel: { jobId in
-                        await appModel.cancelJob(jobId: jobId)
-                    },
-                    onMaterialize: { artifact in
-                        await appModel.cachedOutputURL(for: artifact)
-                    }
-                )
-            case .settings:
-                SettingsScreen(
-                    runtimeStatus: appModel.runtimeStatus,
-                    bootstrapError: appModel.bootstrapError,
-                    error: appModel.settingsError,
-                    onDismissError: { appModel.dismissSettingsError() },
-                    promptHelperMode: $appModel.promptHelperMode,
-                    onRefresh: {
-                        await appModel.refresh()
-                    },
-                    onInspectImport: { draft in
-                        try await appModel.inspectAdvancedImport(draft)
-                    },
-                    onRunImport: { draft in
-                        try await appModel.runAdvancedImport(draft)
-                    }
-                )
-            }
+            Spacer()
         }
     }
 
-    // MARK: - Onboarding Overlay
+    private var shouldShowBootstrapOverlay: Bool {
+        !appModel.hasBootstrapped
+            && appModel.bootstrapError == nil
+            && appModel.globalError == nil
+    }
 
     private var onboardingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.3)
+            MLXRColor.canvasDeep
                 .ignoresSafeArea()
 
-            VStack(spacing: 28) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 48, weight: .medium))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [MLXRTheme.accent, MLXRTheme.secondaryAccent],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .symbolEffect(.variableColor.iterative, options: .repeating.speed(0.5))
+            VStack(spacing: MLXRSpacing.xl) {
+                ZStack {
+                    Circle()
+                        .fill(MLXRColor.brandGlow)
+                        .frame(width: 92, height: 92)
 
-                VStack(spacing: 10) {
-                    Text("Welcome to MLXR")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                    Text("Connecting to the local runtime...")
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [MLXRColor.brandPrimary, MLXRColor.brandSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+
+                VStack(spacing: MLXRSpacing.xs) {
+                    Text("MLXR")
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(MLXRColor.textPrimary)
+                    Text("Connecting to the local runtime…")
+                        .font(MLXRType.bodyMedium)
+                        .foregroundStyle(MLXRColor.textSecondary)
                 }
 
                 ProgressView()
-                    .controlSize(.regular)
+                    .tint(MLXRColor.brandPrimary)
             }
-            .padding(48)
-            .background {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.regularMaterial)
-                    .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
-            }
+            .padding(MLXRSpacing.xxxl)
         }
     }
 
-    // MARK: - Runtime Dead Banner
-
     private var runtimeDeadBanner: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MLXRSpacing.sm) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(MLXRTheme.warmAccent)
+                .foregroundStyle(MLXRColor.brandWarm)
                 .font(.system(size: 16))
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("Runtime disconnected")
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                Text("The MLXR daemon has stopped. Refresh to reconnect.")
-                    .font(.system(.caption, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    .font(MLXRType.bodySmall)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(MLXRColor.textPrimary)
+                Text("Refresh in Settings if the daemon does not reconnect by itself.")
+                    .font(MLXRType.captionLarge)
+                    .foregroundStyle(MLXRColor.textSecondary)
             }
+
             Spacer()
-            Button("Refresh") {
-                Task { await appModel.refresh() }
+
+            Button("Open Settings") {
+                withAnimation(MLXRMotion.snappy) {
+                    destination = .settings
+                }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
         }
-        .padding(14)
+        .padding(MLXRSpacing.md)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.regularMaterial)
+            RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
+                .fill(MLXRColor.surfaceCard)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(MLXRTheme.warmAccent.opacity(0.3), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
+                        .strokeBorder(MLXRColor.brandWarm.opacity(0.25), lineWidth: 0.5)
                 )
-                .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
         }
     }
 
-    // MARK: - Helpers
-
-    private func icon(for surface: ProductSurface) -> String {
-        switch surface {
-        case .images:
-            "photo.stack"
-        case .video:
-            "film.stack"
-        case .models:
-            "shippingbox"
-        case .library:
-            "square.stack.3d.up"
-        case .jobs:
-            "clock.arrow.trianglehead.counterclockwise.rotate.90"
-        case .settings:
-            "slider.horizontal.3"
-        }
-    }
-
-    private func badge(for surface: ProductSurface) -> String? {
-        switch surface {
+    private func badge(for dest: Destination) -> String? {
+        switch dest {
         case .models:
             let count = appModel.activeInstallCount
             return count > 0 ? "\(count)" : nil
-        case .jobs:
-            let count = appModel.activeJobCount
+        case .library:
+            let count = appModel.recentRunGroups.filter { $0.state == .running || $0.state == .queued }.count
             return count > 0 ? "\(count)" : nil
         default:
             return nil
+        }
+    }
+
+    private func chooseInitialDestinationIfNeeded() {
+        if appModel.hasWorkspaceDraft {
+            destination = .studio
+            return
+        }
+        if !appModel.hasModelsReady && !appModel.hasContent {
+            destination = .home
+            return
+        }
+        if let stored = Destination(rawValue: lastDestinationRaw) {
+            destination = stored == .home ? .studio : stored
+        } else {
+            destination = .studio
+        }
+    }
+
+    private func openStudio(
+        task: ProductTask,
+        focusedAssetId: String? = nil,
+        referenceAssetIds: [String] = [],
+        prompt: String? = nil
+    ) {
+        appModel.openStudio(
+            task: task,
+            focusedAssetId: focusedAssetId,
+            referenceAssetIds: referenceAssetIds,
+            prompt: prompt
+        )
+        withAnimation(MLXRMotion.snappy) {
+            destination = .studio
         }
     }
 }

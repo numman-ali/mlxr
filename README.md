@@ -37,7 +37,7 @@
 
 It is a local-first generative runtime built for Apple Silicon: one shared runtime, many thin surfaces, explicit provenance, and support claims that stay tied to real receipts instead of hope.
 
-The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished polished desktop app. The first native Mac app package now exists as an early Swift client over the same runtime, with a real `Models` surface and guided install flow, and the next product step is hardening that into a released app.
+The project is already a real runtime with a real CLI and real family slices for video and image generation. It is not yet a frozen public API or a finished polished desktop app. The first native Mac app package now exists as an early Swift client over the same runtime, now evolving into a unified `Studio + Library + Models` workflow instead of separate technical media forms.
 
 ## See It In Motion
 
@@ -71,7 +71,7 @@ The project is already a real runtime with a real CLI and real family slices for
 - A first-party `mlxr` CLI with `generate`, `serve`, `doctor`, `models list`, `models install`, and `feedback`.
 - Promoted `LTX` fast video slices.
 - Real `Qwen-Image`, `FLUX.2`, and `Z-Image` image-family slices.
-- An early native Mac app package under `packages/clients/mlxr-mac-app/`, including a top-level `Models` screen and runtime-backed install queue.
+- An early native Mac app package under `packages/clients/mlxr-mac-app/`, with a unified Studio surface, reusable library assets, and runtime-backed model installs.
 - Public docs for current status, roadmap, open-source maintenance, and the first Mac app direction.
 
 What is not true yet:

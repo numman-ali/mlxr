@@ -484,13 +484,35 @@ public final class RuntimeClient: RuntimeServing, @unchecked Sendable {
     }
 
     private static func errorDetail(from payload: Data) -> String? {
-        guard
-            let object = try? decoder.decode([String: JSONValue].self, from: payload),
-            let detail = object["detail"]?.stringValue
-        else {
+        guard let object = try? decoder.decode([String: JSONValue].self, from: payload) else {
             return nil
         }
-        return detail
+        if let detail = object["detail"]?.stringValue {
+            return detail
+        }
+        if let issues = object["detail"]?.arrayValue {
+            let messages = issues.compactMap { issue -> String? in
+                guard let issueObject = issue.objectValue else {
+                    return issue.stringValue
+                }
+                let location = issueObject["loc"]?.arrayValue?
+                    .compactMap { $0.stringValue ?? $0.integerValue.map(String.init) }
+                    .joined(separator: " > ")
+                let message = issueObject["msg"]?.stringValue ?? issueObject["message"]?.stringValue
+                switch (location, message) {
+                case let (location?, message?):
+                    return "\(location): \(message)"
+                case let (_, message?):
+                    return message
+                default:
+                    return nil
+                }
+            }
+            if !messages.isEmpty {
+                return messages.joined(separator: "\n")
+            }
+        }
+        return nil
     }
 
     fileprivate static let decoder: JSONDecoder = {

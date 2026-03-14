@@ -4,6 +4,8 @@ import MLXRRuntimeBridge
 
 @MainActor
 extension MLXRAppModel {
+    private static let activeInstallPollIntervalNanoseconds: UInt64 = 3_000_000_000
+
     public func queueModelInstall(modelId: String) async {
         guard let runtime else { return }
         do {
@@ -13,6 +15,7 @@ extension MLXRAppModel {
                 modelPreviews[modelId] = preview
             }
             modelsError = nil
+            syncInstallMonitor()
         } catch {
             modelsError = error.localizedDescription
         }
@@ -24,6 +27,7 @@ extension MLXRAppModel {
             let operation = try await runtime.cancelModelInstall(operationId: operationId)
             installOperations = upsert(operation, into: installOperations)
             modelsError = nil
+            syncInstallMonitor()
         } catch {
             modelsError = error.localizedDescription
         }
@@ -62,7 +66,7 @@ extension MLXRAppModel {
             installedModelDetails.removeValue(forKey: modelId)
             modelPreviews.removeValue(forKey: modelId)
             modelsError = nil
-            await refresh()
+            await refreshCatalogOnly(force: true)
         } catch {
             modelsError = error.localizedDescription
         }
@@ -93,21 +97,44 @@ extension MLXRAppModel {
             let previousOperations = installOperations
             let updated = try await runtime.listModelInstalls().sorted { $0.updatedAt > $1.updatedAt }
             installOperations = updated
+            modelsError = nil
+            syncInstallMonitor()
             if shouldRefreshCatalog(previous: previousOperations, current: updated) {
-                await refresh()
+                await refreshCatalogOnly(force: true)
             }
         } catch {
             modelsError = error.localizedDescription
         }
     }
 
-    func startInstallMonitor(client: RuntimeClient) {
+    func syncInstallMonitor() {
+        guard runtime is RuntimeClient else {
+            installMonitorTask?.cancel()
+            installMonitorTask = nil
+            return
+        }
+        let hasActiveInstalls = installOperations.contains(where: { !$0.phase.isTerminal })
+        guard hasActiveInstalls else {
+            installMonitorTask?.cancel()
+            installMonitorTask = nil
+            return
+        }
+        guard installMonitorTask == nil else {
+            return
+        }
+
         installMonitorTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                try? await Task.sleep(nanoseconds: Self.activeInstallPollIntervalNanoseconds)
                 guard let self else { return }
-                _ = client
+                let shouldContinue = await MainActor.run {
+                    self.installOperations.contains(where: { !$0.phase.isTerminal })
+                }
+                guard shouldContinue else { break }
                 await self.refreshInstallOperationsOnly()
+            }
+            await MainActor.run { [weak self] in
+                self?.installMonitorTask = nil
             }
         }
     }

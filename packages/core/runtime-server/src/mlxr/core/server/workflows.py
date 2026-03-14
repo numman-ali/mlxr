@@ -37,6 +37,8 @@ class WorkflowService:
             intent=intent,
             plan=resolved_plan,
         )
+        if intent.context is not None:
+            job_request = job_request.model_copy(update={"context": intent.context})
         record = self.job_manager.submit(job_request)
         return WorkflowRunResult(
             plan=resolved_plan,

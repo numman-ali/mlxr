@@ -501,3 +501,105 @@ func removeInstalledModelClearsCachedDetailsAfterSuccess() async {
     #expect(model.installedModelDetails["z-image-turbo-local"] == nil)
     #expect(mock.removeModelCallCount == 1)
 }
+
+@Test
+@MainActor
+func defaultImageModelPrefersZImageTurboWhenAvailable() async {
+    let mock = MockRuntime()
+    mock.supportedModels = [
+        SupportedModelDescriptor(
+            modelId: "qwen-image-local",
+            displayName: "Qwen Image",
+            family: "qwen_image",
+            familyVariant: nil,
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.generate"],
+            provider: "huggingface",
+            sourceSummary: "Qwen/Qwen-Image-2512",
+            license: nil,
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        ),
+        SupportedModelDescriptor(
+            modelId: "z-image-turbo-local",
+            displayName: "Z-Image Turbo",
+            family: "z_image",
+            familyVariant: nil,
+            recommendationTier: .recommended,
+            supportLevel: .promoted,
+            tasks: ["image.generate"],
+            provider: "huggingface",
+            sourceSummary: "Tongyi-MAI/Z-Image-Turbo",
+            license: nil,
+            accessState: "public",
+            installed: true,
+            installable: true,
+            notes: nil
+        ),
+    ]
+
+    let model = MLXRAppModel(runtime: mock)
+    await model.refresh()
+
+    #expect(model.preferredDefaultModelId(for: .imageGenerate) == "z-image-turbo-local")
+}
+
+@Test
+@MainActor
+func refreshReconstructsRunGroupsFromJobContext() async {
+    let now = Date()
+    let artifact = OutputArtifactRecord(
+        artifactId: "art_1",
+        artifactFormat: "png",
+        role: "primary",
+        exportable: true,
+        metadata: [:],
+        jobId: "job-run-group",
+        filename: "result.png",
+        mediaType: "image/png",
+        sizeBytes: 1024,
+        storageKey: "outputs/job-run-group/result.png",
+        createdAt: now
+    )
+    let context = WorkflowContextMetadata(
+        workspaceId: "default-workspace",
+        runGroupId: "run-group-1",
+        sourceAssetIds: ["source-asset-1"],
+        intentLabel: "Make Image",
+        presetId: "square"
+    )
+
+    let mock = MockRuntime()
+    mock.jobs = [
+        JobRecord(
+            jobId: "job-run-group",
+            request: JobRequest(
+                modelId: "z-image-turbo-local",
+                task: "image.generate",
+                inputs: ["prompt": .string("golden retriever")],
+                params: [:],
+                output: .init(),
+                context: context,
+                extensions: [:]
+            ),
+            state: .completed,
+            createdAt: now,
+            updatedAt: now,
+            error: nil,
+            artifacts: [artifact]
+        )
+    ]
+
+    let model = MLXRAppModel(runtime: mock)
+    await model.refresh()
+
+    #expect(model.runGroups.count == 1)
+    #expect(model.runGroups[0].id == "run-group-1")
+    #expect(model.runGroups[0].title == "Make Image")
+    #expect(model.runGroups[0].jobIds == ["job-run-group"])
+    #expect(model.runGroups[0].assetIds == ["art_1"])
+    #expect(model.runGroups[0].state == .completed)
+}

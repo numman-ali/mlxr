@@ -390,7 +390,8 @@ def create_app(state: RuntimeState | None = None) -> FastAPI:
         active_jobs = [
             record.job_id
             for record in runtime.job_store.list_records()
-            if record.request.model_id == model_id and record.state not in TERMINAL_STATES
+            if record.request.model_id == model_id
+            and record.state not in TERMINAL_STATES
         ]
         if active_jobs:
             raise HTTPException(

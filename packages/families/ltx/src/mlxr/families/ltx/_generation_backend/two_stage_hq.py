@@ -306,7 +306,7 @@ def generate_two_stage_hq(
     timings_ms["stage1_duration_ms"] = _elapsed_ms(stage1_started)
     # HQ uses distinct distilled-LoRA strengths per stage, so the stage-1 LoRA
     # variant must be dropped before stage 2 builds its own transformer.
-    stage1_transformer = None
+    del stage1_transformer
     stage1_state = None
     del stage1_positions
     del stage1_audio_positions
@@ -320,7 +320,7 @@ def generate_two_stage_hq(
         upsampler = host._ensure_upsampler(imports)
     latents = imports.upsample_latents(latents, upsampler, latent_mean, latent_std)
     mx.eval(latents)
-    upsampler = None
+    del upsampler
     host._upsampler = None
     mx.clear_cache()
     timings_ms["upsample_duration_ms"] = _elapsed_ms(upsample_started)
@@ -413,7 +413,7 @@ def generate_two_stage_hq(
         )
         mx.eval(latents)
     timings_ms["stage2_duration_ms"] = _elapsed_ms(stage2_started)
-    stage2_transformer = None
+    del stage2_transformer
     stage2_state = None
     del stage2_positions
     del stage2_audio_positions

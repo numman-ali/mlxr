@@ -14,6 +14,7 @@ from .jobs import (
     OutputDestinationMode,
     RuntimeEvent,
     RuntimeEventKind,
+    WorkflowContextMetadata,
 )
 from .models import (
     ArtifactConversionRequest,
@@ -119,6 +120,7 @@ __all__ = [
     "SupportedModelSourcePreview",
     "SupportLevel",
     "WorkflowIntent",
+    "WorkflowContextMetadata",
     "WorkflowPlan",
     "WorkflowPlanResult",
     "WorkflowPreferences",

@@ -9,9 +9,8 @@ Current implementation status:
 
 - native Swift package scaffold exists in `packages/clients/mlxr-mac-app/`
 - runtime bridge, feature shells, and early tests are real
+- the app now has a persistent studio draft, a reusable asset library, grouped run results, and guided starter-model setup
 - polish, onboarding, packaging, and release hardening still remain
-
-It is not `MLXR Studio`.
 
 Its job is to make the current runtime accessible to non-technical Mac users
 without creating a second architecture or a host-owned inference stack.
@@ -66,11 +65,10 @@ That means:
 
 Top-level app areas:
 
-- `Images`
-- `Video`
-- `Models`
+- `Home`
+- `Studio`
 - `Library`
-- `Jobs`
+- `Models`
 - `Settings`
 
 ### Models
@@ -79,34 +77,22 @@ Top-level app areas:
 - install queue visibility and status
 - installed model details
 - remove model from the MLXR-managed install home
+- first-run starter-model setup flow for new users
 
-### Images
+### Studio
 
-- prompt-only generation
-- image editing
-- model selection
-- optional advanced section for supported-but-unpromoted rows
-
-### Video
-
-- text-to-video
-- image-to-video
-- conditioned-audio
-- advanced section for reference-video, interpolation, retake, and other
-  supported-but-unpromoted rows
+- one creation surface for image and video workflows
+- prompt in the main workspace
+- config on the right
+- reusable assets from the library on the left
+- current progress stays in context instead of pushing the user to a separate job list
 
 ### Library
 
-- exported outputs
+- generated outputs plus imported source assets
+- run-group-aware asset sets instead of a raw job list
 - quick reveal in Finder
-- rerun from prior settings later, if the runtime job metadata already supports
-  it cleanly
-
-### Jobs
-
-- current progress
-- recent failures
-- stage status and output artifact links
+- fast reuse into Studio for edit, animate, guide, and retake flows
 
 ### Settings
 

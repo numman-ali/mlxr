@@ -1,7 +1,7 @@
 import MLXRAppDomain
 import MLXRDesignSystem
 import MLXRRuntimeBridge
-import SwiftUI
+@preconcurrency import SwiftUI
 
 public struct SettingsScreen: View {
     private let runtimeStatus: RuntimeStatusSnapshot?
@@ -41,51 +41,56 @@ public struct SettingsScreen: View {
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                FeatureHeader(
-                    eyebrow: "Settings",
-                    title: "Runtime, models, and import",
-                    subtitle: "This is where the app stays honest about runtime state, installs curated defaults, and opens the advanced import path without pretending everything is equally ready."
-                )
+        ZStack {
+            AdaptiveBackground()
 
-                if let error {
-                    InlineErrorBanner(error, onDismiss: onDismissError)
-                        .animation(MLXRAnimation.snappy, value: error)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: MLXRSpacing.xl) {
+                    FeatureHeader(
+                        eyebrow: "Settings",
+                        title: "Runtime, models, and import",
+                        subtitle: "This is where the app stays honest about runtime state, installs curated defaults, and opens the advanced import path without pretending everything is equally ready."
+                    )
+
+                    if let error {
+                        InlineErrorBanner(error, onDismiss: onDismissError)
+                            .animation(MLXRMotion.snappy, value: error)
+                    }
+
+                    if let bootstrapError {
+                        InlineErrorBanner(bootstrapError)
+                            .animation(MLXRMotion.snappy, value: bootstrapError)
+                    }
+
+                    runtimeSection
+                    promptHelperSection
+                    advancedImportSection
                 }
-
-                if let bootstrapError {
-                    InlineErrorBanner(bootstrapError)
-                        .animation(MLXRAnimation.snappy, value: bootstrapError)
-                }
-
-                runtimeSection
-                promptHelperSection
-                advancedImportSection
+                .padding(.horizontal, MLXRSpacing.xl)
+                .padding(.vertical, MLXRSpacing.xl)
             }
-            .padding(28)
         }
     }
 
     // MARK: - Runtime
 
     private var runtimeSection: some View {
-        SectionCard(
+        GlassCard(
             title: "Runtime",
             subtitle: "The app is a client. The Python runtime and daemon stay the source of truth, while model installs and removals now live in the dedicated Models screen."
         ) {
             if let runtimeStatus {
-                HStack(spacing: 10) {
+                HStack(spacing: MLXRSpacing.sm) {
                     StatusPill(
                         label: runtimeStatus.health.status,
                         tint: runtimeStatus.health.status == "ok"
-                            ? MLXRTheme.secondaryAccent
-                            : MLXRTheme.destructive
+                            ? MLXRColor.brandSecondary
+                            : MLXRColor.brandDanger
                     )
                     if let socketPath = runtimeStatus.socketPath {
                         StatusPill(
                             label: socketPath.lastPathComponent,
-                            tint: MLXRTheme.accent
+                            tint: MLXRColor.brandPrimary
                         )
                     }
                 }
@@ -94,70 +99,112 @@ public struct SettingsScreen: View {
                 DetailRow(label: "Log file", value: runtimeStatus.logFile.path)
             } else {
                 Text("Runtime status has not been loaded yet.")
-                    .foregroundStyle(.secondary)
+                    .font(MLXRType.bodyMedium)
+                    .foregroundStyle(MLXRColor.textSecondary)
             }
 
-            Button("Refresh runtime state") {
+            Button {
                 Task { await onRefresh() }
+            } label: {
+                HStack(spacing: MLXRSpacing.xs) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Refresh runtime state")
+                        .font(MLXRType.bodySmall)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, MLXRSpacing.lg)
+                .padding(.vertical, MLXRSpacing.xs)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(MLXRColor.brandGradient)
+                        .shadow(color: MLXRColor.brandPrimary.opacity(0.25), radius: 8, y: 2)
+                )
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Prompt Helper
 
     private var promptHelperSection: some View {
-        SectionCard(
+        GlassCard(
             title: "Prompt helper",
             subtitle: "Prompt enhancement belongs in the app, not in the core runtime contract. This is a placeholder for the first local helper track."
         ) {
-            Picker("Mode", selection: $promptHelperMode) {
-                ForEach(PromptHelperMode.allCases) { mode in
-                    Text(mode.rawValue.capitalized).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            CreativeControlSegment(
+                label: "Mode",
+                selection: $promptHelperMode,
+                options: PromptHelperMode.allCases.map { ($0, $0.rawValue.capitalized) }
+            )
 
             Text("The current app keeps this setting ready without making core generation depend on it.")
-                .foregroundStyle(.secondary)
+                .font(MLXRType.bodySmall)
+                .foregroundStyle(MLXRColor.textTertiary)
         }
     }
 
     // MARK: - Advanced Import
 
     private var advancedImportSection: some View {
-        SectionCard(
+        GlassCard(
             title: "Advanced import",
             subtitle: "Use the existing runtime source inspect, register, and convert routes rather than inventing a parallel app-only model pipeline."
         ) {
-            Picker("Mode", selection: $draft.mode) {
-                ForEach(AdvancedImportMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            CreativeControlSegment(
+                label: "Mode",
+                selection: $draft.mode,
+                options: AdvancedImportMode.allCases.map { ($0, $0.title) }
+            )
 
-            TextField("Model ID", text: $draft.modelId)
-                .textFieldStyle(.roundedBorder)
-            TextField("Family hint (optional)", text: Binding(
+            MLXRTextField("Model ID", text: $draft.modelId, placeholder: "e.g. my-custom-model")
+            MLXRTextField("Family hint", text: Binding(
                 get: { draft.familyHint ?? "" },
                 set: { draft.familyHint = $0.isEmpty ? nil : $0 }
-            ))
-            .textFieldStyle(.roundedBorder)
+            ), placeholder: "Optional")
 
             modeSpecificFields
 
-            HStack {
-                Button("Inspect sources") {
+            HStack(spacing: MLXRSpacing.sm) {
+                Button {
                     Task { await inspect() }
+                } label: {
+                    HStack(spacing: MLXRSpacing.xxs) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Inspect sources")
+                            .font(MLXRType.bodySmall)
+                    }
+                    .foregroundStyle(MLXRColor.brandPrimary)
+                    .padding(.horizontal, MLXRSpacing.md)
+                    .padding(.vertical, MLXRSpacing.xs)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(MLXRColor.brandGlow)
+                    )
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
                 .disabled(isWorking)
 
-                Button("Import model") {
+                Button {
                     Task { await runImport() }
+                } label: {
+                    HStack(spacing: MLXRSpacing.xxs) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Import model")
+                            .font(MLXRType.bodySmall)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, MLXRSpacing.md)
+                    .padding(.vertical, MLXRSpacing.xs)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(MLXRColor.brandGradient)
+                            .shadow(color: MLXRColor.brandPrimary.opacity(0.25), radius: 8, y: 2)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
                 .disabled(isWorking)
 
                 if isWorking {
@@ -183,44 +230,45 @@ public struct SettingsScreen: View {
     private var modeSpecificFields: some View {
         switch draft.mode {
         case .huggingFaceSingleRepo:
-            TextField("Hugging Face repo", text: $draft.huggingFaceRepo)
-                .textFieldStyle(.roundedBorder)
+            MLXRTextField("Hugging Face repo", text: $draft.huggingFaceRepo, placeholder: "org/model-name")
         case .trustedLocalBundle:
-            TextField("Local bundle path", text: $draft.localPath)
-                .textFieldStyle(.roundedBorder)
+            MLXRTextField("Local bundle path", text: $draft.localPath, placeholder: "/path/to/bundle")
         case .ltxMultiSource:
-            TextField("Checkpoint repo", text: $draft.ltxCheckpointRepo)
-                .textFieldStyle(.roundedBorder)
-            TextField("Spatial upsampler repo (optional)", text: $draft.ltxUpsamplerRepo)
-                .textFieldStyle(.roundedBorder)
-            TextField("Text encoder repo", text: $draft.ltxTextEncoderRepo)
-                .textFieldStyle(.roundedBorder)
-            TextField("Distilled LoRA repo (optional)", text: $draft.ltxDistilledLoRARepo)
-                .textFieldStyle(.roundedBorder)
+            MLXRTextField("Checkpoint repo", text: $draft.ltxCheckpointRepo, placeholder: "org/checkpoint")
+            MLXRTextField("Spatial upsampler repo", text: $draft.ltxUpsamplerRepo, placeholder: "Optional")
+            MLXRTextField("Text encoder repo", text: $draft.ltxTextEncoderRepo, placeholder: "org/encoder")
+            MLXRTextField("Distilled LoRA repo", text: $draft.ltxDistilledLoRARepo, placeholder: "Optional")
         }
     }
 
     private var inspectionResultsView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MLXRSpacing.md) {
             Text("Inspection results")
-                .font(.system(.headline, design: .rounded, weight: .semibold))
+                .font(MLXRType.titleMedium)
+                .foregroundStyle(MLXRColor.textPrimary)
             ForEach(inspectionResults.keys.sorted(), id: \.self) { role in
                 if let result = inspectionResults[role] {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
                         Text(role)
-                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .font(MLXRType.titleSmall)
+                            .foregroundStyle(MLXRColor.textPrimary)
                         DetailRow(label: "Provider", value: result.resolvedSource.provider)
                         DetailRow(label: "Family", value: result.familyInspection?.family ?? "Unknown")
                         DetailRow(label: "Variant", value: result.familyInspection?.variant ?? "Unknown")
                         DetailRow(label: "Access", value: result.resolvedSource.accessState)
                         DetailRow(label: "License", value: result.resolvedSource.license ?? "Unknown")
                         Text(result.familyInspection?.tasks.joined(separator: ", ") ?? "No tasks detected")
-                            .foregroundStyle(.secondary)
+                            .font(MLXRType.bodySmall)
+                            .foregroundStyle(MLXRColor.textTertiary)
                     }
-                    .padding(14)
+                    .padding(MLXRSpacing.md)
                     .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(MLXRTheme.surfaceSecondary)
+                        RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)
+                            .fill(Color.white.opacity(0.05))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)
+                                    .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                            )
                     )
                 }
             }

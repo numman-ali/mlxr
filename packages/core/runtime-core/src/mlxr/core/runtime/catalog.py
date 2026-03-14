@@ -379,9 +379,9 @@ class RuntimeCatalog:
         managed_size_bytes = self._artifact_size_bytes(artifact)
         supported_model = None
         try:
-            supported_model = _supported_model_recipe(self.registry, model_id).to_descriptor(
-                installed=True
-            )
+            supported_model = _supported_model_recipe(
+                self.registry, model_id
+            ).to_descriptor(installed=True)
         except CatalogNotFoundError:
             supported_model = None
         return InstalledModelDetails(

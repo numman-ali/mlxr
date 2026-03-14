@@ -41,6 +41,7 @@ public struct ImageGenerationRequest: Sendable, Hashable {
     public var artifactFormat: String
     public var promptHelperMode: PromptHelperMode
     public var quality: WorkflowQuality
+    public var context: WorkflowContextMetadata?
     public var references: [MediaReferenceInput]
     public var familyExtensions: JSONMap
 
@@ -57,6 +58,7 @@ public struct ImageGenerationRequest: Sendable, Hashable {
         artifactFormat: String = "png",
         promptHelperMode: PromptHelperMode = .suggest,
         quality: WorkflowQuality = .balanced,
+        context: WorkflowContextMetadata? = nil,
         references: [MediaReferenceInput] = [],
         familyExtensions: JSONMap = [:]
     ) {
@@ -72,6 +74,7 @@ public struct ImageGenerationRequest: Sendable, Hashable {
         self.artifactFormat = artifactFormat
         self.promptHelperMode = promptHelperMode
         self.quality = quality
+        self.context = context
         self.references = references
         self.familyExtensions = familyExtensions
     }
@@ -91,6 +94,7 @@ public struct VideoGenerationRequest: Sendable, Hashable {
     public var seed: Int?
     public var artifactFormat: String
     public var quality: WorkflowQuality
+    public var context: WorkflowContextMetadata?
     public var references: [MediaReferenceInput]
     public var workflowVariant: String?
     public var controlVariant: String?
@@ -115,6 +119,7 @@ public struct VideoGenerationRequest: Sendable, Hashable {
         seed: Int? = nil,
         artifactFormat: String = "mp4",
         quality: WorkflowQuality = .balanced,
+        context: WorkflowContextMetadata? = nil,
         references: [MediaReferenceInput] = [],
         workflowVariant: String? = nil,
         controlVariant: String? = nil,
@@ -138,6 +143,7 @@ public struct VideoGenerationRequest: Sendable, Hashable {
         self.seed = seed
         self.artifactFormat = artifactFormat
         self.quality = quality
+        self.context = context
         self.references = references
         self.workflowVariant = workflowVariant
         self.controlVariant = controlVariant

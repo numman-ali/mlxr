@@ -1,41 +1,13 @@
 import Foundation
 
-public enum ProductSurface: String, CaseIterable, Identifiable, Sendable {
-    case images
-    case video
-    case models
-    case library
-    case jobs
-    case settings
-
-    public var id: String { rawValue }
-
-    public var title: String {
-        switch self {
-        case .images:
-            "Images"
-        case .video:
-            "Video"
-        case .models:
-            "Models"
-        case .library:
-            "Library"
-        case .jobs:
-            "Jobs"
-        case .settings:
-            "Settings"
-        }
-    }
-}
-
-public enum TaskCategory: String, CaseIterable, Identifiable, Sendable {
+public enum TaskCategory: String, CaseIterable, Identifiable, Sendable, Codable {
     case image
     case video
 
     public var id: String { rawValue }
 }
 
-public enum ProductTask: String, CaseIterable, Identifiable, Sendable {
+public enum ProductTask: String, CaseIterable, Identifiable, Sendable, Codable {
     case imageGenerate = "image.generate"
     case imageEdit = "image.edit"
     case videoGenerate = "video.generate"
@@ -50,42 +22,42 @@ public enum ProductTask: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .imageGenerate:
-            "Generate"
+            "Make Image"
         case .imageEdit:
-            "Edit"
+            "Edit Image"
         case .videoGenerate:
-            "Text to Video"
+            "Make Video"
         case .videoConditionImage:
-            "Image to Video"
+            "Animate Image"
         case .videoConditionAudio:
-            "Audio Conditioned"
+            "Video From Sound"
         case .videoConditionVideo:
-            "Video Control"
+            "Guide With Video"
         case .videoInterpolate:
-            "Interpolate"
+            "Blend Frames"
         case .videoRetake:
-            "Retake"
+            "Retake Clip"
         }
     }
 
     public var subtitle: String {
         switch self {
         case .imageGenerate:
-            "Prompt-only image generation"
+            "Create a still image from a prompt"
         case .imageEdit:
-            "Edit one or more reference images"
+            "Change or refine an existing image"
         case .videoGenerate:
-            "Create motion from text alone"
+            "Create a clip from text alone"
         case .videoConditionImage:
-            "Turn a still image or keyframes into a clip"
+            "Turn a still into motion"
         case .videoConditionAudio:
-            "Drive a clip with audio timing and mood"
+            "Drive a clip from sound"
         case .videoConditionVideo:
-            "Condition with a source video and LoRA control"
+            "Steer motion with a source clip"
         case .videoInterpolate:
-            "Generate motion between keyed frames"
+            "Create motion between key frames"
         case .videoRetake:
-            "Regenerate a time window inside an existing clip"
+            "Redo part of a clip without starting over"
         }
     }
 
@@ -292,6 +264,11 @@ public struct CatalogSnapshot: Sendable {
 public struct LibraryEntry: Identifiable, Hashable, Sendable {
     public var artifact: OutputArtifactRecord
     public var job: JobRecord
+
+    public init(artifact: OutputArtifactRecord, job: JobRecord) {
+        self.artifact = artifact
+        self.job = job
+    }
 
     public var id: String { artifact.id }
 

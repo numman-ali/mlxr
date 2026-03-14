@@ -46,6 +46,15 @@ class JobOutputPolicy(BaseModel):
     stream: bool = False
 
 
+class WorkflowContextMetadata(BaseModel):
+    workspace_id: str | None = None
+    collection_id: str | None = None
+    run_group_id: str | None = None
+    source_asset_ids: list[str] = Field(default_factory=list)
+    intent_label: str | None = None
+    preset_id: str | None = None
+
+
 class InputImportRequest(BaseModel):
     content_base64: str
     media_type: str | None = None
@@ -102,6 +111,7 @@ class JobRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
     params: dict[str, Any] = Field(default_factory=dict)
     output: JobOutputPolicy = Field(default_factory=JobOutputPolicy)
+    context: WorkflowContextMetadata | None = None
     extensions: dict[str, Any] = Field(default_factory=dict)
 
 
