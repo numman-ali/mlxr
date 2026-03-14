@@ -148,7 +148,7 @@ public struct ActivityCenterSheet: View {
             {
                 EmptyStateView(
                     title: "No recent activity",
-                    subtitle: "Runs you start in Studio will appear here while they work, then move into the Library once they finish.",
+                    subtitle: "Runs you start from the composer appear here while they work, then move into the Library once they finish.",
                     systemImage: "sparkles"
                 )
             } else {

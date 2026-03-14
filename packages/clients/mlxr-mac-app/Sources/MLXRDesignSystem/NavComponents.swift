@@ -6,15 +6,18 @@ public struct NavRail<D: Hashable & CaseIterable & Identifiable>: View
     where D.AllCases: RandomAccessCollection
 {
     @Binding var selection: D?
+    let destinations: [D]
     let items: (D) -> NavRailItemConfig
     let footer: AnyView?
 
     public init(
         selection: Binding<D?>,
+        destinations: [D] = Array(D.allCases),
         items: @escaping (D) -> NavRailItemConfig,
         footer: AnyView? = nil
     ) {
         self._selection = selection
+        self.destinations = destinations
         self.items = items
         self.footer = footer
     }
@@ -59,7 +62,7 @@ public struct NavRail<D: Hashable & CaseIterable & Identifiable>: View
 
             // Destination items
             VStack(spacing: MLXRSpacing.xs) {
-                ForEach(Array(D.allCases)) { destination in
+                ForEach(destinations) { destination in
                     let config = items(destination)
                     NavRailButton(
                         icon: config.icon,

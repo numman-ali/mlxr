@@ -34,7 +34,7 @@ public struct StarterModelSetupView: View {
             FeatureHeader(
                 eyebrow: "First Run",
                 title: "Pick your starter models",
-                subtitle: "Install the rows you want once, then use them everywhere in Studio and Library."
+                subtitle: "Install the rows you want once, then use them across your projects and Library."
             )
 
             ScrollView {

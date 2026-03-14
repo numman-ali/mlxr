@@ -14,7 +14,7 @@ public enum Destination: String, CaseIterable, Identifiable, Sendable, Codable {
     public var title: String {
         switch self {
         case .home: "Home"
-        case .studio: "Studio"
+        case .studio: "Create"
         case .library: "Library"
         case .models: "Models"
         case .settings: "Settings"

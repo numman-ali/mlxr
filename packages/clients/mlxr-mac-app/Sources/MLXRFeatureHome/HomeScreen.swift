@@ -79,8 +79,8 @@ public struct HomeScreen: View {
 
     private var hero: some View {
         HeroBanner(
-            title: "A local studio for making and reusing media",
-            subtitle: "Start with a prompt, build from something you already made, or bring in media from Finder and keep working in one place."
+            title: "A local workspace for prompts, projects, and media",
+            subtitle: "Start with a prompt, build from something you already made, or bring media in from Finder and keep the whole thread together."
         ) {
             HStack(spacing: MLXRSpacing.sm) {
                 StatusPill(

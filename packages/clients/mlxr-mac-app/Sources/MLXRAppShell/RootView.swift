@@ -341,7 +341,6 @@ public struct MLXRMacAppRoot: View {
             isBusy: appModel.isSubmittingImage || appModel.isSubmittingVideo,
             canSubmit: appModel.canSubmitCurrentWorkspace(),
             disabledReason: appModel.currentWorkspaceSubmitDisabledReason(),
-            showsOpenStudioAction: destination != .studio,
             onSelectMode: { mode in
                 appModel.selectComposerMode(mode)
             },
@@ -360,12 +359,7 @@ public struct MLXRMacAppRoot: View {
             onSelectVariation: { count in
                 appModel.selectComposerVariationCount(count)
             },
-            onSubmit: submitFromGlobalComposer,
-            onOpenStudio: {
-                withAnimation(MLXRMotion.snappy) {
-                    destination = .studio
-                }
-            }
+            onSubmit: submitFromGlobalComposer
         )
         .padding(.horizontal, MLXRSpacing.xl)
         .padding(.bottom, MLXRSpacing.lg)

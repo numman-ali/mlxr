@@ -18,7 +18,6 @@ public struct GlobalComposerBar: View {
     private let isBusy: Bool
     private let canSubmit: Bool
     private let disabledReason: String?
-    private let showsOpenStudioAction: Bool
     private let onSelectMode: (TaskCategory) -> Void
     private let onSelectTask: (ProductTask) -> Void
     private let onSelectQuality: (String) -> Void
@@ -26,7 +25,6 @@ public struct GlobalComposerBar: View {
     private let onSelectDuration: (String) -> Void
     private let onSelectVariation: (Int) -> Void
     private let onSubmit: () -> Void
-    private let onOpenStudio: () -> Void
 
     public init(
         workspace: Binding<StudioWorkspaceDraft>,
@@ -43,15 +41,13 @@ public struct GlobalComposerBar: View {
         isBusy: Bool,
         canSubmit: Bool,
         disabledReason: String?,
-        showsOpenStudioAction: Bool = true,
         onSelectMode: @escaping (TaskCategory) -> Void,
         onSelectTask: @escaping (ProductTask) -> Void,
         onSelectQuality: @escaping (String) -> Void,
         onSelectAspect: @escaping (String) -> Void,
         onSelectDuration: @escaping (String) -> Void,
         onSelectVariation: @escaping (Int) -> Void,
-        onSubmit: @escaping () -> Void,
-        onOpenStudio: @escaping () -> Void
+        onSubmit: @escaping () -> Void
     ) {
         self._workspace = workspace
         self.mode = mode
@@ -67,7 +63,6 @@ public struct GlobalComposerBar: View {
         self.isBusy = isBusy
         self.canSubmit = canSubmit
         self.disabledReason = disabledReason
-        self.showsOpenStudioAction = showsOpenStudioAction
         self.onSelectMode = onSelectMode
         self.onSelectTask = onSelectTask
         self.onSelectQuality = onSelectQuality
@@ -75,7 +70,6 @@ public struct GlobalComposerBar: View {
         self.onSelectDuration = onSelectDuration
         self.onSelectVariation = onSelectVariation
         self.onSubmit = onSubmit
-        self.onOpenStudio = onOpenStudio
     }
 
     public var body: some View {
@@ -107,11 +101,6 @@ public struct GlobalComposerBar: View {
                 }
 
                 Spacer(minLength: 0)
-
-                if showsOpenStudioAction {
-                    Button("Open Studio", action: onOpenStudio)
-                        .buttonStyle(.bordered)
-                }
             }
 
             TextField(

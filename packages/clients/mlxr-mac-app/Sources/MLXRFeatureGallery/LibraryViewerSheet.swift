@@ -208,7 +208,7 @@ struct LibraryViewerSheet: View {
                     }
                     .buttonStyle(.bordered)
                 } else if asset.isAudio {
-                    Button("Use in Studio") {
+                    Button("Use as audio guide") {
                         onOpenInStudio(
                             StudioOpenRequest(
                                 task: .videoConditionAudio,

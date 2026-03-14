@@ -20,7 +20,7 @@ struct LibraryFilterRail: View {
                 FeatureHeader(
                     eyebrow: "Library",
                     title: "Everything you made or imported",
-                    subtitle: "Browse reusable assets, keep lightweight collections, and send anything straight back into Studio."
+                    subtitle: "Browse reusable assets, keep lightweight collections, and send anything straight back into your current project."
                 )
 
                 GlassCard(title: "Filter", subtitle: "Narrow the library to the media you need right now.") {

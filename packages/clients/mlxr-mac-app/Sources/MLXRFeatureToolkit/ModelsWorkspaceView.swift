@@ -261,7 +261,7 @@ public struct ModelsWorkspaceView: View {
     private var packsSection: some View {
         SectionCard(
             title: "Packs",
-            subtitle: "Friendly wrappers for the family-local style, motion, and control options used in Studio."
+            subtitle: "Friendly wrappers for the family-local style, motion, and control options used throughout creation."
         ) {
             ForEach(packs) { pack in
                 VStack(alignment: .leading, spacing: 8) {
