@@ -21,6 +21,7 @@ public struct LibraryWorkspaceView: View {
     private let onToggleFavorite: (String) -> Void
     private let onToggleCollection: (String, String) -> Void
     private let onCreateCollection: (String) -> Void
+    private let onViewerPresentationChange: (Bool) -> Void
 
     @State private var selectedFilter: LibraryAssetFilter = .all
     @State private var selectedModelId = "all"
@@ -52,7 +53,8 @@ public struct LibraryWorkspaceView: View {
         onSetWorkspaceCover: @escaping (String, String) -> Void,
         onToggleFavorite: @escaping (String) -> Void,
         onToggleCollection: @escaping (String, String) -> Void,
-        onCreateCollection: @escaping (String) -> Void
+        onCreateCollection: @escaping (String) -> Void,
+        onViewerPresentationChange: @escaping (Bool) -> Void
     ) {
         self.workspaces = workspaces
         self.activeWorkspaceId = activeWorkspaceId
@@ -71,6 +73,7 @@ public struct LibraryWorkspaceView: View {
         self.onToggleFavorite = onToggleFavorite
         self.onToggleCollection = onToggleCollection
         self.onCreateCollection = onCreateCollection
+        self.onViewerPresentationChange = onViewerPresentationChange
     }
 
     public var body: some View {
@@ -106,6 +109,7 @@ public struct LibraryWorkspaceView: View {
         .onAppear {
             isLibraryFocused = true
             applyFocusedRoute()
+            onViewerPresentationChange(viewerAsset != nil)
         }
         .onChange(of: focusedWorkspaceId) { _, _ in
             applyFocusedRoute()
@@ -123,6 +127,9 @@ public struct LibraryWorkspaceView: View {
                 visiblePrimaryAssetIds: visiblePrimaryIds,
                 isViewerAssetVisible: presentation.viewerAsset(for: browserState.viewerAssetId) != nil
             )
+        }
+        .onChange(of: browserState.viewerAssetId) { _, newValue in
+            onViewerPresentationChange(newValue != nil)
         }
         .onMoveCommand { direction in
             moveSelection(direction)
@@ -159,6 +166,9 @@ public struct LibraryWorkspaceView: View {
                 let imported = await onImportAssets(urls)
                 browserState.handleImportedAssets(imported)
             }
+        }
+        .onDisappear {
+            onViewerPresentationChange(false)
         }
     }
 
@@ -337,40 +347,53 @@ public struct LibraryWorkspaceView: View {
     }
 
     private func viewerOverlay(for asset: LibraryAsset) -> some View {
-        ZStack {
-            Color.black.opacity(0.62)
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.opacity(0.74)
+                    .ignoresSafeArea()
 
-            LibraryViewerSheet(
-                asset: asset,
-                group: presentation.group(containing: asset.id),
-                collections: collections,
-                onMaterialize: onMaterialize,
-                onRemoveImportedAsset: onRemoveImportedAsset,
-                onSeedComposer: { request in
-                    onSeedComposer(request)
-                    selectPrimaryAsset(for: request.focusedAssetId ?? asset.id)
-                    browserState.closeViewer()
-                },
-                onSetProjectCover: {
-                    guard let workspaceId = browserState.selectedWorkspaceId else {
-                        return
+                LibraryViewerSheet(
+                    asset: asset,
+                    group: presentation.group(containing: asset.id),
+                    collections: collections,
+                    onMaterialize: onMaterialize,
+                    onRemoveImportedAsset: onRemoveImportedAsset,
+                    onSeedComposer: { request in
+                        onSeedComposer(request)
+                        selectPrimaryAsset(for: request.focusedAssetId ?? asset.id)
+                        browserState.closeViewer()
+                    },
+                    onSetProjectCover: {
+                        guard let workspaceId = browserState.selectedWorkspaceId else {
+                            return
+                        }
+                        onSetWorkspaceCover(workspaceId, asset.id)
+                    },
+                    onToggleFavorite: onToggleFavorite,
+                    onToggleCollection: onToggleCollection,
+                    onShowAsset: { nextAsset in
+                        browserState.openAsset(nextAsset.id)
+                        selectPrimaryAsset(for: nextAsset.id)
+                    },
+                    onShowPrevious: previousViewerAction,
+                    onShowNext: nextViewerAction,
+                    onClose: {
+                        browserState.closeViewer()
                     }
-                    onSetWorkspaceCover(workspaceId, asset.id)
-                },
-                onToggleFavorite: onToggleFavorite,
-                onToggleCollection: onToggleCollection,
-                onShowAsset: { nextAsset in
-                    browserState.openAsset(nextAsset.id)
-                    selectPrimaryAsset(for: nextAsset.id)
-                },
-                onShowPrevious: previousViewerAction,
-                onShowNext: nextViewerAction,
-                onClose: {
-                    browserState.closeViewer()
-                }
-            )
-            .padding(MLXRSpacing.xl)
+                )
+                .frame(
+                    width: max(min(proxy.size.width - (MLXRSpacing.xl * 2), 1440), 0),
+                    height: max(min(proxy.size.height - (MLXRSpacing.xl * 2), 920), 0)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
+                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.3), radius: 28, y: 14)
+                .padding(MLXRSpacing.lg)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

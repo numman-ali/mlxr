@@ -46,7 +46,7 @@ struct LibraryViewerSheet: View {
             .frame(width: 360)
             .background(MLXRColor.canvasRaised)
         }
-        .frame(minWidth: 1180, idealWidth: 1280, minHeight: 780, idealHeight: 860)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AdaptiveBackground())
         .task(id: asset.id) {
             await loadPreview()
@@ -79,7 +79,7 @@ struct LibraryViewerSheet: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, MLXRSpacing.xl)
-        .padding(.top, MLXRSpacing.xl)
+        .padding(.top, MLXRSpacing.lg)
         .padding(.bottom, MLXRSpacing.md)
     }
 
@@ -109,7 +109,7 @@ struct LibraryViewerSheet: View {
             }
         }
         .padding(.horizontal, MLXRSpacing.xl)
-        .padding(.bottom, MLXRSpacing.xl)
+        .padding(.bottom, MLXRSpacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -380,7 +380,6 @@ private struct LibraryViewerThumbnail: View {
                 .strokeBorder(isSelected ? MLXRColor.brandPrimary : .clear, lineWidth: 2)
         }
         .task(id: asset.id) {
-            guard previewImage == nil else { return }
             previewImage = await LibraryThumbnailStore.shared.thumbnail(
                 for: asset,
                 maxPixelSize: 320,

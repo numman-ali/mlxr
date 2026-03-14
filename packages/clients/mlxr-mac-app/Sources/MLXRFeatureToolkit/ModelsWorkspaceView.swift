@@ -61,26 +61,24 @@ public struct ModelsWorkspaceView: View {
 
     public var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
                 if let error {
                     InlineErrorBanner(error, onDismiss: onDismissError)
                 }
 
-                HeroBanner(
-                    title: "Models live here",
+                CompactPageHeader(
+                    title: "Models",
                     subtitle: "Choose recommended rows, watch installs move through the queue, and inspect what is already installed in MLXR."
                 ) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: MLXRSpacing.xs) {
                         MetricBadge(label: "Installed", value: "\(catalog.installedItems.count)")
                         MetricBadge(label: "Queue", value: "\(activeOperations.count)")
+                        StatusPill(
+                            label: runtimeStatus == nil ? "Connecting" : "Runtime ready",
+                            tint: runtimeStatus == nil ? MLXRColor.brandWarm : MLXRColor.brandSecondary
+                        )
                     }
                 }
-
-                FeatureHeader(
-                    eyebrow: "Models",
-                    title: "Install, inspect, and remove",
-                    subtitle: "Hugging Face is the source. MLXR is the installed home the app manages for you."
-                )
 
                 Picker("Panel", selection: $selectedPanel) {
                     ForEach(Panel.allCases) { panel in
@@ -88,6 +86,7 @@ public struct ModelsWorkspaceView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .frame(maxWidth: 280)
 
                 if selectedPanel == .models {
                     availableSection
@@ -97,7 +96,9 @@ public struct ModelsWorkspaceView: View {
                     packsSection
                 }
             }
-            .padding(28)
+            .padding(.horizontal, MLXRSpacing.xl)
+            .padding(.top, MLXRSpacing.xl)
+            .padding(.bottom, MLXRSpacing.xl + 16)
         }
         .sheet(
             isPresented: Binding(
@@ -119,10 +120,11 @@ public struct ModelsWorkspaceView: View {
     }
 
     private var availableSection: some View {
-        SectionCard(
-            title: "Available",
-            subtitle: "Recommended rows are ready to queue. Advanced rows stay visible without pretending they are the default."
-        ) {
+        DenseSectionSurface {
+            sectionHeader(
+                title: "Available",
+                subtitle: "Recommended rows are ready to queue. Advanced rows stay visible without pretending they are the default."
+            )
             if availableModels.isEmpty {
                 EmptyStateView(
                     title: "Everything visible is already installed",
@@ -188,10 +190,11 @@ public struct ModelsWorkspaceView: View {
     }
 
     private var installQueueSection: some View {
-        SectionCard(
-            title: "Install queue",
-            subtitle: "Installs are runtime-owned and serial, so they don’t hijack image or video generation UI."
-        ) {
+        DenseSectionSurface {
+            sectionHeader(
+                title: "Install queue",
+                subtitle: "Installs are runtime-owned and serial, so they don’t hijack image or video generation UI."
+            )
             if installOperations.isEmpty {
                 EmptyStateView(
                     title: "No install activity yet",
@@ -224,10 +227,11 @@ public struct ModelsWorkspaceView: View {
     }
 
     private var installedSection: some View {
-        SectionCard(
-            title: "Installed",
-            subtitle: "Use these rows in the generation surfaces, inspect what they unlock, or remove them when you want the disk space back."
-        ) {
+        DenseSectionSurface {
+            sectionHeader(
+                title: "Installed",
+                subtitle: "Use these rows in the generation surfaces, inspect what they unlock, or remove them when you want the disk space back."
+            )
             if catalog.installedItems.isEmpty {
                 EmptyStateView(
                     title: "Nothing installed in MLXR yet",
@@ -259,10 +263,11 @@ public struct ModelsWorkspaceView: View {
     }
 
     private var packsSection: some View {
-        SectionCard(
-            title: "Packs",
-            subtitle: "Friendly wrappers for the family-local style, motion, and control options used throughout creation."
-        ) {
+        DenseSectionSurface {
+            sectionHeader(
+                title: "Packs",
+                subtitle: "Friendly wrappers for the family-local style, motion, and control options used throughout creation."
+            )
             ForEach(packs) { pack in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -349,6 +354,17 @@ public struct ModelsWorkspaceView: View {
             if partialResult[operation.modelId] == nil {
                 partialResult[operation.modelId] = operation
             }
+        }
+    }
+
+    private func sectionHeader(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
+            Text(title)
+                .font(MLXRType.titleSmall)
+                .foregroundStyle(MLXRColor.textPrimary)
+            Text(subtitle)
+                .font(MLXRType.bodySmall)
+                .foregroundStyle(MLXRColor.textSecondary)
         }
     }
 

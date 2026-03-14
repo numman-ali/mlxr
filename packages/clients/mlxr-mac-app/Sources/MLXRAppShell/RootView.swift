@@ -12,11 +12,13 @@ public struct MLXRMacAppRoot: View {
     private static let visibleDestinations: [Destination] = [.home, .library, .models, .settings]
 
     @AppStorage("mlxr.mac-app.last-destination") private var lastDestinationRaw = Destination.home.rawValue
+    @AppStorage("mlxr.mac-app.composer-collapsed") private var isComposerCollapsed = false
     @State private var appModel = MLXRAppModel()
     @State private var destination: Destination? = .home
     @State private var isActivityPresented = false
     @State private var libraryFocusedWorkspaceId: String?
     @State private var libraryFocusedAssetId: String?
+    @State private var isLibraryViewerPresented = false
 
     public init() {}
 
@@ -73,9 +75,10 @@ public struct MLXRMacAppRoot: View {
                             .padding(.bottom, MLXRSpacing.md)
                     }
                 }
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .overlay(alignment: .bottom) {
                     if shouldShowGlobalComposer {
                         globalComposerInset
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
             }
@@ -111,9 +114,11 @@ public struct MLXRMacAppRoot: View {
                 recentAssets: appModel.recentLibraryAssets,
                 hasWorkspaceDraft: appModel.hasWorkspaceDraft,
                 onCreateImage: {
+                    isComposerCollapsed = false
                     appModel.selectComposerTask(.imageGenerate)
                 },
                 onCreateVideo: {
+                    isComposerCollapsed = false
                     appModel.selectComposerTask(.videoGenerate)
                 },
                 onOpenModels: {
@@ -142,6 +147,7 @@ public struct MLXRMacAppRoot: View {
                 onResumeWorkspace: {
                     libraryFocusedWorkspaceId = appModel.activeWorkspaceId
                     libraryFocusedAssetId = nil
+                    isComposerCollapsed = false
                     withAnimation(MLXRMotion.snappy) {
                         destination = .library
                     }
@@ -232,6 +238,9 @@ public struct MLXRMacAppRoot: View {
                 },
                 onCreateCollection: { title in
                     appModel.createCollection(named: title)
+                },
+                onViewerPresentationChange: { isPresented in
+                    isLibraryViewerPresented = isPresented
                 }
             )
 
@@ -329,6 +338,7 @@ public struct MLXRMacAppRoot: View {
     private var globalComposerInset: some View {
         GlobalComposerBar(
             workspace: $appModel.studioWorkspace,
+            isCollapsed: isComposerCollapsed,
             mode: appModel.composerMode,
             availableModes: appModel.composerAvailableModes,
             subworkflows: appModel.composerSubworkflowOptions(for: appModel.composerMode),
@@ -342,6 +352,11 @@ public struct MLXRMacAppRoot: View {
             isBusy: appModel.isSubmittingImage || appModel.isSubmittingVideo,
             canSubmit: appModel.canSubmitCurrentWorkspace(),
             disabledReason: appModel.currentWorkspaceSubmitDisabledReason(),
+            onToggleCollapsed: {
+                withAnimation(MLXRMotion.snappy) {
+                    isComposerCollapsed.toggle()
+                }
+            },
             onSelectMode: { mode in
                 appModel.selectComposerMode(mode)
             },
@@ -364,6 +379,8 @@ public struct MLXRMacAppRoot: View {
         )
         .padding(.horizontal, MLXRSpacing.xl)
         .padding(.bottom, MLXRSpacing.lg)
+        .padding(.top, MLXRSpacing.lg)
+        .frame(maxWidth: .infinity)
         .background(Color.clear)
     }
 
@@ -424,6 +441,7 @@ public struct MLXRMacAppRoot: View {
     private var shouldShowGlobalComposer: Bool {
         guard !shouldShowBootstrapOverlay else { return false }
         guard !appModel.hasPendingModelSetup else { return false }
+        guard !isLibraryViewerPresented else { return false }
         switch destination ?? .home {
         case .home, .library, .studio:
             return true
@@ -571,6 +589,7 @@ public struct MLXRMacAppRoot: View {
         appModel.seedComposer(with: request)
         libraryFocusedWorkspaceId = request.workspaceId ?? appModel.activeWorkspaceId
         libraryFocusedAssetId = nil
+        isComposerCollapsed = false
     }
 
     private func submitFromGlobalComposer() {

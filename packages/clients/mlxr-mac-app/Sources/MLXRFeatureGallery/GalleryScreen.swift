@@ -20,6 +20,7 @@ public struct GalleryScreen: View {
     let onToggleFavorite: (String) -> Void
     let onToggleCollection: (String, String) -> Void
     let onCreateCollection: (String) -> Void
+    let onViewerPresentationChange: (Bool) -> Void
 
     public init(
         workspaces: [WorkspaceRecord],
@@ -38,7 +39,8 @@ public struct GalleryScreen: View {
         onSetWorkspaceCover: @escaping (String, String) -> Void,
         onToggleFavorite: @escaping (String) -> Void,
         onToggleCollection: @escaping (String, String) -> Void,
-        onCreateCollection: @escaping (String) -> Void
+        onCreateCollection: @escaping (String) -> Void,
+        onViewerPresentationChange: @escaping (Bool) -> Void
     ) {
         self.workspaces = workspaces
         self.activeWorkspaceId = activeWorkspaceId
@@ -57,6 +59,7 @@ public struct GalleryScreen: View {
         self.onToggleFavorite = onToggleFavorite
         self.onToggleCollection = onToggleCollection
         self.onCreateCollection = onCreateCollection
+        self.onViewerPresentationChange = onViewerPresentationChange
     }
 
     public var body: some View {
@@ -77,7 +80,8 @@ public struct GalleryScreen: View {
             onSetWorkspaceCover: onSetWorkspaceCover,
             onToggleFavorite: onToggleFavorite,
             onToggleCollection: onToggleCollection,
-            onCreateCollection: onCreateCollection
+            onCreateCollection: onCreateCollection,
+            onViewerPresentationChange: onViewerPresentationChange
         )
     }
 }

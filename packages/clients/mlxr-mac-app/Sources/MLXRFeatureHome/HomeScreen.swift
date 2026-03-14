@@ -56,9 +56,8 @@ public struct HomeScreen: View {
 
     public var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: MLXRSpacing.xl) {
-                hero
-                metrics
+            VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
+                header
                 quickActions
 
                 if hasWorkspaceDraft {
@@ -72,80 +71,86 @@ public struct HomeScreen: View {
                 }
             }
             .padding(.horizontal, MLXRSpacing.xl)
-            .padding(.vertical, MLXRSpacing.xl)
+            .padding(.top, MLXRSpacing.xl)
+            .padding(.bottom, MLXRSpacing.xl + 16)
         }
         .background(AdaptiveBackground())
     }
 
-    private var hero: some View {
-        HeroBanner(
-            title: "A local workspace for prompts, projects, and media",
-            subtitle: "Start with a prompt, build from something you already made, or bring media in from Finder and keep the whole thread together."
+    private var header: some View {
+        CompactPageHeader(
+            title: "Home",
+            subtitle: "Open a recent project, start something new, or jump to Models if the runtime still needs a starter row."
         ) {
-            HStack(spacing: MLXRSpacing.sm) {
+            HStack(spacing: MLXRSpacing.xs) {
                 StatusPill(
-                    label: runtimeReady ? "Runtime connected" : "Connecting",
+                    label: runtimeReady ? "Runtime ready" : "Connecting",
                     tint: runtimeReady ? MLXRColor.brandSecondary : MLXRColor.brandWarm
                 )
                 StatusPill(
-                    label: hasModels ? "Models ready" : "Install models",
+                    label: hasModels ? "\(installedModelCount) installed" : "Models needed",
                     tint: hasModels ? MLXRColor.brandPrimary : MLXRColor.brandWarm
                 )
                 if activeJobCount > 0 {
-                    StatusPill(label: "\(activeJobCount) active job\(activeJobCount == 1 ? "" : "s")", tint: MLXRColor.brandPrimary)
+                    StatusPill(
+                        label: "\(activeJobCount) active",
+                        tint: MLXRColor.brandPrimary
+                    )
+                }
+                if queuedInstallCount > 0 {
+                    StatusPill(
+                        label: "\(queuedInstallCount) installing",
+                        tint: MLXRColor.brandWarm
+                    )
+                }
+                StatusPill(label: "\(totalCreations) outputs", tint: MLXRColor.brandSecondary)
+            }
+        }
+    }
+
+    private var quickActions: some View {
+        DenseSectionSurface {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+                Text("Quick start")
+                    .font(MLXRType.titleSmall)
+                    .foregroundStyle(MLXRColor.textPrimary)
+
+                HStack(spacing: MLXRSpacing.md) {
+                    actionButton(
+                        title: "Make image",
+                        subtitle: "Generate or edit a still",
+                        systemImage: "photo.fill",
+                        tint: MLXRColor.brandPrimary,
+                        action: onCreateImage
+                    )
+                    actionButton(
+                        title: "Make video",
+                        subtitle: "Text, image, audio, or retake",
+                        systemImage: "film.fill",
+                        tint: MLXRColor.brandSecondary,
+                        action: onCreateVideo
+                    )
+                    actionButton(
+                        title: "Manage models",
+                        subtitle: "Install or remove rows",
+                        systemImage: "square.stack.3d.up.fill",
+                        tint: MLXRColor.brandWarm,
+                        action: onOpenModels
+                    )
                 }
             }
         }
     }
 
-    private var metrics: some View {
-        HStack(spacing: MLXRSpacing.md) {
-            MetricBadge(label: "Installed", value: "\(installedModelCount)")
-            MetricBadge(label: "Queued", value: "\(queuedInstallCount)")
-            MetricBadge(label: "Outputs", value: "\(totalCreations)")
-        }
-    }
-
-    private var quickActions: some View {
-        GlassCard(
-            title: "Start a project",
-            subtitle: "Choose what you want to make, then stay with the same project while the results land."
-        ) {
-            HStack(spacing: MLXRSpacing.md) {
-                actionButton(
-                    title: "Make image",
-                    subtitle: "Generate or edit a still",
-                    systemImage: "photo.fill",
-                    tint: MLXRColor.brandPrimary,
-                    action: onCreateImage
-                )
-                actionButton(
-                    title: "Make video",
-                    subtitle: "Text, image, audio, or retake",
-                    systemImage: "film.fill",
-                    tint: MLXRColor.brandSecondary,
-                    action: onCreateVideo
-                )
-                actionButton(
-                    title: "Manage models",
-                    subtitle: "Install or remove rows",
-                    systemImage: "square.stack.3d.up.fill",
-                    tint: MLXRColor.brandWarm,
-                    action: onOpenModels
-                )
-            }
-        }
-    }
-
     private var setupCard: some View {
-        GlassCard(
-            title: "Start with recommended models",
-            subtitle: "Install the starter rows once, then use them everywhere in Home and Library."
-        ) {
+        DenseSectionSurface {
             HStack {
                 VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
+                    Text("Start with recommended models")
+                        .font(MLXRType.titleSmall)
+                        .foregroundStyle(MLXRColor.textPrimary)
                     Text("No models are installed in MLXR yet.")
-                        .font(MLXRType.bodyLarge)
+                        .font(MLXRType.bodyMedium)
                         .foregroundStyle(MLXRColor.textPrimary)
                     Text("Open Models to queue the recommended image and video defaults.")
                         .font(MLXRType.bodyMedium)
@@ -159,68 +164,85 @@ public struct HomeScreen: View {
     }
 
     private var resumeCard: some View {
-        GlassCard(
-            title: "Resume your workspace",
-            subtitle: "Your last draft is still waiting in Library, so you can keep iterating without rebuilding the setup."
-        ) {
-            HStack(spacing: MLXRSpacing.md) {
-                Button("Open project", action: onResumeWorkspace)
-                    .buttonStyle(.borderedProminent)
-                Button("Browse library", action: onOpenLibrary)
-                    .buttonStyle(.bordered)
+        DenseSectionSurface {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+                Text("Resume your workspace")
+                    .font(MLXRType.titleSmall)
+                    .foregroundStyle(MLXRColor.textPrimary)
+                Text("Your last draft is still waiting in Library, so you can keep iterating without rebuilding the setup.")
+                    .font(MLXRType.bodyMedium)
+                    .foregroundStyle(MLXRColor.textSecondary)
+
+                HStack(spacing: MLXRSpacing.md) {
+                    Button("Open project", action: onResumeWorkspace)
+                        .buttonStyle(.borderedProminent)
+                    Button("Browse library", action: onOpenLibrary)
+                        .buttonStyle(.bordered)
+                }
             }
         }
     }
 
     private var firstCreationCard: some View {
-        GlassCard(
-            title: "You’re ready to create",
-            subtitle: "Your starter models are installed. The next useful move is to make the first result and then build forward from it."
-        ) {
-            HStack(spacing: MLXRSpacing.md) {
-                Button("Create an image", action: onCreateImage)
-                    .buttonStyle(.borderedProminent)
-                Button("Create a video", action: onCreateVideo)
-                    .buttonStyle(.bordered)
+        DenseSectionSurface {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+                Text("You’re ready to create")
+                    .font(MLXRType.titleSmall)
+                    .foregroundStyle(MLXRColor.textPrimary)
+                Text("Your starter models are installed. The next useful move is to make the first result and then build forward from it.")
+                    .font(MLXRType.bodyMedium)
+                    .foregroundStyle(MLXRColor.textSecondary)
+
+                HStack(spacing: MLXRSpacing.md) {
+                    Button("Create an image", action: onCreateImage)
+                        .buttonStyle(.borderedProminent)
+                    Button("Create a video", action: onCreateVideo)
+                        .buttonStyle(.bordered)
+                }
             }
         }
     }
 
     private var continueCard: some View {
-        GlassCard(
-            title: "Continue from your library",
-            subtitle: "Everything you make or import becomes something you can use again."
-        ) {
-            ForEach(Array(recentAssets.prefix(5))) { asset in
-                Button {
-                    onContinueAsset(asset)
-                } label: {
-                    HStack(spacing: MLXRSpacing.md) {
-                        Image(systemName: asset.isVideo ? "film" : asset.isAudio ? "waveform" : "photo")
-                            .foregroundStyle(asset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary)
-                            .frame(width: 18)
-                        VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
-                            Text(asset.displayTitle)
-                                .font(.system(.headline, design: .rounded, weight: .semibold))
-                                .foregroundStyle(MLXRColor.textPrimary)
-                            Text(asset.subtitle)
-                                .font(MLXRType.bodySmall)
-                                .foregroundStyle(MLXRColor.textSecondary)
-                                .lineLimit(2)
+        DenseSectionSurface {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+                Text("Continue from your library")
+                    .font(MLXRType.titleSmall)
+                    .foregroundStyle(MLXRColor.textPrimary)
+                Text("Everything you make or import becomes something you can use again.")
+                    .font(MLXRType.bodyMedium)
+                    .foregroundStyle(MLXRColor.textSecondary)
+                ForEach(Array(recentAssets.prefix(5))) { asset in
+                    Button {
+                        onContinueAsset(asset)
+                    } label: {
+                        HStack(spacing: MLXRSpacing.md) {
+                            Image(systemName: asset.isVideo ? "film" : asset.isAudio ? "waveform" : "photo")
+                                .foregroundStyle(asset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
+                                Text(asset.displayTitle)
+                                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(MLXRColor.textPrimary)
+                                Text(asset.subtitle)
+                                    .font(MLXRType.bodySmall)
+                                    .foregroundStyle(MLXRColor.textSecondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            StatusPill(
+                                label: asset.isImported ? "Imported" : asset.task?.title ?? "Generated",
+                                tint: asset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary
+                            )
                         }
-                        Spacer()
-                        StatusPill(
-                            label: asset.isImported ? "Imported" : asset.task?.title ?? "Generated",
-                            tint: asset.isImported ? MLXRColor.brandWarm : MLXRColor.brandPrimary
-                        )
+                        .padding(.vertical, MLXRSpacing.xxs)
                     }
-                    .padding(.vertical, MLXRSpacing.xxs)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
 
-            Button("Open library", action: onOpenLibrary)
-                .buttonStyle(.bordered)
+                Button("Open library", action: onOpenLibrary)
+                    .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -243,7 +265,7 @@ public struct HomeScreen: View {
                     .font(MLXRType.bodySmall)
                     .foregroundStyle(MLXRColor.textSecondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
             .padding(MLXRSpacing.md)
             .background(
                 RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)

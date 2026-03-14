@@ -5,6 +5,7 @@ import SwiftUI
 public struct GlobalComposerBar: View {
     @Binding private var workspace: StudioWorkspaceDraft
 
+    private let isCollapsed: Bool
     private let mode: TaskCategory
     private let availableModes: [TaskCategory]
     private let subworkflows: [WorkflowPresentationSubworkflow]
@@ -18,6 +19,7 @@ public struct GlobalComposerBar: View {
     private let isBusy: Bool
     private let canSubmit: Bool
     private let disabledReason: String?
+    private let onToggleCollapsed: () -> Void
     private let onSelectMode: (TaskCategory) -> Void
     private let onSelectTask: (ProductTask) -> Void
     private let onSelectQuality: (String) -> Void
@@ -28,6 +30,7 @@ public struct GlobalComposerBar: View {
 
     public init(
         workspace: Binding<StudioWorkspaceDraft>,
+        isCollapsed: Bool,
         mode: TaskCategory,
         availableModes: [TaskCategory],
         subworkflows: [WorkflowPresentationSubworkflow],
@@ -41,6 +44,7 @@ public struct GlobalComposerBar: View {
         isBusy: Bool,
         canSubmit: Bool,
         disabledReason: String?,
+        onToggleCollapsed: @escaping () -> Void,
         onSelectMode: @escaping (TaskCategory) -> Void,
         onSelectTask: @escaping (ProductTask) -> Void,
         onSelectQuality: @escaping (String) -> Void,
@@ -50,6 +54,7 @@ public struct GlobalComposerBar: View {
         onSubmit: @escaping () -> Void
     ) {
         self._workspace = workspace
+        self.isCollapsed = isCollapsed
         self.mode = mode
         self.availableModes = availableModes
         self.subworkflows = subworkflows
@@ -63,6 +68,7 @@ public struct GlobalComposerBar: View {
         self.isBusy = isBusy
         self.canSubmit = canSubmit
         self.disabledReason = disabledReason
+        self.onToggleCollapsed = onToggleCollapsed
         self.onSelectMode = onSelectMode
         self.onSelectTask = onSelectTask
         self.onSelectQuality = onSelectQuality
@@ -73,6 +79,25 @@ public struct GlobalComposerBar: View {
     }
 
     public var body: some View {
+        Group {
+            if isCollapsed {
+                collapsedBody
+            } else {
+                expandedBody
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
+                .fill(MLXRColor.canvasRaised)
+                .overlay(
+                    RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
+                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+        )
+    }
+
+    private var expandedBody: some View {
         VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
             HStack(spacing: MLXRSpacing.sm) {
                 Picker("Mode", selection: modeBinding) {
@@ -101,6 +126,14 @@ public struct GlobalComposerBar: View {
                 }
 
                 Spacer(minLength: 0)
+
+                Button {
+                    onToggleCollapsed()
+                } label: {
+                    Label("Collapse", systemImage: "chevron.down")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
             }
 
             TextField(
@@ -133,9 +166,6 @@ public struct GlobalComposerBar: View {
                     label: runtimeStatusLabel,
                     tint: canSubmit ? MLXRColor.brandPrimary : MLXRColor.brandWarm
                 )
-                if isPlanning {
-                    StatusPill(label: "Planning", tint: MLXRColor.brandWarm)
-                }
 
                 Spacer(minLength: 0)
 
@@ -161,15 +191,33 @@ public struct GlobalComposerBar: View {
             }
         }
         .padding(MLXRSpacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
-                .fill(MLXRColor.canvasRaised)
-                .overlay(
-                    RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
-                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
-        )
+    }
+
+    private var collapsedBody: some View {
+        HStack(spacing: MLXRSpacing.md) {
+            Label(mode == .image ? "Image" : "Video", systemImage: mode == .image ? "photo" : "film")
+                .font(MLXRType.bodySmall)
+                .foregroundStyle(MLXRColor.textSecondary)
+
+            Text(promptSummary)
+                .font(MLXRType.bodyMedium)
+                .foregroundStyle(promptSummary == placeholderPrompt ? MLXRColor.textTertiary : MLXRColor.textPrimary)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            StatusPill(
+                label: runtimeStatusLabel,
+                tint: canSubmit ? MLXRColor.brandPrimary : MLXRColor.brandWarm
+            )
+
+            Button("Open") {
+                onToggleCollapsed()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, MLXRSpacing.lg)
+        .padding(.vertical, MLXRSpacing.md)
     }
 
     private var modeBinding: Binding<TaskCategory> {
@@ -250,5 +298,17 @@ public struct GlobalComposerBar: View {
         case .long:
             "12s"
         }
+    }
+
+    private var promptSummary: String {
+        let normalized = workspace.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return placeholderPrompt
+        }
+        return normalized
+    }
+
+    private var placeholderPrompt: String {
+        "Prompt hidden"
     }
 }
