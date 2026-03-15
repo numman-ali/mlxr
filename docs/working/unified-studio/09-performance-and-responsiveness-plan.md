@@ -1,6 +1,6 @@
 # Unified Studio Performance And Responsiveness Plan
 
-Status: active performance tranche with hot-path relief landed; instrumentation and deeper thumbnail materialization follow-up remain
+Status: active performance tranche with hot-path relief landed; lightweight instrumentation remains the main follow-up
 
 This plan covers the Mac app slowdown seen when:
 
@@ -94,7 +94,7 @@ The fix is not to move more into the runtime. The fix is to make app-owned state
 - [x] Make thumbnail generation cancellation-safe.
 - [x] Keep thumbnail decode off the main actor for heavy work.
 - [x] Avoid spawning more work than the visible grid needs.
-- [ ] Add small reuse for repeated asset materialization where the same visible assets are requested often.
+- [x] Add small reuse for repeated asset materialization where the same visible assets are requested often.
 
 ### Models
 
@@ -115,7 +115,6 @@ The fix is not to move more into the runtime. The fix is to make app-owned state
 ## Remaining Follow-Up
 
 - Add lightweight signpost or timing instrumentation around route switching, project open, and viewer open so future regressions are measured rather than felt anecdotally.
-- Add a small materialized-URL reuse layer for the thumbnail path so repeated grid visits do not re-resolve the same assets unnecessarily.
 
 ## Acceptance Criteria
 
