@@ -8,6 +8,7 @@ public struct LibraryWorkspaceView: View {
     private let defaultWorkspaceId: String
     private let focusedWorkspaceId: String?
     private let focusedAssetId: String?
+    private let presentationDataRevision: Int
     private let assets: [LibraryAsset]
     private let runGroups: [RunGroupRecord]
     private let collections: [CollectionRecord]
@@ -37,6 +38,7 @@ public struct LibraryWorkspaceView: View {
     @State private var gridColumnCount = 1
     @State private var projectGridColumnCount = 1
     @State private var browserProjectId: String?
+    @State private var presentationModel: LibraryPresentationModel
     @FocusState private var isLibraryFocused: Bool
     @Environment(\.mlxrBottomOverlayInset) private var bottomOverlayInset
 
@@ -45,6 +47,7 @@ public struct LibraryWorkspaceView: View {
         defaultWorkspaceId: String,
         focusedWorkspaceId: String?,
         focusedAssetId: String?,
+        presentationDataRevision: Int,
         assets: [LibraryAsset],
         runGroups: [RunGroupRecord],
         collections: [CollectionRecord],
@@ -65,6 +68,7 @@ public struct LibraryWorkspaceView: View {
         self.defaultWorkspaceId = defaultWorkspaceId
         self.focusedWorkspaceId = focusedWorkspaceId
         self.focusedAssetId = focusedAssetId
+        self.presentationDataRevision = presentationDataRevision
         self.assets = assets
         self.runGroups = runGroups
         self.collections = collections
@@ -80,16 +84,32 @@ public struct LibraryWorkspaceView: View {
         self.onToggleCollection = onToggleCollection
         self.onCreateCollection = onCreateCollection
         self.onViewerPresentationChange = onViewerPresentationChange
+        _presentationModel = State(
+            initialValue: Self.buildPresentation(
+                assets: assets,
+                workspaces: workspaces,
+                runGroups: runGroups,
+                collections: collections,
+                filters: LibraryFilterState(),
+                selectedWorkspaceId: nil,
+                defaultWorkspaceId: defaultWorkspaceId
+            )
+        )
     }
 
     public var body: some View {
+        let presentation = presentationModel
+        let viewerAsset = presentation.viewerAsset(for: browserState.viewerAssetId)
+        let projectIds = presentation.projectSummaries.map(\.id)
+        let visibleAssetIds = presentation.visibleAssetIds
+        let orderedPrimaryAssetIds = presentation.orderedPrimaryAssetIds
         ZStack {
             VStack(spacing: 0) {
-                libraryToolbar
+                libraryToolbar(presentation)
 
                 if let selectedWorkspace = presentation.selectedWorkspace,
                    let projectSummary = presentation.projectSummary(id: selectedWorkspace.id) {
-                    projectDetail(projectSummary)
+                    projectDetail(projectSummary, presentation: presentation)
                 } else {
                     ProjectBrowserView(
                         projects: presentation.projectSummaries,
@@ -109,7 +129,7 @@ public struct LibraryWorkspaceView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if let viewerAsset {
-                viewerOverlay(for: viewerAsset)
+                viewerOverlay(for: viewerAsset, presentation: presentation)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
                     .zIndex(20)
             }
@@ -120,6 +140,7 @@ public struct LibraryWorkspaceView: View {
         .onAppear {
             isLibraryFocused = true
             applyFocusedRoute()
+            rebuildPresentation()
             ensureBrowserProjectSelection()
             onViewerPresentationChange(viewerAsset != nil)
         }
@@ -129,7 +150,14 @@ public struct LibraryWorkspaceView: View {
         .onChange(of: focusedAssetId) { _, _ in
             applyFocusedRoute()
         }
+        .onChange(of: currentFilters) { _, _ in
+            rebuildPresentation()
+        }
+        .onChange(of: presentationDataRevision) { _, _ in
+            rebuildPresentation()
+        }
         .onChange(of: browserState.selectedWorkspaceId) { _, newValue in
+            rebuildPresentation()
             if let newValue {
                 browserProjectId = newValue
                 onSelectWorkspace(newValue)
@@ -139,12 +167,12 @@ public struct LibraryWorkspaceView: View {
                 ensureBrowserProjectSelection()
             }
         }
-        .onChange(of: presentation.projectSummaries.map(\.id)) { _, _ in
+        .onChange(of: projectIds) { _, _ in
             ensureBrowserProjectSelection()
         }
-        .onChange(of: presentation.visibleAssetIds) { _, _ in
+        .onChange(of: visibleAssetIds) { _, _ in
             browserState.pruneVisibleState(
-                visiblePrimaryAssetIds: presentation.orderedPrimaryAssetIds,
+                visiblePrimaryAssetIds: orderedPrimaryAssetIds,
                 isViewerAssetVisible: presentation.visibleViewerAsset(for: browserState.viewerAssetId) != nil
             )
         }
@@ -152,7 +180,7 @@ public struct LibraryWorkspaceView: View {
             onViewerPresentationChange(newValue != nil)
         }
         .onMoveCommand { direction in
-            moveSelection(direction)
+            moveSelection(direction, presentation: presentation)
         }
         .onExitCommand {
             if browserState.viewerAssetId != nil {
@@ -164,14 +192,14 @@ public struct LibraryWorkspaceView: View {
             }
         }
         .onKeyPress(.return) {
-            openSelectedAsset() ? .handled : .ignored
+            openSelectedAsset(presentation: presentation) ? .handled : .ignored
         }
         .onKeyPress(.space) {
-            openSelectedAsset() ? .handled : .ignored
+            openSelectedAsset(presentation: presentation) ? .handled : .ignored
         }
         .onDeleteCommand {
             Task {
-                await removeSelectedImportedAsset()
+                await removeSelectedImportedAsset(presentation: presentation)
             }
         }
         .fileImporter(
@@ -204,8 +232,28 @@ public struct LibraryWorkspaceView: View {
         )
     }
 
-    private var presentation: LibraryPresentationModel {
+    private static func buildPresentation(
+        assets: [LibraryAsset],
+        workspaces: [WorkspaceRecord],
+        runGroups: [RunGroupRecord],
+        collections: [CollectionRecord],
+        filters: LibraryFilterState,
+        selectedWorkspaceId: String?,
+        defaultWorkspaceId: String
+    ) -> LibraryPresentationModel {
         LibraryPresentationModel(
+            assets: assets,
+            workspaces: workspaces,
+            runGroups: runGroups,
+            collections: collections,
+            filters: filters,
+            selectedWorkspaceId: selectedWorkspaceId,
+            defaultWorkspaceId: defaultWorkspaceId
+        )
+    }
+
+    private func rebuildPresentation() {
+        presentationModel = Self.buildPresentation(
             assets: assets,
             workspaces: workspaces,
             runGroups: runGroups,
@@ -216,11 +264,7 @@ public struct LibraryWorkspaceView: View {
         )
     }
 
-    private var viewerAsset: LibraryAsset? {
-        presentation.viewerAsset(for: browserState.viewerAssetId)
-    }
-
-    private var libraryToolbar: some View {
+    private func libraryToolbar(_ presentation: LibraryPresentationModel) -> some View {
         VStack(spacing: MLXRSpacing.sm) {
             HStack(spacing: MLXRSpacing.sm) {
                 if let project = presentation.projectSummary(id: browserState.selectedWorkspaceId) {
@@ -267,17 +311,17 @@ public struct LibraryWorkspaceView: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            detailFiltersBarContainer
+            detailFiltersBarContainer(presentation)
         }
         .padding(.horizontal, MLXRSpacing.xl)
         .padding(.top, MLXRSpacing.lg)
         .padding(.bottom, MLXRSpacing.sm)
     }
 
-    private var detailFiltersBarContainer: some View {
+    private func detailFiltersBarContainer(_ presentation: LibraryPresentationModel) -> some View {
         Group {
             if browserState.selectedWorkspaceId != nil {
-                detailFiltersBar
+                detailFiltersBar(presentation)
             } else {
                 browserFiltersBar
             }
@@ -307,7 +351,7 @@ public struct LibraryWorkspaceView: View {
         }
     }
 
-    private var detailFiltersBar: some View {
+    private func detailFiltersBar(_ presentation: LibraryPresentationModel) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: MLXRSpacing.md) {
                 Picker("Media", selection: $selectedFilter) {
@@ -356,17 +400,20 @@ public struct LibraryWorkspaceView: View {
     }
 
     @ViewBuilder
-    private func projectDetail(_ project: ProjectSummaryPresentation) -> some View {
+    private func projectDetail(
+        _ project: ProjectSummaryPresentation,
+        presentation: LibraryPresentationModel
+    ) -> some View {
         VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
             ProjectHeaderView(
                 project: project,
-                selectedAsset: selectedPrimaryAsset,
+                selectedAsset: selectedPrimaryAsset(in: presentation),
                 onMaterialize: onMaterialize,
-                onSetCover: setCoverAction(for: project)
+                onSetCover: setCoverAction(for: project, presentation: presentation)
             )
 
-            if !pendingRunGroups.isEmpty {
-                pendingRunGroupsStrip
+            if !pendingRunGroups(in: presentation).isEmpty {
+                pendingRunGroupsStrip(presentation: presentation)
                     .padding(.horizontal, MLXRSpacing.lg)
             }
 
@@ -401,7 +448,10 @@ public struct LibraryWorkspaceView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private func viewerOverlay(for asset: LibraryAsset) -> some View {
+    private func viewerOverlay(
+        for asset: LibraryAsset,
+        presentation: LibraryPresentationModel
+    ) -> some View {
         GeometryReader { proxy in
             let horizontalInset = min(max(proxy.size.width * 0.03, 12), MLXRSpacing.xl)
             let verticalInset = min(max(proxy.size.height * 0.03, 12), MLXRSpacing.xl)
@@ -423,7 +473,10 @@ public struct LibraryWorkspaceView: View {
                             browserProjectId = workspaceId
                             browserState.openProject(workspaceId)
                         }
-                        selectPrimaryAsset(for: request.focusedAssetId ?? asset.id)
+                        selectPrimaryAsset(
+                            for: request.focusedAssetId ?? asset.id,
+                            presentation: presentation
+                        )
                         browserState.closeViewer()
                     },
                     onSetProjectCover: {
@@ -436,10 +489,10 @@ public struct LibraryWorkspaceView: View {
                     onToggleCollection: onToggleCollection,
                     onShowAsset: { nextAsset in
                         browserState.openAsset(nextAsset.id)
-                        selectPrimaryAsset(for: nextAsset.id)
+                        selectPrimaryAsset(for: nextAsset.id, presentation: presentation)
                     },
-                    onShowPrevious: previousViewerAction,
-                    onShowNext: nextViewerAction,
+                    onShowPrevious: previousViewerAction(presentation: presentation),
+                    onShowNext: nextViewerAction(presentation: presentation),
                     onClose: {
                         browserState.closeViewer()
                     }
@@ -459,8 +512,10 @@ public struct LibraryWorkspaceView: View {
         }
     }
 
-    private var previousViewerAction: (() -> Void)? {
-        guard let viewerAsset else { return nil }
+    private func previousViewerAction(
+        presentation: LibraryPresentationModel
+    ) -> (() -> Void)? {
+        guard let viewerAsset = presentation.viewerAsset(for: browserState.viewerAssetId) else { return nil }
         let primaryId = presentation.group(containing: viewerAsset.id)?.primaryAsset.id ?? viewerAsset.id
         guard let index = presentation.orderedPrimaryAssetIds.firstIndex(of: primaryId), index > 0 else {
             return nil
@@ -471,8 +526,10 @@ public struct LibraryWorkspaceView: View {
         }
     }
 
-    private var nextViewerAction: (() -> Void)? {
-        guard let viewerAsset else { return nil }
+    private func nextViewerAction(
+        presentation: LibraryPresentationModel
+    ) -> (() -> Void)? {
+        guard let viewerAsset = presentation.viewerAsset(for: browserState.viewerAssetId) else { return nil }
         let primaryId = presentation.group(containing: viewerAsset.id)?.primaryAsset.id ?? viewerAsset.id
         guard let index = presentation.orderedPrimaryAssetIds.firstIndex(of: primaryId),
               index < presentation.orderedPrimaryAssetIds.count - 1
@@ -485,7 +542,7 @@ public struct LibraryWorkspaceView: View {
         }
     }
 
-    private func openSelectedAsset() -> Bool {
+    private func openSelectedAsset(presentation: LibraryPresentationModel) -> Bool {
         guard browserState.selectedWorkspaceId != nil else {
             let targetProjectId = browserProjectId ?? presentation.projectSummaries.first?.id
             guard let targetProjectId else { return false }
@@ -498,11 +555,17 @@ public struct LibraryWorkspaceView: View {
         return true
     }
 
-    private func selectPrimaryAsset(for assetId: String) {
+    private func selectPrimaryAsset(
+        for assetId: String,
+        presentation: LibraryPresentationModel
+    ) {
         browserState.selectAsset(presentation.group(containing: assetId)?.primaryAsset.id ?? assetId)
     }
 
-    private func moveSelection(_ direction: MoveCommandDirection) {
+    private func moveSelection(
+        _ direction: MoveCommandDirection,
+        presentation: LibraryPresentationModel
+    ) {
         guard browserState.selectedWorkspaceId != nil else {
             let orderedProjectIds = presentation.projectSummaries.map(\.id)
             guard !orderedProjectIds.isEmpty else { return }
@@ -560,7 +623,9 @@ public struct LibraryWorkspaceView: View {
         browserState.selectAsset(orderedPrimaryAssetIds[nextIndex])
     }
 
-    private func removeSelectedImportedAsset() async {
+    private func removeSelectedImportedAsset(
+        presentation: LibraryPresentationModel
+    ) async {
         let targetAssetId = browserState.viewerAssetId ?? browserState.selectedPrimaryAssetId
         guard let targetAsset = presentation.viewerAsset(for: targetAssetId) else {
             return
@@ -603,13 +668,18 @@ public struct LibraryWorkspaceView: View {
         }
     }
 
-    private var selectedPrimaryAsset: LibraryAsset? {
+    private func selectedPrimaryAsset(
+        in presentation: LibraryPresentationModel
+    ) -> LibraryAsset? {
         presentation.viewerAsset(for: browserState.selectedPrimaryAssetId)
     }
 
-    private func setCoverAction(for project: ProjectSummaryPresentation) -> (() -> Void)? {
+    private func setCoverAction(
+        for project: ProjectSummaryPresentation,
+        presentation: LibraryPresentationModel
+    ) -> (() -> Void)? {
         guard let workspaceId = browserState.selectedWorkspaceId,
-              let selectedPrimaryAsset,
+              let selectedPrimaryAsset = selectedPrimaryAsset(in: presentation),
               selectedPrimaryAsset.id != project.heroAsset?.id
         else {
             return nil
@@ -621,7 +691,7 @@ public struct LibraryWorkspaceView: View {
 
     private func ensureBrowserProjectSelection() {
         guard browserState.selectedWorkspaceId == nil else { return }
-        let projectIds = presentation.projectSummaries.map(\.id)
+        let projectIds = presentationModel.projectSummaries.map(\.id)
         guard !projectIds.isEmpty else {
             browserProjectId = nil
             return
@@ -632,7 +702,9 @@ public struct LibraryWorkspaceView: View {
         browserProjectId = projectIds.first
     }
 
-    private var pendingRunGroups: [RunGroupRecord] {
+    private func pendingRunGroups(
+        in presentation: LibraryPresentationModel
+    ) -> [RunGroupRecord] {
         guard let workspaceId = browserState.selectedWorkspaceId else {
             return []
         }
@@ -649,10 +721,12 @@ public struct LibraryWorkspaceView: View {
             }
     }
 
-    private var pendingRunGroupsStrip: some View {
+    private func pendingRunGroupsStrip(
+        presentation: LibraryPresentationModel
+    ) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: MLXRSpacing.sm) {
-                ForEach(pendingRunGroups) { runGroup in
+                ForEach(pendingRunGroups(in: presentation)) { runGroup in
                     PendingRunGroupCard(runGroup: runGroup)
                 }
             }

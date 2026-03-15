@@ -29,44 +29,103 @@ public final class MLXRAppModel {
     // -- State --
     public var runtimeStatus: RuntimeStatusSnapshot?
     public var catalog = CatalogSnapshot(supportedModels: [], installedModels: [], capabilities: [])
-    public var jobs: [JobRecord] = []
-    public var importedAssets: [ImportedAssetRecord] = []
+    public var jobs: [JobRecord] = [] {
+        didSet { rebuildDerivedLibraryState() }
+    }
+    public var importedAssets: [ImportedAssetRecord] = [] {
+        didSet { rebuildDerivedLibraryState() }
+    }
     public var installOperations: [ModelInstallOperationRecord] = []
     public var modelPreviews: [String: SupportedModelPreview] = [:]
     public var installedModelDetails: [String: InstalledModelDetails] = [:]
-    public var lastSubmittedJobId: String?
+    public var lastSubmittedJobId: String? {
+        didSet { rebuildDerivedLibraryState() }
+    }
     public var isRefreshing = false
     public var isSubmittingImage = false
     public var isSubmittingVideo = false
     public var isPlanningCreation = false
     public var promptHelperMode: PromptHelperMode = .suggest
     public var hasCompletedOnboarding = false {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.hasCompletedOnboarding = hasCompletedOnboarding
+            schedulePresentationStatePersist()
+        }
     }
     public var activeWorkspaceId = "default-workspace" {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.activeWorkspaceId = activeWorkspaceId
+            rebuildPreferredWorkspaceCache()
+            schedulePresentationStatePersist()
+        }
     }
     public var selectedLibraryWorkspaceId: String? {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.selectedLibraryWorkspaceId = selectedLibraryWorkspaceId
+            rebuildPreferredWorkspaceCache()
+            schedulePresentationStatePersist()
+        }
     }
     public var workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "New Project")] {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.workspaces = workspaces
+            bumpLibraryPresentationRevision()
+            rebuildPreferredWorkspaceCache()
+            rebuildActivityRunGroupsCache()
+            schedulePresentationStatePersist()
+        }
     }
     public var collections: [CollectionRecord] = [] {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.collections = collections
+            bumpLibraryPresentationRevision()
+            schedulePresentationStatePersist()
+        }
     }
     public var runGroups: [RunGroupRecord] = [] {
-        didSet { persistPresentationState() }
+        didSet {
+            runGroupsByIdCache = Dictionary(uniqueKeysWithValues: runGroups.map { ($0.id, $0) })
+            presentationStateCache.runGroups = runGroups
+            bumpLibraryPresentationRevision()
+            rebuildPreferredWorkspaceCache()
+            rebuildActivityRunGroupsCache()
+            schedulePresentationStatePersist()
+        }
     }
     public var dismissedActivityRunGroupIds: Set<String> = [] {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.dismissedActivityRunGroupIds = Array(dismissedActivityRunGroupIds).sorted()
+            rebuildActivityRunGroupsCache()
+            schedulePresentationStatePersist()
+        }
     }
     public var assetRecords: [String: AssetRecord] = [:] {
-        didSet { persistPresentationState() }
+        didSet {
+            sortedAssetRecordsCache = assetRecords.values.sorted { $0.id < $1.id }
+            presentationStateCache.assets = sortedAssetRecordsCache
+            rebuildDerivedLibraryState()
+            schedulePresentationStatePersist()
+        }
     }
     public var creationDraft = CreationDraft() {
-        didSet { persistPresentationState() }
+        didSet {
+            presentationStateCache.creationDraft = creationDraft
+            schedulePresentationStatePersist()
+        }
     }
+    var libraryEntriesCache: [LibraryEntry] = []
+    var libraryAssetsCache: [LibraryAsset] = []
+    var recentLibraryAssetsCache: [LibraryAsset] = []
+    var latestGeneratedAssetCache: LibraryAsset?
+    var hasContentCache = false
+    var preferredLibraryWorkspaceIdCache: String?
+    var recentCompletedAssetsCache: [LibraryAsset] = []
+    var latestSubmittedAssetCache: LibraryAsset?
+    var activityRunGroupsCache: [RunGroupRecord] = []
+    var sortedAssetRecordsCache: [AssetRecord] = []
+    var libraryPresentationRevision = 0
+    var activeJobCountCache = 0
+    var totalCreationCountCache = 0
 
     // Per-surface inline errors (shown where the user is working).
     public var imageError: String?
@@ -92,6 +151,15 @@ public final class MLXRAppModel {
 
     @ObservationIgnored
     let workspaceStateStore: WorkspaceStateStore
+
+    @ObservationIgnored
+    let presentationStatePersistence: PresentationStatePersistenceCoordinator
+
+    @ObservationIgnored
+    var presentationStateCache = AppPresentationState()
+
+    @ObservationIgnored
+    var runGroupsByIdCache: [String: RunGroupRecord] = [:]
 
     @ObservationIgnored
     private var eventTasks: [String: Task<Void, Never>] = [:]
@@ -126,11 +194,18 @@ public final class MLXRAppModel {
     @ObservationIgnored
     private var observedJobIds: Set<String> = []
 
+    @ObservationIgnored
+    var presentationPersistTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var outputURLCache: [String: URL] = [:]
+
     public init(runtime: RuntimeServing? = nil) {
         let store = ImportedAssetStore()
         self.importedAssetStore = store
         let workspaceStateStore = WorkspaceStateStore()
         self.workspaceStateStore = workspaceStateStore
+        self.presentationStatePersistence = PresentationStatePersistenceCoordinator(store: workspaceStateStore)
         do {
             importedAssets = try store.load()
         } catch {
@@ -153,16 +228,19 @@ public final class MLXRAppModel {
         }
         if let runtime {
             self.runtime = runtime
-            return
+        } else {
+            do {
+                let client = try RuntimeClient()
+                self.runtime = client
+                startHealthMonitor(client: client)
+            } catch {
+                self.runtime = nil
+                self.bootstrapError = error.localizedDescription
+            }
         }
-        do {
-            let client = try RuntimeClient()
-            self.runtime = client
-            startHealthMonitor(client: client)
-        } catch {
-            self.runtime = nil
-            self.bootstrapError = error.localizedDescription
-        }
+        runGroupsByIdCache = Dictionary(uniqueKeysWithValues: runGroups.map { ($0.id, $0) })
+        rebuildDerivedLibraryState()
+        refreshPresentationStateCache()
     }
 
     deinit {
@@ -171,16 +249,17 @@ public final class MLXRAppModel {
         installMonitorTask?.cancel()
         jobsRefreshTask?.cancel()
         creationPlanTask?.cancel()
+        presentationPersistTask?.cancel()
     }
 
     // MARK: - Derived State
 
     public var libraryEntries: [LibraryEntry] {
-        LibraryEntry.flatten(jobs: jobs)
+        libraryEntriesCache
     }
 
     public var activeJobCount: Int {
-        jobs.filter { !$0.state.isTerminal }.count
+        activeJobCountCache
     }
 
     public var hasBootstrapped: Bool {
@@ -201,6 +280,24 @@ public final class MLXRAppModel {
 
     public var activeWorkspace: WorkspaceRecord? {
         workspaces.first(where: { $0.id == activeWorkspaceId })
+    }
+
+    func bumpLibraryPresentationRevision() {
+        libraryPresentationRevision &+= 1
+    }
+
+    func refreshPresentationStateCache() {
+        presentationStateCache = AppPresentationState(
+            hasCompletedOnboarding: hasCompletedOnboarding,
+            activeWorkspaceId: activeWorkspaceId,
+            selectedLibraryWorkspaceId: selectedLibraryWorkspaceId,
+            workspaces: workspaces,
+            collections: collections,
+            runGroups: runGroups,
+            dismissedActivityRunGroupIds: Array(dismissedActivityRunGroupIds).sorted(),
+            assets: sortedAssetRecordsCache,
+            creationDraft: creationDraft
+        )
     }
 
     // MARK: - Refresh
@@ -446,9 +543,14 @@ public final class MLXRAppModel {
     // MARK: - Output
 
     public func cachedOutputURL(for artifact: OutputArtifactRecord) async -> URL? {
+        if let cachedURL = outputURLCache[artifact.artifactId] {
+            return cachedURL
+        }
         guard let runtime else { return nil }
         do {
-            return try await runtime.cachedDownloadURL(for: artifact)
+            let resolvedURL = try await runtime.cachedDownloadURL(for: artifact)
+            outputURLCache[artifact.artifactId] = resolvedURL
+            return resolvedURL
         } catch {
             globalError = error.localizedDescription
             return nil

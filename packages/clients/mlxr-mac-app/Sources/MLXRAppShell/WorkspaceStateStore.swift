@@ -1,7 +1,7 @@
 import Foundation
 import MLXRAppDomain
 
-public struct WorkspaceStateStore {
+public struct WorkspaceStateStore: @unchecked Sendable {
     private let fileManager: FileManager
     private let rootDirectory: URL
     private let manifestURL: URL

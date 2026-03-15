@@ -5,9 +5,20 @@ import SwiftUI
 
 struct LibraryAssetThumbnailView: View {
     let asset: LibraryAsset
+    let maxPixelSize: CGFloat
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
 
     @State private var previewImage: NSImage?
+
+    init(
+        asset: LibraryAsset,
+        maxPixelSize: CGFloat = 320,
+        onMaterialize: @escaping @Sendable (LibraryAsset) async -> URL?
+    ) {
+        self.asset = asset
+        self.maxPixelSize = maxPixelSize
+        self.onMaterialize = onMaterialize
+    }
 
     var body: some View {
         ZStack {
@@ -33,7 +44,7 @@ struct LibraryAssetThumbnailView: View {
         .task(id: asset.id) {
             previewImage = await LibraryThumbnailStore.shared.thumbnail(
                 for: asset,
-                maxPixelSize: 640,
+                maxPixelSize: maxPixelSize,
                 materialize: onMaterialize
             )
         }

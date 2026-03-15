@@ -73,41 +73,7 @@ extension MLXRAppModel {
     }
 
     public var activityRunGroups: [RunGroupRecord] {
-        let persistedIds = Set(runGroups.map(\.id))
-        let legacyGroups = jobs.compactMap { job -> RunGroupRecord? in
-            guard job.request.context?.runGroupId == nil else {
-                return nil
-            }
-            guard let task = ProductTask.from(rawTask: job.request.task) else {
-                return nil
-            }
-            let syntheticId = "legacy-\(job.jobId)"
-            guard !persistedIds.contains(syntheticId) else {
-                return nil
-            }
-            let relatedAssets = libraryAssets.filter { $0.jobId == job.jobId }
-            let group = RunGroupRecord(
-                id: syntheticId,
-                workspaceId: activeWorkspaceId,
-                collectionId: nil,
-                task: task,
-                title: legacyActivityTitle(for: job, task: task),
-                sourceAssetIds: [],
-                jobIds: [job.jobId],
-                assetIds: relatedAssets.map(\.id),
-                variationCount: max(relatedAssets.count, 1),
-                createdAt: job.createdAt,
-                updatedAt: job.updatedAt,
-                state: state(for: [job], assetCount: relatedAssets.count)
-            )
-            return shouldIncludeInActivity(group)
-                ? group
-                : nil
-        }
-        let persistedGroups = runGroups.filter {
-            shouldIncludeInActivity($0)
-        }
-        return (persistedGroups + legacyGroups).sorted { $0.updatedAt > $1.updatedAt }
+        activityRunGroupsCache
     }
 
     public func dismissActivityRunGroup(_ runGroupId: String) {
@@ -116,22 +82,29 @@ extension MLXRAppModel {
 
     public func persistPresentationState() {
         do {
-            try workspaceStateStore.persist(
-                AppPresentationState(
-                    hasCompletedOnboarding: hasCompletedOnboarding,
-                    activeWorkspaceId: activeWorkspaceId,
-                    selectedLibraryWorkspaceId: selectedLibraryWorkspaceId,
-                    workspaces: workspaces,
-                    collections: collections,
-                    runGroups: runGroups,
-                    dismissedActivityRunGroupIds: Array(dismissedActivityRunGroupIds).sorted(),
-                    assets: Array(assetRecords.values).sorted { $0.id < $1.id },
-                    creationDraft: creationDraft
-                )
-            )
+            try workspaceStateStore.persist(currentPresentationState())
         } catch {
             settingsError = error.localizedDescription
         }
+    }
+
+    func schedulePresentationStatePersist() {
+        let state = currentPresentationState()
+        let persistence = presentationStatePersistence
+        presentationPersistTask?.cancel()
+        presentationPersistTask = Task { [weak self] in
+            do {
+                try await persistence.persist(state)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.settingsError = error.localizedDescription
+            }
+        }
+    }
+
+    private func currentPresentationState() -> AppPresentationState {
+        presentationStateCache
     }
 
     public func seedComposer(with request: ComposerSeedRequest) {
@@ -614,7 +587,7 @@ extension MLXRAppModel {
         runGroups.sort { $0.updatedAt > $1.updatedAt }
     }
 
-    private func shouldIncludeInActivity(
+    func shouldIncludeInActivity(
         _ group: RunGroupRecord
     ) -> Bool {
         switch group.state {
@@ -627,7 +600,7 @@ extension MLXRAppModel {
         }
     }
 
-    private func legacyActivityTitle(for job: JobRecord, task: ProductTask) -> String {
+    func legacyActivityTitle(for job: JobRecord, task: ProductTask) -> String {
         if let prompt = job.request.inputs.string("prompt") {
             let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -847,7 +820,7 @@ extension MLXRAppModel {
         return (0..<count).map { min($0 * step, maxFrame) }
     }
 
-    private func state(for jobs: [JobRecord], assetCount: Int) -> RunGroupState {
+    func state(for jobs: [JobRecord], assetCount: Int) -> RunGroupState {
         if jobs.contains(where: { $0.state == .failed }) {
             return .failed
         }

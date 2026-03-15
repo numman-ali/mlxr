@@ -14,7 +14,7 @@ extension MLXRAppModel {
             return workspaceId
         }
         if let runGroupId = asset.runGroupId,
-           let runGroup = runGroups.first(where: { $0.id == runGroupId })
+           let runGroup = runGroupsByIdCache[runGroupId]
         {
             return runGroup.workspaceId
         }
@@ -33,26 +33,15 @@ extension MLXRAppModel {
     }
 
     public var hasContent: Bool {
-        !libraryAssets.isEmpty
+        hasContentCache
     }
 
     public var preferredLibraryWorkspaceId: String? {
-        if let selectedLibraryWorkspaceId,
-           libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == selectedLibraryWorkspaceId })
-        {
-            return selectedLibraryWorkspaceId
-        }
-        if libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == activeWorkspaceId }) {
-            return activeWorkspaceId
-        }
-        if libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == defaultWorkspaceId }) {
-            return defaultWorkspaceId
-        }
-        return libraryAssets.first.map(resolvedWorkspaceId(for:))
+        preferredLibraryWorkspaceIdCache
     }
 
     public var totalCreationCount: Int {
-        jobs.filter { $0.state == .completed }.count
+        totalCreationCountCache
     }
 
     public var activeJobs: [JobRecord] {
@@ -65,14 +54,11 @@ extension MLXRAppModel {
     }
 
     public var recentCompletedAssets: [LibraryAsset] {
-        libraryAssets
-            .filter(\.isGenerated)
-            .sorted { $0.createdAt > $1.createdAt }
+        recentCompletedAssetsCache
     }
 
     public var latestSubmittedAsset: LibraryAsset? {
-        guard let lastSubmittedJobId else { return nil }
-        return libraryAssets.first { $0.jobId == lastSubmittedJobId }
+        latestSubmittedAssetCache
     }
 
     /// Progress estimate for a job based on its current phase

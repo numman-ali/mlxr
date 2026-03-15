@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 import AVFoundation
 import ImageIO
 import MLXRAppDomain
@@ -29,8 +29,11 @@ final class LibraryThumbnailStore {
             return await task.value
         }
 
-        let task = Task<NSImage?, Never> {
+        let task = Task.detached(priority: .utility) { [asset, maxPixelSize] () -> NSImage? in
             guard let url = await materialize(asset) else { return nil }
+            if Task.isCancelled {
+                return nil
+            }
             return await Self.makeThumbnail(
                 for: asset,
                 url: url,
@@ -38,7 +41,11 @@ final class LibraryThumbnailStore {
             )
         }
         inflight[inflightKey] = task
-        let image = await task.value
+        let image = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
         inflight.removeValue(forKey: inflightKey)
         if let image {
             cache.setObject(image, forKey: cacheKey)
@@ -46,7 +53,7 @@ final class LibraryThumbnailStore {
         return image
     }
 
-    private static func makeThumbnail(
+    nonisolated private static func makeThumbnail(
         for asset: LibraryAsset,
         url: URL,
         maxPixelSize: CGFloat
@@ -74,7 +81,7 @@ final class LibraryThumbnailStore {
         }
     }
 
-    private static func downsampledImage(at url: URL, maxPixelSize: CGFloat) -> NSImage? {
+    nonisolated private static func downsampledImage(at url: URL, maxPixelSize: CGFloat) -> NSImage? {
         guard
             let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
             let cgImage = CGImageSourceCreateThumbnailAtIndex(

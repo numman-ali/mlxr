@@ -119,6 +119,10 @@ public struct ModelsWorkspaceView: View {
         }
     }
 
+    private var previewPrefetchModelIds: [String] {
+        Array(availableModels.prefix(3).map(\.modelId))
+    }
+
     private var availableSection: some View {
         DenseSectionSurface {
             sectionHeader(
@@ -134,10 +138,12 @@ public struct ModelsWorkspaceView: View {
             } else {
                 ForEach(availableModels) { item in
                     availableRow(item)
-                        .task {
-                            await onLoadPreview(item.modelId)
-                        }
                 }
+            }
+        }
+        .task(id: previewPrefetchModelIds) {
+            for modelId in previewPrefetchModelIds {
+                await onLoadPreview(modelId)
             }
         }
     }

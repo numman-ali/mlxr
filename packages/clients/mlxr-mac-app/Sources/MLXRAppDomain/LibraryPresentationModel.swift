@@ -75,13 +75,23 @@ public struct LibraryAssetGroupPresentation: Identifiable, Hashable, Sendable {
 
 public struct LibraryPresentationModel: Sendable {
     private let assets: [LibraryAsset]
+    private let workspaceAssetsById: [String: [LibraryAsset]]
     private let workspacesById: [String: WorkspaceRecord]
     private let runGroupsById: [String: RunGroupRecord]
+    private let projectSummariesById: [String: ProjectSummaryPresentation]
+    private let visibleAssetsById: [String: LibraryAsset]
     private let defaultWorkspaceId: String
 
     public let collections: [CollectionRecord]
     public let filters: LibraryFilterState
     public let selectedWorkspaceId: String?
+    public let modelOptions: [String]
+    public let taskOptions: [ProductTask]
+    public let projectSummaries: [ProjectSummaryPresentation]
+    public let filteredAssets: [LibraryAsset]
+    public let groups: [LibraryAssetGroupPresentation]
+    public let orderedPrimaryAssetIds: [String]
+    public let visibleAssetIds: [String]
 
     public init(
         assets: [LibraryAsset],
@@ -92,59 +102,106 @@ public struct LibraryPresentationModel: Sendable {
         selectedWorkspaceId: String?,
         defaultWorkspaceId: String
     ) {
-        self.assets = assets
-        self.workspacesById = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0) })
-        self.runGroupsById = Dictionary(uniqueKeysWithValues: runGroups.map { ($0.id, $0) })
+        let workspacesById = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0) })
+        let runGroupsById = Dictionary(uniqueKeysWithValues: runGroups.map { ($0.id, $0) })
+        let normalizedQuery = filters.query
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        func effectiveWorkspaceId(for asset: LibraryAsset) -> String {
+            if let workspaceId = asset.workspaceId {
+                return workspaceId
+            }
+            if let runGroupId = asset.runGroupId,
+               let runGroup = runGroupsById[runGroupId]
+            {
+                return runGroup.workspaceId
+            }
+            if let importedWorkspaceId = asset.importedAsset?.workspaceId {
+                return importedWorkspaceId
+            }
+            return defaultWorkspaceId
+        }
+
+        let workspaceAssetsById = Dictionary(grouping: assets) { asset in
+            effectiveWorkspaceId(for: asset)
+        }
+
+        func workspaceScopedAssets(_ workspaceId: String?) -> [LibraryAsset] {
+            guard let workspaceId else {
+                return assets
+            }
+            return workspaceAssetsById[workspaceId] ?? []
+        }
+
+        func matchesFilters(_ asset: LibraryAsset) -> Bool {
+            guard filters.selectedFilter.includes(asset) else { return false }
+            guard !filters.favoritesOnly || asset.isFavorite else { return false }
+            guard filters.selectedModelId == "all" || asset.modelId == filters.selectedModelId else {
+                return false
+            }
+            guard filters.selectedTaskRaw == "all" || asset.task?.rawValue == filters.selectedTaskRaw else {
+                return false
+            }
+            if let selectedCollectionId = filters.selectedCollectionId,
+               !asset.collectionIds.contains(selectedCollectionId)
+            {
+                return false
+            }
+            guard normalizedQuery.isEmpty || asset.searchableText.contains(normalizedQuery) else {
+                return false
+            }
+            return true
+        }
+
+        func sortComparator(_ lhs: LibraryAsset, _ rhs: LibraryAsset) -> Bool {
+            switch filters.selectedSort {
+            case .newest:
+                if lhs.createdAt != rhs.createdAt {
+                    return lhs.createdAt > rhs.createdAt
+                }
+                return lhs.id > rhs.id
+            case .lastUsed:
+                let lhsLastUsed = lhs.lastUsedAt ?? lhs.createdAt
+                let rhsLastUsed = rhs.lastUsedAt ?? rhs.createdAt
+                if lhsLastUsed != rhsLastUsed {
+                    return lhsLastUsed > rhsLastUsed
+                }
+                return lhs.id > rhs.id
+            }
+        }
+
+        func sortTimestamp(for group: LibraryAssetGroupPresentation) -> Date {
+            switch filters.selectedSort {
+            case .newest:
+                group.updatedAt
+            case .lastUsed:
+                group.updatedAt
+            }
+        }
+
         self.collections = collections
         self.filters = filters
         self.selectedWorkspaceId = selectedWorkspaceId
+        self.assets = assets
+        self.workspacesById = workspacesById
+        self.runGroupsById = runGroupsById
         self.defaultWorkspaceId = defaultWorkspaceId
-    }
+        self.workspaceAssetsById = workspaceAssetsById
 
-    public var selectedWorkspace: WorkspaceRecord? {
-        guard let selectedWorkspaceId else { return nil }
-        return workspacesById[selectedWorkspaceId]
-    }
-
-    public var modelOptions: [String] {
-        Array(Set(filteredAssets.compactMap(\.modelId))).sorted()
-    }
-
-    public var taskOptions: [ProductTask] {
-        Array(Set(filteredAssets.compactMap(\.task))).sorted { $0.title < $1.title }
-    }
-
-    public func count(for filter: LibraryAssetFilter) -> Int {
-        assets.filter { filter.includes($0) }.count
-    }
-
-    public func count(for collectionId: String?) -> Int {
-        guard let collectionId else { return assets.count }
-        return assets.filter { $0.collectionIds.contains(collectionId) }.count
-    }
-
-    public var projectSummaries: [ProjectSummaryPresentation] {
-        workspacesById.values.compactMap(projectSummary(for:))
-            .filter(projectMatchesFilters(_:))
-            .sorted { lhs, rhs in
-                if lhs.updatedAt != rhs.updatedAt {
-                    return lhs.updatedAt > rhs.updatedAt
-                }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-    }
-
-    public var filteredAssets: [LibraryAsset] {
-        workspaceScopedAssets(selectedWorkspaceId)
-            .filter(matchesFilters(_:))
+        let scopedAssets = workspaceScopedAssets(selectedWorkspaceId)
+            .filter { matchesFilters($0) }
             .sorted(by: sortComparator)
-    }
+        self.filteredAssets = scopedAssets
+        self.visibleAssetIds = scopedAssets.map(\.id)
+        self.visibleAssetsById = Dictionary(uniqueKeysWithValues: scopedAssets.map { ($0.id, $0) })
+        self.modelOptions = Array(Set(scopedAssets.compactMap(\.modelId))).sorted()
+        self.taskOptions = Array(Set(scopedAssets.compactMap(\.task))).sorted { $0.title < $1.title }
 
-    public var groups: [LibraryAssetGroupPresentation] {
-        let groupedAssets = Dictionary(grouping: filteredAssets) { asset in
+        let groupedAssets = Dictionary(grouping: scopedAssets) { asset in
             asset.runGroupId ?? asset.id
         }
-        return groupedAssets.compactMap { groupId, grouped in
+        let groups = groupedAssets.compactMap { groupId, grouped in
             let sortedAssets = grouped.sorted(by: sortComparator)
             guard let primaryAsset = sortedAssets.first else {
                 return nil
@@ -166,14 +223,96 @@ public struct LibraryPresentationModel: Sendable {
         .sorted { lhs, rhs in
             sortTimestamp(for: lhs) > sortTimestamp(for: rhs)
         }
+        self.groups = groups
+        self.orderedPrimaryAssetIds = groups.map { $0.primaryAsset.id }
+
+        func projectSummary(for workspace: WorkspaceRecord) -> ProjectSummaryPresentation? {
+            let workspaceAssets = workspaceScopedAssets(workspace.id)
+            guard
+                !workspaceAssets.isEmpty
+                    || workspace.id == selectedWorkspaceId
+                    || workspace.id != defaultWorkspaceId
+            else {
+                return nil
+            }
+            let sortedAssets = workspaceAssets.sorted(by: sortComparator)
+            let latestAsset = sortedAssets.first
+            let heroAsset =
+                workspace.coverAssetId.flatMap { coverAssetId in
+                    sortedAssets.first(where: { $0.id == coverAssetId })
+                }
+                ?? latestAsset
+            let latestPrompt = latestAsset?.promptHeadline ?? latestAsset?.displayTitle ?? "No results yet"
+            let updatedAt = workspaceAssets
+                .map { $0.lastUsedAt ?? $0.createdAt }
+                .max()
+                ?? workspace.lastOpenedAt
+            let runGroupCount = Set(
+                workspaceAssets.compactMap { asset in
+                    asset.runGroupId ?? asset.jobId
+                }
+            ).count
+            return ProjectSummaryPresentation(
+                id: workspace.id,
+                title: workspace.title,
+                subtitle: latestPrompt,
+                heroAsset: heroAsset,
+                assetCount: workspaceAssets.count,
+                imageCount: workspaceAssets.filter(\.isImage).count,
+                videoCount: workspaceAssets.filter(\.isVideo).count,
+                audioCount: workspaceAssets.filter(\.isAudio).count,
+                runGroupCount: runGroupCount,
+                updatedAt: updatedAt,
+                isActive: workspace.id == selectedWorkspaceId
+            )
+        }
+
+        func matchesTopLevelProjectFilters(_ asset: LibraryAsset) -> Bool {
+            filters.selectedFilter.includes(asset)
+                && (!filters.favoritesOnly || asset.isFavorite)
+        }
+
+        func projectMatchesFilters(_ summary: ProjectSummaryPresentation) -> Bool {
+            let workspaceAssets = workspaceScopedAssets(summary.id)
+            if !workspaceAssets.isEmpty,
+               workspaceAssets.contains(where: matchesTopLevelProjectFilters(_:)) == false
+            {
+                return false
+            }
+            if normalizedQuery.isEmpty {
+                return true
+            }
+            if summary.title.lowercased().contains(normalizedQuery) {
+                return true
+            }
+            return workspaceAssets.contains { $0.searchableText.contains(normalizedQuery) }
+        }
+
+        let allSummaries = workspacesById.values.compactMap(projectSummary(for:))
+        let summaries = allSummaries
+            .filter { projectMatchesFilters($0) }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt {
+                    return lhs.updatedAt > rhs.updatedAt
+                }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        self.projectSummaries = summaries
+        self.projectSummariesById = Dictionary(uniqueKeysWithValues: allSummaries.map { ($0.id, $0) })
     }
 
-    public var orderedPrimaryAssetIds: [String] {
-        groups.map { $0.primaryAsset.id }
+    public var selectedWorkspace: WorkspaceRecord? {
+        guard let selectedWorkspaceId else { return nil }
+        return workspacesById[selectedWorkspaceId]
     }
 
-    public var visibleAssetIds: [String] {
-        filteredAssets.map(\.id)
+    public func count(for filter: LibraryAssetFilter) -> Int {
+        assets.filter { filter.includes($0) }.count
+    }
+
+    public func count(for collectionId: String?) -> Int {
+        guard let collectionId else { return assets.count }
+        return assets.filter { $0.collectionIds.contains(collectionId) }.count
     }
 
     public func group(containing assetId: String) -> LibraryAssetGroupPresentation? {
@@ -184,7 +323,7 @@ public struct LibraryPresentationModel: Sendable {
 
     public func visibleViewerAsset(for assetId: String?) -> LibraryAsset? {
         guard let assetId else { return nil }
-        return filteredAssets.first(where: { $0.id == assetId })
+        return visibleAssetsById[assetId]
     }
 
     public func viewerAsset(for assetId: String?) -> LibraryAsset? {
@@ -194,8 +333,8 @@ public struct LibraryPresentationModel: Sendable {
     }
 
     public func projectSummary(id: String?) -> ProjectSummaryPresentation? {
-        guard let id, let workspace = workspacesById[id] else { return nil }
-        return projectSummary(for: workspace)
+        guard let id else { return nil }
+        return projectSummariesById[id]
     }
 
     private func projectSummary(for workspace: WorkspaceRecord) -> ProjectSummaryPresentation? {
@@ -265,7 +404,7 @@ public struct LibraryPresentationModel: Sendable {
         guard let workspaceId else {
             return assets
         }
-        return assets.filter { effectiveWorkspaceId(for: $0) == workspaceId }
+        return workspaceAssetsById[workspaceId] ?? []
     }
 
     private func effectiveWorkspaceId(for asset: LibraryAsset) -> String {

@@ -170,6 +170,7 @@ public struct MLXRMacAppRoot: View {
                 defaultWorkspaceId: appModel.defaultWorkspaceId,
                 focusedWorkspaceId: libraryFocusedWorkspaceId ?? appModel.selectedLibraryWorkspaceId,
                 focusedAssetId: libraryFocusedAssetId,
+                presentationDataRevision: appModel.libraryPresentationRevision,
                 assets: appModel.libraryAssets,
                 runGroups: appModel.runGroups,
                 collections: appModel.collections,

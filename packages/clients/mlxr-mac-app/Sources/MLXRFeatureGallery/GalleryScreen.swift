@@ -7,6 +7,7 @@ public struct GalleryScreen: View {
     let defaultWorkspaceId: String
     let focusedWorkspaceId: String?
     let focusedAssetId: String?
+    let presentationDataRevision: Int
     let assets: [LibraryAsset]
     let runGroups: [RunGroupRecord]
     let collections: [CollectionRecord]
@@ -28,6 +29,7 @@ public struct GalleryScreen: View {
         defaultWorkspaceId: String,
         focusedWorkspaceId: String?,
         focusedAssetId: String?,
+        presentationDataRevision: Int,
         assets: [LibraryAsset],
         runGroups: [RunGroupRecord],
         collections: [CollectionRecord],
@@ -48,6 +50,7 @@ public struct GalleryScreen: View {
         self.defaultWorkspaceId = defaultWorkspaceId
         self.focusedWorkspaceId = focusedWorkspaceId
         self.focusedAssetId = focusedAssetId
+        self.presentationDataRevision = presentationDataRevision
         self.assets = assets
         self.runGroups = runGroups
         self.collections = collections
@@ -71,6 +74,7 @@ public struct GalleryScreen: View {
             defaultWorkspaceId: defaultWorkspaceId,
             focusedWorkspaceId: focusedWorkspaceId,
             focusedAssetId: focusedAssetId,
+            presentationDataRevision: presentationDataRevision,
             assets: assets,
             runGroups: runGroups,
             collections: collections,

@@ -14,6 +14,7 @@ Primary plan sources:
 - `docs/working/unified-studio/05-home-models-activity-plan.md`
 - `docs/working/unified-studio/06-implementation-architecture-plan.md`
 - `docs/working/unified-studio/07-stage-acceptance-and-review-checklists.md`
+- `docs/working/unified-studio/09-performance-and-responsiveness-plan.md`
 
 Review gate:
 
@@ -214,6 +215,17 @@ Do not call the redesign done until:
 - the SwiftUI-pro review is recorded for the touched stage
 - validation passes locally
 - the live app behaves correctly under Peekaboo and log inspection
+
+## Performance Tranche
+
+- [x] Keep `09-performance-and-responsiveness-plan.md` aligned with the latest live findings.
+- [x] Keep local presentation-state persistence off the UI hot path.
+- [x] Keep shell-level derived state cached rather than rebuilt on routine screen switches.
+- [x] Keep Library and project presentation work out of the hottest render loops.
+- [x] Keep viewer image decode asynchronous and lightweight.
+- [x] Keep thumbnail generation cancellation-safe and bounded to visible work.
+- [x] Keep `Models` entry cheap by limiting eager preview work.
+- [x] Re-validate route switching and asset-open latency in the staged app after each tranche.
 
 ## Current Tranche Review Notes
 

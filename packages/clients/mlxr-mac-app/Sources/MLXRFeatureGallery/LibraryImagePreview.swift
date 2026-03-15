@@ -1,7 +1,7 @@
 import MLXRDesignSystem
 import SwiftUI
 
-struct ImageCanvasPreview: View {
+struct LibraryImagePreview: View {
     let url: URL
 
     @State private var image: NSImage?

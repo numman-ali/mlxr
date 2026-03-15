@@ -112,8 +112,8 @@ struct LibraryViewerSheet: View {
             if isLoadingPreview {
                 IndeterminateProgress(label: "Loading preview…")
             } else if let previewURL {
-                if asset.isImage, let image = NSImage(contentsOf: previewURL) {
-                    MediaHero(image: image, dominantHue: dominantHue(from: image))
+                if asset.isImage {
+                    LibraryImagePreview(url: previewURL)
                 } else if asset.isVideo {
                     LibraryVideoPreview(url: previewURL)
                 } else {
