@@ -13,7 +13,7 @@ Favor re-composition over reinvention.
 The redesign should mostly:
 
 - move ownership upward into `RootView` and `MLXRAppModel`
-- split the current `StudioScreen` into reusable composer and canvas pieces
+- keep the shared composer in `RootView` and the project/detail canvas in `MLXRFeatureGallery`
 - refactor `GalleryScreen` into project browser plus project detail
 
 The redesign should not:
@@ -36,7 +36,6 @@ Own:
 
 Primary changes:
 
-- keep `Destination.studio` as a temporary fallback seam only during migration
 - introduce shell state for active project detail
 - host one shared composer overlay
 
@@ -44,10 +43,10 @@ Primary changes:
 
 Refactor the current create surface into reusable pieces:
 
-- `GlobalComposerView`
-- `ComposerReferenceStrip`
+- `GlobalComposerBar`
+- `ComposerContextRow`
 - `ComposerSettingsRow`
-- `TunePopover`
+- `ComposerControlPill`
 - action helpers that mutate the shared draft
 
 This package should stop owning a full-screen destination.
@@ -57,7 +56,8 @@ This package should stop owning a full-screen destination.
 Own the library body in two states:
 
 - `ProjectBrowserView`
-- `ProjectDetailCanvasView`
+- compact `LibraryWorkspaceView` project detail
+- `LibraryGridView` and pending-run strip support
 
 Keep and reuse:
 
@@ -98,7 +98,7 @@ Add or clarify responsibilities for:
 - project summaries derived from `WorkspaceRecord` and `RunGroupRecord`
 - project auto-titling from the first accepted prompt
 - import-to-project behavior
-- run-group actions such as recreate, delete, and reopen in composer
+- run-group actions such as edit/animate seeding, delete, and reopen in composer
 - routing helpers that move from `Home` into project detail after acceptance
 
 Do not move planning or readiness logic out of the app model into views.
@@ -107,7 +107,7 @@ Do not move planning or readiness logic out of the app model into views.
 
 Preserve:
 
-- `StudioWorkspaceDraft` for the editable draft
+- `CreationDraft` for the editable draft
 - `WorkspaceRecord` for project persistence
 - `RunGroupRecord` for grouped outputs
 - `CollectionRecord` as secondary metadata only
@@ -130,7 +130,7 @@ Implement in this order:
 4. project model and project detail canvas
 5. library browser refactor
 6. home cleanup and models/activity polish
-7. final cutover removing the temporary `Studio` seam
+7. final cutover removing the old Studio-era files and names
 8. test hardening and state-restoration cleanup
 
 ## Testing Focus

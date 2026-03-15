@@ -257,6 +257,9 @@ Validation contract:
   narrower repo-owned lane is explicitly justified for the task
 - do not treat a successful lightweight hook run as equivalent to a green
   `verify`
+- for first-party Mac-app UI work, stage the app with
+  `uv run python scripts/dev.py mac-app` and validate the live surface with
+  Peekaboo before calling the work done
 
 ## Done Definition
 
@@ -269,6 +272,7 @@ A change is not done until all of the following are true:
 - tests pass
 - package builds pass
 - runtime logs were checked when runtime behavior changed
+- Peekaboo validation was performed for first-party Mac-app UI changes
 - docs were updated when repo truth changed
 - fresh-eyes review was completed before commit
 - remaining uncertainty is called out explicitly instead of hidden
@@ -296,6 +300,9 @@ If the task is first-party Mac-app-specific:
 - read [mac-app-runtime-contract.md](docs/mac-app-runtime-contract.md)
 - read [00-master-plan.md](docs/working/unified-studio/00-master-plan.md)
 - read the relevant stage docs under [docs/working/unified-studio/](docs/working/unified-studio/)
+- use `uv run python scripts/dev.py mac-app` to stage the current dev app when validating visible behavior
+- check `peekaboo -h` if you need a quick reminder of available app automation, capture, or inspection commands
+- prefer Peekaboo for visible Mac-app validation and receipts instead of relying on memory after launch
 
 If the task is performance-specific:
 

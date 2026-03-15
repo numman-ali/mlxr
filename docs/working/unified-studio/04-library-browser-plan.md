@@ -14,7 +14,8 @@ The main header contains:
 
 - search
 - media filter chips: `All`, `Video`, `Image`, `Audio`
-- optional favorites toggle
+- favorites toggle
+- `New Project`
 - import action
 
 The old side filter rail is removed.
@@ -25,11 +26,11 @@ Each project card shows:
 
 - title
 - hero thumbnail
-- updated time
-- counts by media type
-- running or failed badge if the project has active or recent problematic work
+- latest prompt or asset subtitle
+- quick counts for assets and sets
+- active badge when the project is the current continuity context
 
-Project cards should be quick to scan and easy to reopen, more like folders than inspector summaries.
+Project cards should be quick to scan and easy to reopen, more like dense folders than inspector summaries.
 
 ## Project Detail Transition
 
@@ -55,7 +56,7 @@ Top-level search should match:
 Media filter chips at the top level filter projects by whether they contain matching assets.
 Inside project detail, the same chips filter the visible assets and run groups for that project.
 
-Model and task filters are still useful, but they move into a secondary filter popover instead of occupying a permanent side rail.
+Model and task filters are still useful, but they live inline in the project-detail toolbar instead of occupying a permanent side rail.
 
 ## Collections And Favorites
 
@@ -76,7 +77,8 @@ Collections can return later as optional saved sets if they still earn their com
 Rules:
 
 - importing while a project is open adds the asset to that project
-- importing from top-level library attaches to the active project or asks for a target project
+- importing from top-level library must not visibly jump into a project before the file picker succeeds
+- after top-level file selection succeeds, the app may import against a deferred project id and only materialize/select that project after assets actually exist
 - imported assets become eligible references in the shared composer immediately after import
 
 ## Viewer Behavior
@@ -88,6 +90,9 @@ Keep:
 - large in-window preview
 - keyboard navigation
 - quick reuse into the composer
+- responsive preview layout so narrow windows stack preview and metadata instead of clipping
+- single-click open from the project-detail grid
+- composer hidden while the viewer is open
 
 Do not reintroduce a persistent right inspector for library browsing.
 
@@ -97,6 +102,7 @@ Do not reintroduce a persistent right inspector for library browsing.
 - The flat asset browser and filter rail are no longer the primary mental model.
 - Imported and generated assets remain reusable without losing project context.
 - The same library shell supports both browse and continue flows.
+- Project browser and project detail share the same toolbar rhythm and density language.
 
 ## SwiftUI-Pro Review Checklist
 

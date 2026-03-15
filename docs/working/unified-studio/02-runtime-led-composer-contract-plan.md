@@ -19,7 +19,7 @@ The composer is a presentation layer over `/v1/workflows/plan` and `/v1/workflow
 
 ## Draft To Runtime Mapping
 
-The composer keeps using `StudioWorkspaceDraft` as its editable state.
+The composer keeps using `CreationDraft` as its editable state.
 
 On every meaningful change, the app derives a `WorkflowIntent` from:
 

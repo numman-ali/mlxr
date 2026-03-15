@@ -38,7 +38,7 @@ public final class MLXRAppModel {
     public var isRefreshing = false
     public var isSubmittingImage = false
     public var isSubmittingVideo = false
-    public var isPlanningStudio = false
+    public var isPlanningCreation = false
     public var promptHelperMode: PromptHelperMode = .suggest
     public var hasCompletedOnboarding = false {
         didSet { persistPresentationState() }
@@ -64,7 +64,7 @@ public final class MLXRAppModel {
     public var assetRecords: [String: AssetRecord] = [:] {
         didSet { persistPresentationState() }
     }
-    public var studioWorkspace = StudioWorkspaceDraft() {
+    public var creationDraft = CreationDraft() {
         didSet { persistPresentationState() }
     }
 
@@ -81,8 +81,8 @@ public final class MLXRAppModel {
 
     // Active job progress tracking (jobId -> latest phase).
     public var activeJobPhases: [String: String] = [:]
-    public var studioPlanResult: WorkflowPlanResult?
-    public var studioPlanError: String?
+    public var creationPlanResult: WorkflowPlanResult?
+    public var creationPlanError: String?
 
     @ObservationIgnored
     let runtime: RuntimeServing?
@@ -109,7 +109,13 @@ public final class MLXRAppModel {
     private var jobsRefreshTask: Task<Void, Never>?
 
     @ObservationIgnored
-    private var studioPlanTask: Task<Void, Never>?
+    private var creationPlanTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var pendingCreationPlanIntent: WorkflowIntent?
+
+    @ObservationIgnored
+    private var refreshingCreationPlanIntent: WorkflowIntent?
 
     @ObservationIgnored
     private var lastFullRefreshAt: Date?
@@ -133,7 +139,7 @@ public final class MLXRAppModel {
         }
         do {
             let presentation = try workspaceStateStore.load()
-            hasCompletedOnboarding = presentation.hasCompletedModelSetup
+            hasCompletedOnboarding = presentation.hasCompletedOnboarding
             activeWorkspaceId = presentation.activeWorkspaceId
             selectedLibraryWorkspaceId = presentation.selectedLibraryWorkspaceId
             workspaces = presentation.workspaces
@@ -141,7 +147,7 @@ public final class MLXRAppModel {
             runGroups = presentation.runGroups
             dismissedActivityRunGroupIds = Set(presentation.dismissedActivityRunGroupIds)
             assetRecords = Dictionary(uniqueKeysWithValues: presentation.assets.map { ($0.id, $0) })
-            studioWorkspace = presentation.workspaceDraft
+            creationDraft = presentation.creationDraft
         } catch {
             settingsError = error.localizedDescription
         }
@@ -164,7 +170,7 @@ public final class MLXRAppModel {
         healthMonitorTask?.cancel()
         installMonitorTask?.cancel()
         jobsRefreshTask?.cancel()
-        studioPlanTask?.cancel()
+        creationPlanTask?.cancel()
     }
 
     // MARK: - Derived State
@@ -190,7 +196,7 @@ public final class MLXRAppModel {
     }
 
     public var hasWorkspaceDraft: Bool {
-        studioWorkspace.hasMeaningfulState
+        creationDraft.hasMeaningfulState
     }
 
     public var activeWorkspace: WorkspaceRecord? {
@@ -291,52 +297,85 @@ public final class MLXRAppModel {
     public func dismissModelsError() { modelsError = nil }
     public func dismissSettingsError() { settingsError = nil }
     public func dismissGlobalError() { globalError = nil }
-    public func dismissStudioPlanError() { studioPlanError = nil }
+    public func dismissCreationPlanError() { creationPlanError = nil }
 
-    // MARK: - Studio Planning
+    // MARK: - Creation Planning
 
-    public func scheduleStudioPlan() {
-        studioPlanTask?.cancel()
-        studioPlanTask = Task { [weak self] in
+    public func scheduleCreationPlan() {
+        guard let intent = creationPlanningIntent() else {
+            creationPlanTask?.cancel()
+            creationPlanTask = nil
+            pendingCreationPlanIntent = nil
+            refreshingCreationPlanIntent = nil
+            creationPlanResult = nil
+            creationPlanError = nil
+            isPlanningCreation = false
+            return
+        }
+        if pendingCreationPlanIntent == intent || refreshingCreationPlanIntent == intent {
+            return
+        }
+        creationPlanTask?.cancel()
+        pendingCreationPlanIntent = intent
+        creationPlanTask = Task { [weak self, intent] in
             try? await Task.sleep(nanoseconds: 200_000_000)
             guard let self else { return }
-            await self.refreshStudioPlan()
+            await self.refreshCreationPlan(using: intent)
         }
     }
 
-    public func refreshStudioPlan() async {
+    public func refreshCreationPlan() async {
+        await refreshCreationPlan(using: creationPlanningIntent())
+    }
+
+    private func refreshCreationPlan(using plannedIntent: WorkflowIntent?) async {
         guard let runtime else {
-            studioPlanResult = nil
-            studioPlanError = bootstrapError
+            creationPlanResult = nil
+            creationPlanError = bootstrapError
+            pendingCreationPlanIntent = nil
+            refreshingCreationPlanIntent = nil
+            creationPlanTask = nil
+            isPlanningCreation = false
             return
         }
-        guard let intent = studioPlanningIntent() else {
-            studioPlanTask = nil
-            isPlanningStudio = false
-            studioPlanResult = nil
-            studioPlanError = nil
+        guard let intent = plannedIntent else {
+            creationPlanTask = nil
+            pendingCreationPlanIntent = nil
+            refreshingCreationPlanIntent = nil
+            isPlanningCreation = false
+            creationPlanResult = nil
+            creationPlanError = nil
             return
         }
-        isPlanningStudio = true
+        if refreshingCreationPlanIntent == intent {
+            pendingCreationPlanIntent = nil
+            creationPlanTask = nil
+            return
+        }
+        pendingCreationPlanIntent = nil
+        refreshingCreationPlanIntent = intent
+        isPlanningCreation = true
         defer {
-            isPlanningStudio = false
-            studioPlanTask = nil
+            isPlanningCreation = false
+            creationPlanTask = nil
+            refreshingCreationPlanIntent = nil
         }
 
         do {
-            studioPlanResult = try await runtime.plan(intent: intent)
-            studioPlanError = nil
+            creationPlanResult = try await runtime.plan(intent: intent)
+            creationPlanError = nil
         } catch is CancellationError {
             return
         } catch {
-            studioPlanResult = nil
-            studioPlanError = error.localizedDescription
+            creationPlanResult = nil
+            creationPlanError = error.localizedDescription
         }
     }
 
     // MARK: - Image Submission
 
-    public func submitImage(_ request: ImageGenerationRequest) async {
+    @discardableResult
+    public func submitImage(_ request: ImageGenerationRequest) async -> Bool {
         imageError = nil
         isSubmittingImage = true
         defer { isSubmittingImage = false }
@@ -348,14 +387,17 @@ public final class MLXRAppModel {
                 runGroupTitle: request.runGroupTitle,
                 variationCount: request.variationCount
             )
+            return true
         } catch {
             imageError = error.localizedDescription
+            return false
         }
     }
 
     // MARK: - Video Submission
 
-    public func submitVideo(_ request: VideoGenerationRequest) async {
+    @discardableResult
+    public func submitVideo(_ request: VideoGenerationRequest) async -> Bool {
         videoError = nil
         isSubmittingVideo = true
         defer { isSubmittingVideo = false }
@@ -367,8 +409,10 @@ public final class MLXRAppModel {
                 runGroupTitle: request.runGroupTitle,
                 variationCount: request.variationCount
             )
+            return true
         } catch {
             videoError = error.localizedDescription
+            return false
         }
     }
 

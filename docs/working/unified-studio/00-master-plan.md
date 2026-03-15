@@ -42,9 +42,8 @@ This keeps the Hailuo-style "one app, one prompt bar, one body of work" feel fro
 
 ## Locked Decisions
 
-- Remove the top-level `Studio` destination in the end-state. The visible rail
-  already hides `Studio`; only the internal fallback seam remains during
-  migration, and it must not regain new primary creation behaviors.
+- Remove the top-level `Studio` destination in the end-state. That cutover is
+  now complete, and the app shell no longer carries a hidden fallback route.
 - Keep the primary composer switcher to `Video` and `Image`.
 - Do not expose standalone `Audio` mode yet. `MLXR` supports audio-conditioned video, not standalone audio creation, so audio remains a video sub-workflow instead of a third top-level segment.
 - Treat `project` as the user-facing name for `WorkspaceRecord`.
@@ -61,9 +60,16 @@ This keeps the Hailuo-style "one app, one prompt bar, one body of work" feel fro
 - Show the composer on `Home` and `Library` as the real user-facing creation
   surfaces.
 - Hide the composer on `Models` and `Settings`.
-- Allow the internal `.studio` fallback seam to reuse the same shell composer
-  during migration without reintroducing a visible `Studio` destination.
-- Do not add a dedicated right-edge filmstrip in the first redesign pass. The project canvas grid and hero preview are enough.
+- Treat the composer as floating shell chrome:
+  - expanded = centered overlay drawer
+  - collapsed = small trailing command pill
+  - hidden = user-dismissed resting state, also forced while viewer, bootstrap, or starter-model overlays are open
+- Do not add a dedicated right-edge filmstrip in the first redesign pass. The project canvas grid, pending strip, and modal viewer are enough.
+- Use square thumbnail tiles for dense project and library browsing.
+- Keep full aspect-ratio viewing inside the modal viewer, not inside the grid.
+- Opening an asset is single-click and modal-first.
+- Let the shell own bottom overlay inset so screens do not guess composer height with fixed footer padding.
+- Route from `Home` into `Library` only after runtime acceptance, not on button press.
 
 ## Resolved Differences From The Screen Brief
 
@@ -73,8 +79,11 @@ The screen brief is still the visual and interaction anchor, but these details a
 - `Project` maps to `WorkspaceRecord`, not `CollectionRecord`.
 - `Audio` is omitted from the primary segmented control until the runtime has a real standalone audio row.
 - The full results canvas lives inside project detail in `Library`.
+- The compact project/detail density is the app-wide visual target:
+  less vertical padding, fewer decorative card backgrounds, and tighter toolbar rhythm.
 - Creating from a project detail appends to that project.
-- Creating from the top-level project browser creates a new project on runtime acceptance unless the user explicitly resumed an existing project context.
+- The top-level `New Project` action creates and opens a blank project immediately.
+- Creating from the top-level project browser without opening a project first still creates a new project on runtime acceptance.
 - Creating from `Home` creates a new project by default and only reuses an existing one when the user explicitly resumes it.
 
 ## User-Facing Flow
@@ -83,9 +92,9 @@ The screen brief is still the visual and interaction anchor, but these details a
    - no installed starter model: `Models` setup
    - installed models but no meaningful work: `Home`
    - existing work: `Library` focused on the active or most recent project
-2. The composer is always available on `Home` and `Library`.
+2. The composer is available on `Home` and `Library` whenever the runtime has a runnable row and no higher-priority overlay, modal viewer, or setup flow is suppressing it.
 3. Submitting from `Home` creates a new project by default, unless the user explicitly resumed an existing project.
-4. Submitting from the top-level `Library` browser creates a new project after runtime acceptance.
+4. Pressing `New Project` in the top-level `Library` browser opens a blank project immediately, while submitting from the top-level browser without opening a project first creates a new project after runtime acceptance.
 5. Submitting from `Library` project detail keeps the user in place and appends work into the current project.
 6. Results, references, iteration actions, and project history stay together.
 
@@ -138,13 +147,13 @@ Each stage doc in this folder must name the exact files and the exact `swiftui-p
 - No new persistent database model for projects.
 - No standalone audio creation UX.
 - No second inspector pane or workflow sidebar.
-- No separate "pro mode" surface; advanced controls stay behind the composer tune popover and model-specific packs.
+- No separate "pro mode" surface; advanced controls stay in the compact composer pill row and model-specific packs.
 
 ## Done Definition
 
 This redesign is only complete when all of these are true together:
 
-- `Studio` is gone from the primary navigation.
+- `Studio` is gone from the primary navigation and the shell router.
 - `Home` and `Library` share one global composer.
 - Project detail is the continuity surface for progress and results.
 - The app still plans and submits through the same runtime seams used today.

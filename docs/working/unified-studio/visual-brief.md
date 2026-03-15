@@ -334,7 +334,7 @@ scroll below. The user sees continuity — their work is building up.
 |                                                                       |
 |  "A pirate sailing through a storm at sunset"                         |
 |  LTX Fast · 720p · 16:9 · 8s                                         |
-|  [Re-create] [Edit] [Animate] [Reveal in Finder] [Delete]            |
+|  [Edit] [Animate] [Reveal in Finder]                                 |
 |                                                                       |
 |  Earlier:                                                             |
 |  +------+ +------+ +------+ +------+                                 |
@@ -354,21 +354,21 @@ Each result group shows:
 - Compact metadata line (model, resolution, aspect, duration)
 - Inline action buttons
 
-Clicking a result opens it as the hero (large preview with video player
-or image viewer). Clicking an action like "Edit" or "Animate" drops the
-asset into the prompt bar's reference slot and switches to the appropriate
-sub-workflow.
+Clicking a result opens the modal viewer (large preview with video player
+or image viewer). Clicking an action like "Edit" or "Animate" seeds the
+asset back into the prompt bar, shows visible reference context, and switches
+to the appropriate sub-workflow.
 
 ### Result group actions
 
 | Action | Behavior |
 |---|---|
-| Re-create | Same prompt + settings, new seed. Starts generating immediately. |
-| Edit | Drops into Image > Edit, sets the image as reference, preserves prompt. |
-| Animate | Drops into Video > Animate, sets the image as start frame. |
-| Use as reference | Adds to the prompt bar's reference slots for the current modality. |
+| Edit | Drops into Image > Edit, seeds the image as the focused reference, preserves prompt. |
+| Animate | Drops into Video > Animate, seeds the image as the source reference. |
+| Use as reference | Adds the asset to the prompt bar's current reference context. |
 | Reveal in Finder | Opens the output directory in Finder. |
-| Delete | Removes the result group (with confirmation). |
+
+A dedicated `Re-create` button is later polish rather than a phase-1 shipped control, and generated result-group deletion remains deferred in the current shipped app.
 
 ---
 
@@ -402,10 +402,10 @@ filter rail layout with project-first organization.
 |         |                                                             |
 |         |  "A pirate sailing through a storm"                         |
 |         |  LTX Fast · 720p · 16:9 · 8s · 2 references                |
-|         |  [Re-create] [Open in Finder] [Delete Group]                |
+|         |  [Open in Finder]                                           |
 |         |                                                             |
 +-----------------------------------------------------------------------+
-| [Prompt Bar — still visible, can create from here]                    |
+| [Prompt Bar — hidden while the modal viewer is open]                  |
 +-----------------------------------------------------------------------+
 ```
 
@@ -496,7 +496,8 @@ Clean, minimal, action-oriented. No GlassCards with subtitles.
 
 ## Models
 
-Largely unchanged from current `ToolkitScreen`. This is the one area where
+Largely unchanged from the current `ToolkitScreen` shell and `ModelsWorkspaceView`
+content. This is the one area where
 a more information-dense layout is appropriate — users are making a
 deliberate decision about what to install.
 
@@ -554,16 +555,16 @@ thin progress bar appears at the top edge of the prompt bar).
 
 1. User generates 4 image variations (×4 in prompt bar).
 2. Results appear as a 2×2 grid.
-3. User clicks the best one → it becomes the hero preview.
-4. Clicks "Use as reference" → it drops into the prompt bar's reference slot.
+3. User clicks the best one → it opens in the modal viewer.
+4. Clicks "Use as reference" → it seeds the prompt bar with visible reference context.
 5. Tweaks the prompt → generates again with the reference.
 
 ### Flow 5: Browse and continue
 
 1. User opens Library. Sees project cards.
 2. Clicks "The Pirate" project. Sees all pirate-themed assets.
-3. Clicks a video result. It opens as the hero.
-4. Types a new prompt in the (still-visible) prompt bar.
+3. Clicks a video result. It opens in the modal viewer.
+4. Uses a viewer action or closes the viewer to continue in the prompt bar.
 5. Generates. New result lands in "The Pirate" project.
 
 ### Flow 6: Switch modality mid-session
@@ -593,8 +594,8 @@ thin progress bar appears at the top edge of the prompt bar).
 | Model install/management | Models view (nav rail) |
 | Runtime status | Small indicator in prompt bar + Settings view |
 | Quality/aspect/duration | Pill selectors in prompt bar |
-| Advanced settings | Tune popover (gear icon in prompt bar) |
-| References | Visual thumbnail slots in prompt bar (adaptive) |
+| Advanced settings | Compact control pills in the prompt bar |
+| References | Seeded-context chips in the prompt bar plus viewer actions |
 | Activity/progress | Inline progress in canvas + Activity overlay |
 | Library/assets | Library view with project-first organization |
 | Favorites/collections | Project-level grouping replaces collections |
@@ -609,7 +610,7 @@ thin progress bar appears at the top edge of the prompt bar).
   properties in the bar's body. All planning/readiness checks happen in
   `MLXRAppModel` and are passed down as simple values.
 - **Canvas scroll** — use `LazyVStack` for the results list. Don't load
-  all video players upfront — only the hero and visible thumbnails.
+  all video players upfront — only the modal viewer and visible thumbnails.
 - **Modality switching** — should feel instant. No full view teardown.
   The prompt bar adapts its visible controls via ternary expressions on
   the modality value, preserving structural identity.
@@ -623,10 +624,10 @@ thin progress bar appears at the top edge of the prompt bar).
 | View | Replaces | Purpose |
 |---|---|---|
 | `OmniPromptBar` | Parts of `StudioCanvasView`, `StudioSidebarView`, `StudioInspectorView` | The floating prompt bar |
-| `CanvasResultsView` | `StudioCanvasView` (preview area only) | Results display, hero preview, project context |
+| `ProjectDetailView` | `LibraryWorkspaceView` (project detail branch) | Compact project header, grouped grid, pending strip, and viewer hooks |
 | `ProjectGridView` | `LibraryGridView` (partially) | Project cards for Library top-level |
-| `ProjectDetailView` | `LibraryWorkspaceView` (partially) | Expanded project view with assets grid |
-| `TunePopover` | `StudioInspectorView` (advanced card) | Advanced settings popover |
+| `ComposerContextRow` | Viewer-to-create state handoff glue | Makes focused asset and seeded references visible in the prompt bar |
+| `ComposerControlPill` | `StudioInspectorView` advanced cards | Compact advanced controls without a separate popover |
 
 ### Views to remove
 
@@ -634,8 +635,8 @@ thin progress bar appears at the top edge of the prompt bar).
 |---|---|
 | `StudioScreen` | Replaced by canvas + prompt bar in `RootView` |
 | `StudioSidebarView` | Workflow list eliminated; reference picking moves to prompt bar |
-| `StudioInspectorView` | Model/settings move to prompt bar; advanced to Tune popover |
-| `StudioCanvasView` | Split into `CanvasResultsView` (results) + `OmniPromptBar` (input) |
+| `StudioInspectorView` | Model/settings move to prompt bar control pills |
+| `StudioCanvasView` | Split into project detail grid/viewer work plus `OmniPromptBar` |
 | `LibraryFilterRail` | Replaced by simpler top toolbar filter |
 
 ### Views to keep (with modifications)
@@ -647,7 +648,7 @@ thin progress bar appears at the top edge of the prompt bar).
 | `GalleryScreen` | Refactor to project-first layout. Keep modal viewer. |
 | `LibraryViewerSheet` | Keep as-is — the modal preview is good. |
 | `LibraryThumbnailStore` | Keep — thumbnail caching is needed. |
-| `ToolkitScreen` | Keep — model management is already well-designed. |
+| `ToolkitScreen` / `ModelsWorkspaceView` | Keep — model management is already well-designed. |
 | `SettingsScreen` | Keep. |
 | `ActivityCenterSheet` | Keep. |
 | `NavRail` | Remove Studio item. Add Activity badge item. |
@@ -658,7 +659,7 @@ The existing domain types are well-designed and map directly:
 
 | Type | Maps to |
 |---|---|
-| `StudioWorkspaceDraft` | Prompt bar state (prompt, model, settings, references) |
+| `CreationDraft` | Prompt bar state (prompt, model, settings, references) |
 | `ProductTask` | Modality + sub-workflow selection |
 | `WorkflowPlanResult` | Capability adaptation (reference slots, readiness) |
 | `LibraryAsset` | Result display in canvas and library |
@@ -673,5 +674,5 @@ The existing domain types are well-designed and map directly:
 1. **Right-edge filmstrip** — Hailuo has a vertical filmstrip on the right
    edge showing all generated assets. This is useful for quick navigation
    but takes screen width. The current locked phase-1 direction keeps the
-   in-canvas grid and hero preview instead; revisit the filmstrip only if
+   in-canvas grid, pending strip, and modal viewer instead; revisit the filmstrip only if
    later project-density testing shows a real navigation problem.

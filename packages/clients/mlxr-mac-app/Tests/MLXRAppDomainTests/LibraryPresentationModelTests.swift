@@ -140,6 +140,39 @@ func projectSummariesHonorSearchAcrossProjectTitlesAndAssetPrompts() {
 }
 
 @Test
+func nonDefaultEmptyWorkspaceStillAppearsAsProjectSummary() {
+    let now = Date(timeIntervalSince1970: 2_500)
+    let workspaces = [
+        WorkspaceRecord(id: "workspace-a", title: "Default", createdAt: now, lastOpenedAt: now),
+        WorkspaceRecord(id: "workspace-b", title: "Blank Project", createdAt: now, lastOpenedAt: now.addingTimeInterval(30)),
+    ]
+    let assets = [
+        libraryAsset(
+            id: "asset-a1",
+            title: "Existing still",
+            prompt: "A neon city at dusk",
+            modelId: "z-image-turbo-local",
+            task: .imageGenerate,
+            createdAt: now,
+            workspaceId: "workspace-a"
+        )
+    ]
+
+    let presentation = LibraryPresentationModel(
+        assets: assets,
+        workspaces: workspaces,
+        runGroups: [],
+        collections: [],
+        filters: LibraryFilterState(),
+        selectedWorkspaceId: nil,
+        defaultWorkspaceId: "workspace-a"
+    )
+
+    #expect(presentation.projectSummaries.map(\.id) == ["workspace-b", "workspace-a"])
+    #expect(presentation.projectSummary(id: "workspace-b")?.assetCount == 0)
+}
+
+@Test
 func workspaceResolutionFallsBackToRunGroupImportedRecordAndDefaultWorkspace() {
     let now = Date(timeIntervalSince1970: 3_000)
     let workspaces = [
@@ -275,6 +308,49 @@ func projectSummaryPrefersExplicitWorkspaceCoverAsset() {
     #expect(presentation.projectSummary(id: "workspace-a")?.subtitle == "A dramatic castle at dawn")
 }
 
+@Test
+func visibleViewerAssetRespectsCurrentProjectAndFilters() {
+    let now = Date(timeIntervalSince1970: 4_500)
+    let workspaces = [
+        WorkspaceRecord(id: "workspace-a", title: "Castle", createdAt: now, lastOpenedAt: now),
+        WorkspaceRecord(id: "workspace-b", title: "Neon", createdAt: now, lastOpenedAt: now),
+    ]
+    let assets = [
+        libraryAsset(
+            id: "asset-a1",
+            title: "Castle frame",
+            prompt: "An ogre attacking a castle",
+            modelId: "z-image-turbo-local",
+            task: .imageGenerate,
+            createdAt: now,
+            workspaceId: "workspace-a"
+        ),
+        libraryAsset(
+            id: "asset-b1",
+            title: "Neon frame",
+            prompt: "A violinist in neon rain",
+            modelId: "qwen-image-local",
+            task: .imageGenerate,
+            createdAt: now.addingTimeInterval(30),
+            workspaceId: "workspace-b"
+        ),
+    ]
+
+    let projectScoped = LibraryPresentationModel(
+        assets: assets,
+        workspaces: workspaces,
+        runGroups: [],
+        collections: [],
+        filters: .init(query: "castle"),
+        selectedWorkspaceId: "workspace-a",
+        defaultWorkspaceId: "workspace-a"
+    )
+
+    #expect(projectScoped.visibleViewerAsset(for: "asset-a1")?.id == "asset-a1")
+    #expect(projectScoped.visibleViewerAsset(for: "asset-b1") == nil)
+    #expect(projectScoped.viewerAsset(for: "asset-b1")?.id == "asset-b1")
+}
+
 private func libraryAsset(
     id: String,
     origin: LibraryAssetOrigin = .generated,
@@ -305,4 +381,27 @@ private func libraryAsset(
         runGroupId: runGroupId,
         workspaceId: workspaceId
     )
+}
+
+@Test
+func clearingProjectScopedSelectionsLeavesTopLevelFiltersIntact() {
+    var filters = LibraryFilterState(
+        selectedFilter: .videos,
+        selectedModelId: "ltx-2.3-fast-local",
+        selectedTaskRaw: ProductTask.videoGenerate.rawValue,
+        selectedSort: .lastUsed,
+        favoritesOnly: true,
+        selectedCollectionId: "collection-a",
+        query: "fox"
+    )
+
+    filters.clearProjectScopedSelections()
+
+    #expect(filters.selectedFilter == .videos)
+    #expect(filters.selectedModelId == "all")
+    #expect(filters.selectedTaskRaw == "all")
+    #expect(filters.selectedSort == .lastUsed)
+    #expect(filters.favoritesOnly)
+    #expect(filters.selectedCollectionId == nil)
+    #expect(filters.query == "fox")
 }

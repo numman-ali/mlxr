@@ -47,12 +47,19 @@ public struct LibraryBrowserState: Equatable, Sendable {
         workspaceId: String?,
         assetId: String?
     ) {
-        if let workspaceId {
+        switch (workspaceId, assetId) {
+        case let (.some(workspaceId), .some(assetId)):
             selectedWorkspaceId = workspaceId
-        }
-        if let assetId {
             selectedPrimaryAssetId = assetId
             viewerAssetId = assetId
+        case let (.some(workspaceId), .none):
+            openProject(workspaceId)
+        case let (.none, .some(assetId)):
+            selectedWorkspaceId = nil
+            selectedPrimaryAssetId = assetId
+            viewerAssetId = assetId
+        case (.none, .none):
+            clearProjectSelection()
         }
     }
 
@@ -72,7 +79,7 @@ public struct LibraryBrowserState: Equatable, Sendable {
         isViewerAssetVisible: Bool
     ) {
         if let selectedPrimaryAssetId, !visiblePrimaryAssetIds.contains(selectedPrimaryAssetId) {
-            self.selectedPrimaryAssetId = visiblePrimaryAssetIds.first
+            self.selectedPrimaryAssetId = nil
         }
         if !isViewerAssetVisible {
             viewerAssetId = nil

@@ -12,9 +12,8 @@ Current implementation status:
 - native Swift package scaffold exists in `packages/clients/mlxr-mac-app/`
 - runtime bridge, feature shells, and early tests are real
 - the app now has a shared global composer, a project-first `Library`, rail-
-  based `Activity`, guided starter-model setup, and a transitional internal
-  `Studio` seam that should disappear from the final visible information
-  architecture
+  based `Activity`, guided starter-model setup, and no separate `Studio`
+  destination in the visible or internal shell
 - polish, onboarding, packaging, and release hardening still remain
 
 Its job is to make the current runtime accessible to non-technical Mac users
@@ -93,7 +92,7 @@ destination.
 - one continuity surface for progress, outputs, and reuse
 - generated outputs plus imported source assets
 - run-group-aware asset sets instead of a raw job list
-- uniform `4:5` asset tiles in the browser
+- uniform square asset tiles in the browser
 - large in-window modal preview instead of a sidebar inspector
 - quick reveal in Finder
 - fast reuse into the shared composer for edit, animate, guide, and retake
@@ -104,7 +103,7 @@ destination.
 - one shared creation surface for image and video workflows
 - visible on `Home` and `Library`
 - runtime-led planning and submission through the shared workflow seam
-- model-aware presets and advanced controls behind disclosure
+- model-aware presets and compact control pills in the floating bar
 - current progress stays in context instead of pushing the user to a separate
   jobs page
 
@@ -133,7 +132,7 @@ Map them like this:
 
 Prompt enhancement belongs in the app, not in the core runtime contract.
 
-The v1 UX should expose it as an optional helper with three modes:
+The product model keeps it as an optional helper with three modes:
 
 - `Off`
 - `Suggest`
@@ -143,8 +142,10 @@ Default: `Suggest`
 
 Rules:
 
-- original prompt text stays visible
-- the user can accept or reject the suggestion
+- the current shipped app exposes prompt-helper mode in `Settings`
+- inline composer suggestion UI is later polish, not current product truth
+- original prompt text stays visible whenever inline suggestions are surfaced
+- the user can accept or reject the suggestion when inline suggestions are surfaced
 - core generation or edit must still work when the helper is unavailable
 - the helper is a host-side pipeline, not a required inference dependency
 

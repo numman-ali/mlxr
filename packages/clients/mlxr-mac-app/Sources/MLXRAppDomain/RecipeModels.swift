@@ -4,7 +4,6 @@ import Foundation
 
 public enum Destination: String, CaseIterable, Identifiable, Sendable, Codable {
     case home
-    case studio
     case library
     case models
     case settings
@@ -14,7 +13,6 @@ public enum Destination: String, CaseIterable, Identifiable, Sendable, Codable {
     public var title: String {
         switch self {
         case .home: "Home"
-        case .studio: "Create"
         case .library: "Library"
         case .models: "Models"
         case .settings: "Settings"
@@ -24,7 +22,6 @@ public enum Destination: String, CaseIterable, Identifiable, Sendable, Codable {
     public var icon: String {
         switch self {
         case .home: "house.fill"
-        case .studio: "sparkles.rectangle.stack.fill"
         case .library: "photo.stack.fill"
         case .models: "square.stack.3d.up.fill"
         case .settings: "gearshape.fill"

@@ -21,35 +21,58 @@ struct LibraryViewerSheet: View {
 
     @State private var previewURL: URL?
     @State private var isLoadingPreview = false
+    @State private var previewRequestToken = UUID()
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                header
-                previewSection
+        GeometryReader { proxy in
+            let usesStackedLayout = proxy.size.width < 1_060
+
+            Group {
+                if usesStackedLayout {
+                    VStack(spacing: 0) {
+                        header
+                        Divider()
+                        previewSection
+                            .frame(maxWidth: .infinity)
+                            .frame(height: max((proxy.size.height * 0.44).rounded(.down), 280))
+                        Divider()
+                        metadataPane
+                    }
+                } else {
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            header
+                            previewSection
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                        Divider()
+
+                        metadataPane
+                            .frame(width: 320)
+                            .background(MLXRColor.canvasRaised)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
-                    metadataHeader
-                    actionButtons
-                    metadataRows
-                    collectionsSection
-                    relatedAssetsSection
-                }
-                .padding(.horizontal, MLXRSpacing.xl)
-                .padding(.vertical, MLXRSpacing.xl)
+            .background(AdaptiveBackground())
+            .task(id: asset.id) {
+                await loadPreview()
             }
-            .frame(width: 360)
-            .background(MLXRColor.canvasRaised)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AdaptiveBackground())
-        .task(id: asset.id) {
-            await loadPreview()
+    }
+
+    private var metadataPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
+                metadataHeader
+                actionButtons
+                metadataRows
+                collectionsSection
+                relatedAssetsSection
+            }
+            .padding(.horizontal, MLXRSpacing.xl)
+            .padding(.vertical, MLXRSpacing.lg)
         }
     }
 
@@ -79,8 +102,8 @@ struct LibraryViewerSheet: View {
             .buttonStyle(.borderedProminent)
         }
         .padding(.horizontal, MLXRSpacing.xl)
-        .padding(.top, MLXRSpacing.lg)
-        .padding(.bottom, MLXRSpacing.md)
+        .padding(.top, MLXRSpacing.md)
+        .padding(.bottom, MLXRSpacing.sm)
     }
 
     @ViewBuilder
@@ -109,7 +132,7 @@ struct LibraryViewerSheet: View {
             }
         }
         .padding(.horizontal, MLXRSpacing.xl)
-        .padding(.bottom, MLXRSpacing.lg)
+        .padding(.bottom, MLXRSpacing.md)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -346,8 +369,17 @@ struct LibraryViewerSheet: View {
     }
 
     private func loadPreview() async {
+        let requestToken = UUID()
+        previewRequestToken = requestToken
         isLoadingPreview = true
-        previewURL = await onMaterialize(asset)
+        previewURL = nil
+
+        let resolvedPreviewURL = await onMaterialize(asset)
+        guard !Task.isCancelled, previewRequestToken == requestToken else {
+            return
+        }
+
+        previewURL = resolvedPreviewURL
         isLoadingPreview = false
     }
 }

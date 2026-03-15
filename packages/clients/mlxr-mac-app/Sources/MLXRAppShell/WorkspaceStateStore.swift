@@ -5,6 +5,7 @@ public struct WorkspaceStateStore {
     private let fileManager: FileManager
     private let rootDirectory: URL
     private let manifestURL: URL
+    private let legacyManifestURL: URL
 
     public init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -17,17 +18,26 @@ public struct WorkspaceStateStore {
             )) ?? fileManager.temporaryDirectory
         let root = applicationSupport
             .appending(path: "MLXR", directoryHint: .isDirectory)
-            .appending(path: "StudioState", directoryHint: .isDirectory)
+            .appending(path: "CreationState", directoryHint: .isDirectory)
         self.rootDirectory = root
         self.manifestURL = root.appending(path: "app-state.json")
+        self.legacyManifestURL = applicationSupport
+            .appending(path: "MLXR", directoryHint: .isDirectory)
+            .appending(path: "StudioState", directoryHint: .isDirectory)
+            .appending(path: "app-state.json")
         try? ensureDirectories()
     }
 
     public func load() throws -> AppPresentationState {
-        guard fileManager.fileExists(atPath: manifestURL.path()) else {
+        let sourceURL: URL
+        if fileManager.fileExists(atPath: manifestURL.path()) {
+            sourceURL = manifestURL
+        } else if fileManager.fileExists(atPath: legacyManifestURL.path()) {
+            sourceURL = legacyManifestURL
+        } else {
             return AppPresentationState()
         }
-        let data = try Data(contentsOf: manifestURL)
+        let data = try Data(contentsOf: sourceURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(AppPresentationState.self, from: data)

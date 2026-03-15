@@ -28,14 +28,14 @@ The app is intentionally:
   - project-first browsing and continuity
   - generated outputs plus imported assets
   - run-group-aware asset sets
-  - uniform `4:5` browser tiles with a large in-window modal preview
+  - uniform square browser tiles with a large in-window modal preview
   - keyboard-driven selection, preview, and continue-in-composer actions
 - `Composer`
   - runtime-led planning and submission over the shared workflow seam
   - image generation and editing
   - video generation, animation, audio-conditioned, guided-video, interpolation, and retake flows
-  - model-aware presets and advanced controls behind disclosure
-  - shared draft behavior instead of a separate top-level Studio destination
+  - model-aware presets and compact control pills in the floating bar
+  - shared creation draft behavior instead of a separate top-level Studio destination
 - `Models`
   - curated installs
   - first-run starter-model setup
@@ -71,16 +71,9 @@ If you are extending the app, prefer the current product path:
 Do not default to extending migration-only seams just because they still
 compile.
 
-Current migration-only examples:
-
-- `StudioScreen`
-- `StudioSidebarView`
-- `StudioInspectorView`
-- `StudioCanvasView`
-- `LibraryFilterRail`
-
-Those files are still present to support the cutover, but they are not the
-default home for new feature work.
+The older Studio-era panes and the old filter rail have been retired. Build on
+the current shell, composer, and project-first Library surfaces instead of
+recreating those older seams.
 
 ## Development
 

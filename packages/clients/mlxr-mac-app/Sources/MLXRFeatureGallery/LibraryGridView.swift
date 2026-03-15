@@ -9,10 +9,11 @@ struct LibraryGridView: View {
     let onOpen: (String) -> Void
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
     let onGridMetricsChange: (Int) -> Void
+    @Environment(\.mlxrBottomOverlayInset) private var bottomOverlayInset
 
-    private let minTileWidth: CGFloat = 164
-    private let maxTileWidth: CGFloat = 228
-    private let tileSpacing = MLXRSpacing.md
+    private let minTileWidth: CGFloat = 148
+    private let maxTileWidth: CGFloat = 204
+    private let tileSpacing = MLXRSpacing.sm
 
     var body: some View {
         GeometryReader { proxy in
@@ -35,7 +36,7 @@ struct LibraryGridView: View {
                     }
                 }
                 .padding(.horizontal, MLXRSpacing.lg)
-                .padding(.bottom, MLXRSpacing.xl)
+                .padding(.bottom, max(MLXRSpacing.xl, bottomOverlayInset))
             }
             .onAppear {
                 onGridMetricsChange(metrics.columnCount)
@@ -95,12 +96,22 @@ private struct LibraryTileView: View {
                 .aspectRatio(thumbnailAspectRatio, contentMode: .fill)
                 .clipped()
 
-                VStack(alignment: .trailing, spacing: MLXRSpacing.xs) {
-                    if group.primaryAsset.isFavorite {
-                        Image(systemName: "star.fill")
-                            .foregroundStyle(MLXRColor.brandWarm)
-                            .padding(.top, MLXRSpacing.sm)
-                            .padding(.trailing, MLXRSpacing.sm)
+                VStack(spacing: 0) {
+                    HStack(alignment: .top) {
+                        if let runStateLabel {
+                            StatusPill(label: runStateLabel, tint: runStateTint)
+                                .padding(.top, MLXRSpacing.sm)
+                                .padding(.leading, MLXRSpacing.sm)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if group.primaryAsset.isFavorite {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(MLXRColor.brandWarm)
+                                .padding(.top, MLXRSpacing.sm)
+                                .padding(.trailing, MLXRSpacing.sm)
+                        }
                     }
 
                     Spacer()
@@ -125,6 +136,32 @@ private struct LibraryTileView: View {
             Button("Select") { onSelect() }
         }
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var runStateLabel: String? {
+        switch group.runState {
+        case .queued:
+            "Queued"
+        case .running:
+            "Generating"
+        case .failed:
+            "Failed"
+        case .completed, .cancelled, .none:
+            nil
+        }
+    }
+
+    private var runStateTint: Color {
+        switch group.runState {
+        case .queued:
+            MLXRColor.brandWarm
+        case .running:
+            MLXRColor.brandPrimary
+        case .failed:
+            MLXRColor.brandDanger
+        case .completed, .cancelled, .none:
+            MLXRColor.brandSecondary
+        }
     }
 
     private var accessibilityLabel: String {

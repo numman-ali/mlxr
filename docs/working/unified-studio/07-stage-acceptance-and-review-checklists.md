@@ -14,10 +14,6 @@ Every stage must preserve these rules:
 - standalone audio creation is not implied or exposed
 - `swiftui-pro` review is mandatory, not optional
 
-During migration, the internal `.studio` fallback seam may survive temporarily,
-but it must stay hidden from the visible rail and must not regain a separate
-prompt or submit path.
-
 ## SwiftUI-Pro Review Protocol
 
 Before a stage is approved, review the touched files against the relevant `swiftui-pro` references:
@@ -65,7 +61,7 @@ Accept when:
 
 Review questions:
 
-- Does any screen still behave like a hidden full-screen `Studio` owner?
+- Does any screen still behave like a hidden full-screen creation owner instead of sharing the shell composer?
 - Is the composer rendered once at the shell level instead of being copied into multiple screens?
 - Are unsupported states explained using runtime readiness rather than custom heuristics?
 
@@ -76,7 +72,7 @@ Accept when:
 - the user-facing project model is backed by `WorkspaceRecord`
 - results are grouped by run group inside a project
 - generating from `Home` lands in project detail after acceptance
-- recreate, edit, animate, and use-as-reference actions mutate the shared draft
+- shipped reuse actions such as edit, animate, and use-as-reference mutate the shared draft
 
 Review questions:
 

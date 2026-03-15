@@ -39,6 +39,36 @@ func focusedRouteRestoresWorkspaceAndViewer() {
 }
 
 @Test
+func focusedProjectRouteClearsAssetAndViewerState() {
+    var state = LibraryBrowserState(
+        selectedWorkspaceId: "workspace-a",
+        selectedPrimaryAssetId: "asset-a",
+        viewerAssetId: "asset-a"
+    )
+
+    state.applyFocusedRoute(workspaceId: "workspace-b", assetId: nil)
+
+    #expect(state.selectedWorkspaceId == "workspace-b")
+    #expect(state.selectedPrimaryAssetId == nil)
+    #expect(state.viewerAssetId == nil)
+}
+
+@Test
+func clearingFocusedRouteResetsProjectState() {
+    var state = LibraryBrowserState(
+        selectedWorkspaceId: "workspace-a",
+        selectedPrimaryAssetId: "asset-a",
+        viewerAssetId: "asset-a"
+    )
+
+    state.applyFocusedRoute(workspaceId: nil, assetId: nil)
+
+    #expect(state.selectedWorkspaceId == nil)
+    #expect(state.selectedPrimaryAssetId == nil)
+    #expect(state.viewerAssetId == nil)
+}
+
+@Test
 func importedAssetsOpenWorkspaceAndViewer() {
     let imported = ImportedAssetRecord(
         id: "imported-1",
@@ -68,6 +98,24 @@ func removingSelectedAssetClearsSelectionAndViewer() {
     )
 
     state.removeAsset("asset-a")
+
+    #expect(state.selectedWorkspaceId == "workspace-a")
+    #expect(state.selectedPrimaryAssetId == nil)
+    #expect(state.viewerAssetId == nil)
+}
+
+@Test
+func pruningInvisibleSelectionClearsSelectionInsteadOfJumping() {
+    var state = LibraryBrowserState(
+        selectedWorkspaceId: "workspace-a",
+        selectedPrimaryAssetId: "asset-a",
+        viewerAssetId: nil
+    )
+
+    state.pruneVisibleState(
+        visiblePrimaryAssetIds: ["asset-b", "asset-c"],
+        isViewerAssetVisible: false
+    )
 
     #expect(state.selectedWorkspaceId == "workspace-a")
     #expect(state.selectedPrimaryAssetId == nil)

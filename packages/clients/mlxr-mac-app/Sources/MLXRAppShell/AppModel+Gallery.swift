@@ -2,12 +2,53 @@ import Foundation
 import MLXRAppDomain
 
 extension MLXRAppModel {
+    public var defaultWorkspaceId: String {
+        if workspaces.contains(where: { $0.id == "default-workspace" }) {
+            return "default-workspace"
+        }
+        return workspaces.first?.id ?? activeWorkspaceId
+    }
+
+    public func resolvedWorkspaceId(for asset: LibraryAsset) -> String {
+        if let workspaceId = asset.workspaceId {
+            return workspaceId
+        }
+        if let runGroupId = asset.runGroupId,
+           let runGroup = runGroups.first(where: { $0.id == runGroupId })
+        {
+            return runGroup.workspaceId
+        }
+        if let importedWorkspaceId = asset.importedAsset?.workspaceId {
+            return importedWorkspaceId
+        }
+        return defaultWorkspaceId
+    }
+
+    public var hasRunnableCreationModels: Bool {
+        catalog.installedItems.contains { !$0.tasks.isEmpty }
+    }
+
     public var hasModelsReady: Bool {
-        !catalog.installedItems.isEmpty
+        hasRunnableCreationModels
     }
 
     public var hasContent: Bool {
         !libraryAssets.isEmpty
+    }
+
+    public var preferredLibraryWorkspaceId: String? {
+        if let selectedLibraryWorkspaceId,
+           libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == selectedLibraryWorkspaceId })
+        {
+            return selectedLibraryWorkspaceId
+        }
+        if libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == activeWorkspaceId }) {
+            return activeWorkspaceId
+        }
+        if libraryAssets.contains(where: { resolvedWorkspaceId(for: $0) == defaultWorkspaceId }) {
+            return defaultWorkspaceId
+        }
+        return libraryAssets.first.map(resolvedWorkspaceId(for:))
     }
 
     public var totalCreationCount: Int {

@@ -9,65 +9,62 @@ struct ProjectHeaderView: View {
     let onSetCover: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: MLXRSpacing.md) {
-            HStack(alignment: .center, spacing: MLXRSpacing.lg) {
-                projectCover
+        HStack(alignment: .center, spacing: MLXRSpacing.md) {
+            projectCover
 
-                VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
-                    Text(project.title)
-                        .font(MLXRType.titleLarge)
-                        .foregroundStyle(MLXRColor.textPrimary)
+            VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
+                Text(project.title)
+                    .font(MLXRType.titleLarge)
+                    .foregroundStyle(MLXRColor.textPrimary)
 
-                    Text(project.subtitle)
-                        .font(MLXRType.bodySmall)
-                        .foregroundStyle(MLXRColor.textSecondary)
-                        .lineLimit(2)
+                Text(project.subtitle)
+                    .font(MLXRType.captionLarge)
+                    .foregroundStyle(MLXRColor.textSecondary)
+                    .lineLimit(2)
 
-                    HStack(spacing: MLXRSpacing.xs) {
-                        StatusPill(label: "\(project.assetCount) assets", tint: MLXRColor.brandSecondary)
-                        if project.runGroupCount > 0 {
-                            StatusPill(label: "\(project.runGroupCount) sets", tint: MLXRColor.brandWarm)
-                        }
-                        if project.videoCount > 0 {
-                            StatusPill(label: "\(project.videoCount) video", tint: MLXRColor.brandPrimary)
-                        }
+                HStack(spacing: MLXRSpacing.xs) {
+                    StatusPill(label: "\(project.assetCount) assets", tint: MLXRColor.brandSecondary)
+                    if project.runGroupCount > 0 {
+                        StatusPill(label: "\(project.runGroupCount) sets", tint: MLXRColor.brandWarm)
                     }
-                }
-
-                Spacer(minLength: 0)
-
-                if let onSetCover, let selectedAsset {
-                    VStack(alignment: .trailing, spacing: MLXRSpacing.xxs) {
-                        Button("Use selected image as cover", action: onSetCover)
-                            .buttonStyle(.bordered)
-
-                        Text(selectedAsset.displayTitle)
-                            .font(MLXRType.captionLarge)
-                            .foregroundStyle(MLXRColor.textTertiary)
-                            .lineLimit(1)
+                    if project.videoCount > 0 {
+                        StatusPill(label: "\(project.videoCount) video", tint: MLXRColor.brandPrimary)
                     }
                 }
             }
 
-            Divider()
+            Spacer(minLength: 0)
+
+            if let onSetCover, let selectedAsset {
+                VStack(alignment: .trailing, spacing: MLXRSpacing.xxs) {
+                    Button("Set cover", action: onSetCover)
+                        .buttonStyle(.bordered)
+
+                    Text(selectedAsset.displayTitle)
+                        .font(MLXRType.captionLarge)
+                        .foregroundStyle(MLXRColor.textTertiary)
+                        .lineLimit(1)
+                }
+            }
         }
-        .padding(.horizontal, MLXRSpacing.xl)
-        .padding(.top, MLXRSpacing.md)
+        .padding(.horizontal, MLXRSpacing.lg)
+        .padding(.top, MLXRSpacing.sm)
+        .padding(.bottom, MLXRSpacing.sm)
     }
 
     @ViewBuilder
     private var projectCover: some View {
         if let heroAsset = project.heroAsset {
             LibraryAssetThumbnailView(asset: heroAsset, onMaterialize: onMaterialize)
-                .frame(width: 88, height: 88)
+                .frame(width: 72, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous))
         } else {
             RoundedRectangle(cornerRadius: MLXRRadius.md, style: .continuous)
                 .fill(MLXRColor.surfaceCard)
-                .frame(width: 88, height: 88)
+                .frame(width: 72, height: 72)
                 .overlay {
                     Image(systemName: "sparkles.rectangle.stack")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(MLXRColor.brandPrimary)
                 }
         }

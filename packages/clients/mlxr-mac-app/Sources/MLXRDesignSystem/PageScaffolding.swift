@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct MLXRBottomOverlayInsetKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+public extension EnvironmentValues {
+    var mlxrBottomOverlayInset: CGFloat {
+        get { self[MLXRBottomOverlayInsetKey.self] }
+        set { self[MLXRBottomOverlayInsetKey.self] = newValue }
+    }
+}
+
 public struct CompactPageHeader<Content: View>: View {
     private let title: String
     private let subtitle: String?
@@ -16,8 +27,8 @@ public struct CompactPageHeader<Content: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
-            HStack(alignment: .top, spacing: MLXRSpacing.lg) {
+        VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
+            HStack(alignment: .top, spacing: MLXRSpacing.md) {
                 VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
                     Text(title)
                         .font(MLXRType.titleLarge)
@@ -52,7 +63,7 @@ public struct DenseSectionSurface<Content: View>: View {
         VStack(alignment: .leading, spacing: MLXRSpacing.md) {
             content
         }
-        .padding(MLXRSpacing.lg)
+        .padding(MLXRSpacing.md)
         .background(
             RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)
                 .fill(MLXRColor.surfaceCard)

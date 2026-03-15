@@ -45,12 +45,13 @@ public struct SettingsScreen: View {
             AdaptiveBackground()
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: MLXRSpacing.xl) {
-                    FeatureHeader(
-                        eyebrow: "Settings",
-                        title: "Runtime, models, and import",
-                        subtitle: "This is where the app stays honest about runtime state, installs curated defaults, and opens the advanced import path without pretending everything is equally ready."
-                    )
+                VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+                    CompactPageHeader(
+                        title: "Settings",
+                        subtitle: "Runtime status, prompt-helper defaults, and the advanced import path live here without turning this screen into a second control center."
+                    ) {
+                        EmptyView()
+                    }
 
                     if let error {
                         InlineErrorBanner(error, onDismiss: onDismissError)
@@ -67,7 +68,8 @@ public struct SettingsScreen: View {
                     advancedImportSection
                 }
                 .padding(.horizontal, MLXRSpacing.xl)
-                .padding(.vertical, MLXRSpacing.xl)
+                .padding(.top, MLXRSpacing.lg)
+                .padding(.bottom, MLXRSpacing.xl)
             }
         }
     }
@@ -75,10 +77,12 @@ public struct SettingsScreen: View {
     // MARK: - Runtime
 
     private var runtimeSection: some View {
-        GlassCard(
-            title: "Runtime",
-            subtitle: "The app is a client. The Python runtime and daemon stay the source of truth, while model installs and removals now live in the dedicated Models screen."
-        ) {
+        DenseSectionSurface {
+            sectionLead(
+                title: "Runtime",
+                subtitle: "The app stays a client. The Python runtime and daemon remain the source of truth, while install and removal work lives in Models."
+            )
+
             if let runtimeStatus {
                 HStack(spacing: MLXRSpacing.sm) {
                     StatusPill(
@@ -128,10 +132,12 @@ public struct SettingsScreen: View {
     // MARK: - Prompt Helper
 
     private var promptHelperSection: some View {
-        GlassCard(
-            title: "Prompt helper",
-            subtitle: "Prompt enhancement belongs in the app, not in the core runtime contract. This is a placeholder for the first local helper track."
-        ) {
+        DenseSectionSurface {
+            sectionLead(
+                title: "Prompt helper",
+                subtitle: "Prompt enhancement belongs in the app, not in the core runtime contract."
+            )
+
             CreativeControlSegment(
                 label: "Mode",
                 selection: $promptHelperMode,
@@ -147,10 +153,12 @@ public struct SettingsScreen: View {
     // MARK: - Advanced Import
 
     private var advancedImportSection: some View {
-        GlassCard(
-            title: "Advanced import",
-            subtitle: "Use the existing runtime source inspect, register, and convert routes rather than inventing a parallel app-only model pipeline."
-        ) {
+        DenseSectionSurface {
+            sectionLead(
+                title: "Advanced import",
+                subtitle: "Use the existing runtime inspect, register, and convert routes rather than inventing a parallel app-only model pipeline."
+            )
+
             CreativeControlSegment(
                 label: "Mode",
                 selection: $draft.mode,
@@ -223,6 +231,17 @@ public struct SettingsScreen: View {
             if !inspectionResults.isEmpty {
                 inspectionResultsView
             }
+        }
+    }
+
+    private func sectionLead(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: MLXRSpacing.xxs) {
+            Text(title)
+                .font(MLXRType.titleSmall)
+                .foregroundStyle(MLXRColor.textPrimary)
+            Text(subtitle)
+                .font(MLXRType.bodySmall)
+                .foregroundStyle(MLXRColor.textSecondary)
         }
     }
 

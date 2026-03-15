@@ -1,6 +1,6 @@
 # MLXR Current Status
 
-Last updated: 2026-03-14
+Last updated: 2026-03-15
 
 ## Snapshot
 
@@ -31,7 +31,7 @@ What is not true yet:
 | `mlxr` CLI | real | first-party thin client with `generate`, `serve`, `doctor`, `models`, and `feedback` |
 | `ltx-desktop` adapter | planned | compatibility seam, not yet implemented |
 | Comfy adapter | planned | thin runtime-backed adapter, not yet implemented |
-| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a shared global composer, project-first `Library`, hidden legacy `Studio` fallback only, rail-based `Activity`, guided model installs, and a real dev `.app` bundle path for macOS/Peekaboo testing |
+| First-party Mac app | early implementation | buildable native Swift package over the shared runtime, now with a shared floating composer, compact project-first `Library`, square-tile project detail with modal viewer, no visible or hidden `Studio` destination, rail-based `Activity`, guided model installs, and a real dev `.app` bundle path for macOS/Peekaboo testing |
 | Embedded first-party access | planned later | Swift-side host boundary work |
 
 ## Family Truth

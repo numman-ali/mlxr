@@ -26,6 +26,12 @@ public struct LibraryFilterState: Hashable, Sendable {
         self.selectedCollectionId = selectedCollectionId
         self.query = query
     }
+
+    public mutating func clearProjectScopedSelections() {
+        selectedModelId = "all"
+        selectedTaskRaw = "all"
+        selectedCollectionId = nil
+    }
 }
 
 public struct ProjectSummaryPresentation: Identifiable, Hashable, Sendable {
@@ -166,10 +172,19 @@ public struct LibraryPresentationModel: Sendable {
         groups.map { $0.primaryAsset.id }
     }
 
+    public var visibleAssetIds: [String] {
+        filteredAssets.map(\.id)
+    }
+
     public func group(containing assetId: String) -> LibraryAssetGroupPresentation? {
         groups.first { group in
             group.assets.contains(where: { $0.id == assetId })
         }
+    }
+
+    public func visibleViewerAsset(for assetId: String?) -> LibraryAsset? {
+        guard let assetId else { return nil }
+        return filteredAssets.first(where: { $0.id == assetId })
     }
 
     public func viewerAsset(for assetId: String?) -> LibraryAsset? {
@@ -185,7 +200,11 @@ public struct LibraryPresentationModel: Sendable {
 
     private func projectSummary(for workspace: WorkspaceRecord) -> ProjectSummaryPresentation? {
         let workspaceAssets = workspaceScopedAssets(workspace.id)
-        guard !workspaceAssets.isEmpty || workspace.id == selectedWorkspaceId else {
+        guard
+            !workspaceAssets.isEmpty
+                || workspace.id == selectedWorkspaceId
+                || workspace.id != defaultWorkspaceId
+        else {
             return nil
         }
         let sortedAssets = workspaceAssets.sorted(by: sortComparator)
@@ -221,6 +240,12 @@ public struct LibraryPresentationModel: Sendable {
     }
 
     private func projectMatchesFilters(_ summary: ProjectSummaryPresentation) -> Bool {
+        let workspaceAssets = workspaceScopedAssets(summary.id)
+        if !workspaceAssets.isEmpty,
+           workspaceAssets.contains(where: matchesTopLevelProjectFilters(_:)) == false
+        {
+            return false
+        }
         let trimmedQuery = normalizedQuery
         if trimmedQuery.isEmpty {
             return true
@@ -228,8 +253,12 @@ public struct LibraryPresentationModel: Sendable {
         if summary.title.lowercased().contains(trimmedQuery) {
             return true
         }
-        let workspaceAssets = workspaceScopedAssets(summary.id)
         return workspaceAssets.contains { $0.searchableText.contains(trimmedQuery) }
+    }
+
+    private func matchesTopLevelProjectFilters(_ asset: LibraryAsset) -> Bool {
+        filters.selectedFilter.includes(asset)
+            && (!filters.favoritesOnly || asset.isFavorite)
     }
 
     private func workspaceScopedAssets(_ workspaceId: String?) -> [LibraryAsset] {

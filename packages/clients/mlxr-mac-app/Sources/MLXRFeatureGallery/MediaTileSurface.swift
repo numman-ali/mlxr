@@ -22,18 +22,14 @@ struct MediaTileSurface<Content: View>: View {
     var body: some View {
         Button(action: action) {
             content()
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(
-                            isSelected ? MLXRColor.brandPrimary : MLXRColor.surfaceCard,
-                            lineWidth: isSelected ? 2 : 1
+                            isSelected ? MLXRColor.brandPrimary : MLXRColor.borderSubtle.opacity(0.16),
+                            lineWidth: isSelected ? 2 : 0.75
                         )
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(MLXRColor.canvasRaised)
-                )
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

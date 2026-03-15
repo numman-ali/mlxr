@@ -24,7 +24,7 @@ No new database type is introduced for the redesign.
 - The default initial record may still exist internally as `default-workspace`, but it should not be surfaced to users as "Current Workspace."
 - If the active project still has its untouched default title, the first accepted run renames it from the first prompt headline.
 - `New Project` creates a fresh `WorkspaceRecord`, switches the shell to it, clears project-specific references, and preserves only safe composer defaults such as last modality and last model family.
-- Users can rename the project from the project header.
+- Manual project renaming is outside this compact tranche. The visible header stays dense and browse-first.
 
 ## Where The Canvas Lives
 
@@ -42,52 +42,50 @@ When the user submits from `Home`, the app transitions into the active project's
 
 Project detail shows, in order:
 
-1. project header
-2. current run group card if work is running
-3. latest hero result or latest run group
-4. recent run groups
-5. earlier run groups
-6. imported source assets section when the project has imported references
+1. compact project header
+2. inline pending-run strip for queued, running, or failed accepted work that has not materialized into visible assets yet
+3. grouped square-tile result grid
+4. modal viewer for full-aspect preview and action-heavy detail
 
-The canvas is run-group aware, not raw-job aware.
+The canvas is run-group aware, not raw-job aware, but the dense grid is now the primary browsing surface rather than a hero-preview stack.
 
 ## Run Group Presentation
 
 Each run group shows:
 
-- media thumbnails
-- prompt headline
-- compact metadata line
-- source-reference count when relevant
-- state when queued, running, failed, or completed
-- inline actions
+- square media thumbnails
+- prompt/title context through the tile label or viewer metadata
+- count badge when a run group contains multiple outputs
+- state badge when the accepted work is queued, running, or failed
+- viewer actions instead of a heavy inline action row
 
-Primary inline actions are:
+Primary shipped actions are:
 
-- `Re-create`
 - `Edit`
 - `Animate`
 - `Use as reference`
 - `Reveal in Finder`
-- `Delete`
 
-These actions mutate the shared composer draft rather than navigating to a separate creation screen.
+A dedicated `Re-create` button remains later polish, and generated result-group deletion is still deferred. The current shipped reuse actions mutate the shared composer draft, expand the floating composer, and keep the user inside the current project context. Imported assets may still be removed from the library from the viewer.
 
-## Hero Behavior
+## Focus And Viewer Behavior
 
-- Clicking a thumbnail promotes that asset into the hero preview.
-- The hero preview is scoped to the currently opened project.
-- Only the hero and visible thumbnails should instantiate heavy media players.
-- The hero may reuse the existing modal viewer for larger playback and image preview.
+- Single-clicking a thumbnail opens the modal viewer.
+- The grid keeps square density; full aspect ratio belongs in the viewer.
+- The project cover can be updated from the viewer using the currently focused asset.
+- Only the visible viewer surface should instantiate heavy media playback.
 
 ## Imported Asset Behavior
 
 Imported assets belong to the current project when imported from project detail.
 
-When import starts from the top-level library browser, the app must either:
+When import starts from the top-level library browser, the app must not visibly
+jump into a project before the file picker succeeds.
 
-- attach the import to the active project, or
-- ask the user to create or choose a target project before finalizing
+After the user actually chooses source files, the app may:
+
+- attach the import to the currently opened project, or
+- import against a deferred project id and only materialize/select that project after assets really exist
 
 Imports should not silently float outside project context.
 
@@ -97,9 +95,10 @@ Do not add a permanent right-edge filmstrip in the first redesign pass.
 
 The project canvas already has:
 
-- hero preview
+- compact header
+- pending strip for accepted work that has not rendered yet
 - grouped result history
-- direct actions back into the composer
+- direct viewer actions back into the composer
 
 That is enough to ship the new mental model before adding more chrome.
 
@@ -108,6 +107,7 @@ That is enough to ship the new mental model before adding more chrome.
 - A user can understand "where their work lives" as a project without learning repo terms.
 - Results, progress, and reuse actions stay attached to the active project.
 - Creating from `Home` lands in project detail instead of an orphaned temporary canvas.
+- Accepted work that has not produced visible assets yet still appears inline in project detail.
 - The implementation uses `WorkspaceRecord` plus `RunGroupRecord`, not a parallel project persistence model.
 
 ## SwiftUI-Pro Review Checklist
@@ -116,7 +116,7 @@ Files to review:
 
 - project-detail canvas views under `packages/clients/mlxr-mac-app/Sources/MLXRFeatureGallery/`
 - any project-summary presentation model in `MLXRAppDomain` or `MLXRAppShell`
-- any replacement for `StudioCanvasView`
+- the project-detail canvas views under `MLXRFeatureGallery`
 
 Reference categories:
 

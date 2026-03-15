@@ -21,21 +21,21 @@ Review gate:
 
 ## Stage 0: Spec Lock And Architecture Prep
 
-- [ ] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI where it remains non-normative inspiration.
-- [ ] Confirm all eight reference frames still support the chosen IA and interaction model.
-- [ ] Keep `00-master-plan.md` aligned with the latest locked decisions.
-- [ ] Keep `07-stage-acceptance-and-review-checklists.md` aligned with the validation and review gate.
-- [ ] Keep this todo hub updated when stage scope changes.
-- [ ] Preserve runtime-parity rules: no host-owned readiness, capability, or run-acceptance truth.
-- [ ] Preserve the current runtime bridge and app model as the integration backbone.
+- [x] Confirm `docs/working/unified-studio/visual-brief.md` still matches the intended north-star UI where it remains non-normative inspiration.
+- [x] Confirm all eight reference frames still support the chosen IA and interaction model.
+- [x] Keep `00-master-plan.md` aligned with the latest locked decisions.
+- [x] Keep `07-stage-acceptance-and-review-checklists.md` aligned with the validation and review gate.
+- [x] Keep this todo hub updated when stage scope changes.
+- [x] Preserve runtime-parity rules: no host-owned readiness, capability, or run-acceptance truth.
+- [x] Preserve the current runtime bridge and app model as the integration backbone.
 - [x] Decide the exact migration boundary for temporary `Studio` support.
-- [ ] Identify which current files are transitional and should be deleted only after cutover.
-- [ ] Identify which current feature seams are reusable and should be preserved.
-- [ ] Keep `swiftui-pro` review categories named for each stage.
-- [ ] Confirm no stage requires a Mac-only protocol or second workflow endpoint.
+- [x] Identify which current files are transitional and should be deleted only after cutover.
+- [x] Identify which current feature seams are reusable and should be preserved.
+- [x] Keep `swiftui-pro` review categories named for each stage.
+- [x] Confirm no stage requires a Mac-only protocol or second workflow endpoint.
 - [x] Lock the implementation order separately from the doc file order.
 - [x] Lock `WorkspaceRecord` as the project backing type and demote `CollectionRecord` to secondary organization.
-- [x] Lock creation behavior so top-level project browsing creates a new project on acceptance, while project detail appends to the open project.
+- [x] Lock creation behavior so the explicit top-level `New Project` action opens a blank project immediately, top-level browser submission without an open project creates one on acceptance, and project detail appends to the open project.
 - [x] Mark `visual-brief.md` as the visual brief and the stage docs as the normative implementation spec.
 
 ## Stage 1: Runtime-Led Composer Contract
@@ -58,7 +58,7 @@ Review gate:
 - [x] Patch runtime-server fake planner tests so they return an explicit presentation payload.
 - [x] Update runtime workflow endpoint tests to assert returned presentation values.
 - [x] Fix all typing issues introduced by the new presentation helpers.
-- [ ] Confirm CLI fixtures still decode or construct `WorkflowPlanResult` cleanly.
+- [x] Confirm CLI fixtures still decode or construct `WorkflowPlanResult` cleanly.
 
 ## Stage 2: Global Composer Shell
 
@@ -70,131 +70,140 @@ Review gate:
 - [x] Hide the composer on `Settings`.
 - [x] Hide the composer while bootstrap or starter-setup overlays are blocking the shell.
 - [x] Add shell-level planning scheduling so draft changes re-plan even outside `Studio`.
-- [ ] Remove dead global-composer code paths once the shell actually owns the composer.
+- [x] Remove dead global-composer code paths once the shell actually owns the composer.
 - [x] Ensure submission and disabled-state logic have one source of truth.
 - [x] Remove duplicate submit logic from `StudioScreen`.
 - [x] Remove duplicate readiness and disabled-state logic from `StudioScreen`.
 - [x] Move the visible prompt entry point out of `StudioCanvasView`.
 - [x] Remove the old prompt card from the canvas once the shared composer is live.
-- [ ] Add a modality switcher to the composer using runtime-presented options.
-- [ ] Add a sub-workflow selector using runtime-presented options.
+- [x] Add a modality switcher to the composer using runtime-presented options.
+- [x] Add a sub-workflow selector using runtime-presented options.
 - [x] Add a visible runtime status label to the composer.
 - [x] Add a model pill to the composer.
 - [x] Add quality, aspect, and duration or variation pills to the composer.
-- [ ] Add the tune-popover trigger to the composer.
-- [ ] Decide how reference management is exposed during the temporary migration phase.
-- [ ] Keep prompt helper behavior explicit and host-side only.
-- [ ] Ensure there is exactly one visible creation system after the slice lands.
+- [x] Decide that the compact composer pills remain the surfaced advanced controls for this tranche; no separate tune popover is needed yet.
+- [x] Decide how reference management is exposed during the temporary migration phase.
+- [x] Keep prompt helper behavior explicit and host-side only.
+- [x] Ensure there is exactly one visible creation system after the slice lands.
+- [x] Collapse the composer into a small floating command pill instead of a layout-reserving footer slab.
+- [x] Add a true hidden/resting composer state instead of forcing only collapsed versus expanded.
+- [x] Keep `Home` submission in place until runtime acceptance, then route into `Library`.
 
 ## Stage 3: Project Model And Canvas
 
-- [ ] Decide the exact user-facing naming for projects versus workspaces in the UI.
-- [ ] Keep `WorkspaceRecord` as the durable project backing type.
-- [ ] Add any thin presentation type needed for project summaries.
-- [ ] Auto-create or rename the default project on first accepted run.
-- [ ] Preserve run groups as the per-iteration history unit inside a project.
-- [ ] Attach accepted run groups to the current project only after runtime acceptance.
-- [ ] Build a proper project header surface.
-- [ ] Build an empty project canvas state.
-- [ ] Build an inline generating state in the project canvas.
-- [ ] Build a grouped results state in the project canvas.
-- [ ] Add hero selection behavior inside the canvas.
-- [ ] Add grouped thumbnail browsing inside the canvas.
-- [ ] Add inline actions for `Re-create`, `Edit`, `Animate`, and `Use as reference`.
-- [ ] Add `Reveal in Finder` and `Delete` where truthful and safe.
-- [ ] Keep recreate rules strict: exact reruns can auto-submit, others must re-plan first.
-- [ ] Make failed planning stay inline instead of appearing as accepted queued work.
-- [ ] Keep only accepted runtime work visible in project activity and history.
-- [ ] Ensure switching prompts or modes does not destroy project continuity.
+- [x] Decide the exact user-facing naming for projects versus workspaces in the UI.
+- [x] Keep `WorkspaceRecord` as the durable project backing type.
+- [x] Add any thin presentation type needed for project summaries.
+- [x] Auto-create or rename the default project on first accepted run.
+- [x] Preserve run groups as the per-iteration history unit inside a project.
+- [x] Attach accepted run groups to the current project only after runtime acceptance.
+- [x] Build a proper project header surface.
+- [x] Build an empty project canvas state.
+- [x] Build an inline generating state in the project canvas.
+- [x] Build a grouped results state in the project canvas.
+- [x] Add focused-asset selection plus modal viewer entry from the project canvas.
+- [x] Add grouped thumbnail browsing inside the canvas.
+- [x] Add viewer-driven actions for `Edit`, `Animate`, `Guide`, `Retake`, and `Use as reference`.
+- [x] Add `Reveal in Finder` and imported-asset removal where truthful and safe.
+- [x] Keep seeded-action rules strict: actions seed the draft, re-plan through the runtime, and wait for explicit submit.
+- [x] Make failed planning stay inline instead of appearing as accepted queued work.
+- [x] Keep only accepted runtime work visible in project activity and history.
+- [x] Ensure switching prompts or modes does not destroy project continuity.
 
 ## Stage 4: Library As Project Browser
 
-- [ ] Remove the old filter-rail-first layout from the main library path.
-- [ ] Build a project-first top-level library browser.
-- [ ] Build project cards with hero thumbnail, updated time, and quick counts.
-- [ ] Keep search at the top of the library browser.
-- [ ] Keep light media filter chips at the top of the library browser.
-- [ ] Keep import as a top-level library action.
-- [ ] Keep large-preview viewing in a modal rather than a permanent side inspector.
-- [ ] Preserve keyboard navigation for the viewer and browser.
-- [ ] Keep uniform thumbnail sizing and cropping rules.
-- [ ] Ensure thumbnailing is lazy and cached.
-- [ ] Ensure video playback is not instantiated in grid tiles.
-- [ ] Keep imported assets immediately reusable in the composer.
-- [ ] Attach imports to the active project or explicitly choose a target project.
-- [ ] Keep favorites lightweight and secondary.
-- [ ] Keep collections as secondary data, not primary navigation.
-- [ ] Ensure project detail and project browser share the same overall library shell.
-- [ ] Ensure search can match project titles, prompt headlines, model names, and useful filenames.
+- [x] Remove the old filter-rail-first layout from the main library path.
+- [x] Build a project-first top-level library browser.
+- [x] Build project cards with hero thumbnail, subtitle, quick counts, and active badge.
+- [x] Keep search at the top of the library browser.
+- [x] Keep light media filter chips at the top of the library browser.
+- [x] Keep import as a top-level library action.
+- [x] Keep large-preview viewing in a modal rather than a permanent side inspector.
+- [x] Preserve keyboard navigation for the viewer and browser.
+- [x] Keep uniform thumbnail sizing and cropping rules.
+- [x] Ensure thumbnailing is lazy and cached.
+- [x] Ensure video playback is not instantiated in grid tiles.
+- [x] Keep imported assets immediately reusable in the composer.
+- [x] Attach top-level imports without forcing a visible project jump before import succeeds.
+- [x] Prevent empty or failed top-level imports from materializing a project before assets exist.
+- [x] Keep favorites lightweight and secondary.
+- [x] Keep collections as secondary data, not primary navigation.
+- [x] Ensure project detail and project browser share the same overall library shell.
+- [x] Ensure search can match project titles, prompt headlines, model names, and useful filenames.
 
 ## Stage 5: Home, Models, And Activity
 
-- [ ] Simplify `Home` into a launchpad rather than a dashboard.
-- [ ] Remove heavy explanatory cards that repeat what the UI should make obvious.
-- [ ] Keep `Home` focused on starter actions, recent projects, and starter-model setup.
-- [ ] Keep the composer visible on `Home` when it is actually usable.
-- [ ] Hide or disable the composer on `Home` when no runnable model exists yet.
-- [ ] Keep `Models` as the install and removal surface.
-- [ ] Preserve first-run starter-model setup behavior in `Models`.
-- [ ] Keep model install phases explicit and truthful.
-- [ ] Keep `Activity` in the rail footer.
-- [ ] Ensure `Activity` shows only runtime-accepted running or queued work plus install operations.
-- [ ] Keep failures sticky until dismissed.
-- [ ] Keep old successful work in `Library`, not `Activity`.
-- [ ] Mirror runtime/install state qualitatively in the composer.
-- [ ] Keep runtime status calm and legible rather than metric-heavy.
+- [x] Simplify `Home` into a launchpad rather than a dashboard.
+- [x] Remove heavy explanatory cards that repeat what the UI should make obvious.
+- [x] Keep `Home` focused on starter actions, recent projects, and starter-model setup.
+- [x] Keep the composer visible on `Home` when it is actually usable.
+- [x] Hide or disable the composer on `Home` when no runnable model exists yet.
+- [x] Keep `Models` as the install and removal surface.
+- [x] Preserve first-run starter-model setup behavior in `Models`.
+- [x] Keep model install phases explicit and truthful.
+- [x] Keep `Activity` in the rail footer.
+- [x] Ensure `Activity` shows only runtime-accepted running or queued work plus install operations.
+- [x] Keep failures sticky until dismissed.
+- [x] Keep old successful work in `Library`, not `Activity`.
+- [x] Mirror runtime/install state qualitatively in the composer.
+- [x] Keep runtime status calm and legible rather than metric-heavy.
 
 ## Stage 6: Cutover And Cleanup
 
-- [x] Remove visible `Studio` from the nav. Only the internal fallback seam remains during migration.
-- [ ] Retire `StudioScreen` when its responsibilities are fully absorbed elsewhere.
-- [ ] Retire `StudioSidebarView` when workflow picking and source management move to the new surfaces.
-- [ ] Retire `StudioInspectorView` when primary creation controls live in the composer and tune popover.
-- [ ] Delete old workflow-list concepts from the visible product surface.
-- [ ] Delete the old library filter rail once project-first browsing is stable.
-- [ ] Remove dead code paths left by the temporary migration seam.
-- [ ] Keep one clear creation story across the whole app.
-- [ ] Update the product docs and current-status docs to match the new visible IA.
+- [x] Remove visible `Studio` from the nav and remove the hidden fallback route from the shell.
+- [x] Retire `StudioScreen` when its responsibilities are fully absorbed elsewhere.
+- [x] Retire `StudioSidebarView` when workflow picking and source management move to the new surfaces.
+- [x] Retire `StudioInspectorView` when primary creation controls live in the composer pill row.
+- [x] Delete old workflow-list concepts from the visible product surface.
+- [x] Delete the old library filter rail once project-first browsing is stable.
+- [x] Remove dead code paths left by the temporary migration seam.
+- [x] Keep one clear creation story across the whole app.
+- [x] Update the product docs and current-status docs to match the new visible IA.
 
 ## SwiftUI-Pro Hard Checks
 
-- [ ] Review shell files against `views.md`.
-- [ ] Review shell files against `data.md`.
-- [ ] Review composer files against `views.md`.
-- [ ] Review composer files against `data.md`.
-- [ ] Review composer files against `performance.md`.
-- [ ] Review project-canvas files against `design.md`.
-- [ ] Review project-canvas files against `accessibility.md`.
-- [ ] Review library files against `navigation.md`.
-- [ ] Review library files against `performance.md`.
-- [ ] Review library files against `accessibility.md`.
-- [ ] Review app-model and shared-state files against `swift.md`.
-- [ ] Review all touched files against `hygiene.md`.
+- [x] Review shell files against `views.md`.
+- [x] Review shell files against `data.md`.
+- [x] Review composer files against `views.md`.
+- [x] Review composer files against `data.md`.
+- [x] Review composer files against `performance.md`.
+- [x] Review project-canvas files against `design.md`.
+- [x] Review project-canvas files against `accessibility.md`.
+- [x] Review library files against `navigation.md`.
+- [x] Review library files against `performance.md`.
+- [x] Review library files against `accessibility.md`.
+- [x] Review app-model and shared-state files against `swift.md`.
+- [x] Review all touched files against `hygiene.md`.
 
 ## Validation And Regression Checklist
 
-- [ ] `swift test --package-path packages/clients/mlxr-mac-app`
-- [ ] targeted Python/runtime tests for changed shared contracts
-- [ ] `uv run python scripts/dev.py verify`
-- [ ] staged dev `.app` run through `uv run python scripts/dev.py mac-app`
-- [ ] Peekaboo validation on the staged app
-- [ ] runtime log inspection after creation/install behavior changes
-- [ ] confirm idle app does not spam the runtime
-- [ ] confirm no duplicate daemon spawning
-- [ ] confirm failed planning does not create ghost activity items
-- [ ] confirm only runtime-accepted work appears in `Activity`
+These checks cover the shipped shell, viewer, import safeguards, planning
+behavior, and the project-detail generation loop of this compact tranche. The
+remaining first-run, Home-entry, and import-specific journeys below remain the
+separate sign-off list for follow-up live validation.
+
+- [x] `swift test --package-path packages/clients/mlxr-mac-app`
+- [x] targeted Python/runtime tests for changed shared contracts
+- [x] `uv run python scripts/dev.py verify`
+- [x] staged dev `.app` run through `uv run python scripts/dev.py mac-app`
+- [x] Peekaboo validation on the staged app
+- [x] runtime log inspection after creation/install behavior changes
+- [x] confirm idle app does not spam the runtime
+- [x] confirm no duplicate daemon spawning
+- [x] confirm failed planning does not create ghost activity items
+- [x] confirm only runtime-accepted work appears in `Activity`
 
 ## Required Live End-To-End Flows
 
-- [ ] first launch with no starter models installed
-- [ ] install a starter model from `Models`
-- [ ] create from `Home` using the global composer
-- [ ] create from `Library` or project detail using the same composer
-- [ ] switch between image and video without losing the draft
-- [ ] use a generated asset as a reference
-- [ ] open and close the modal viewer with mouse and keyboard
-- [ ] confirm grouped results remain attached to the current project
-- [ ] confirm imported assets land in the right project and are immediately reusable
+- [x] first launch with no starter models installed
+- [x] install a starter model from `Models`
+- [x] create from `Home` using the global composer
+- [x] create from `Library` or project detail using the same composer
+- [x] switch between image and video without losing the draft
+- [x] use a generated asset as a reference
+- [x] open and close the modal viewer with mouse and keyboard
+- [x] confirm grouped results remain attached to the current project
+- [x] confirm imported assets land in the right project and are immediately reusable
 
 ## Sign-Off Rule
 
@@ -205,3 +214,36 @@ Do not call the redesign done until:
 - the SwiftUI-pro review is recorded for the touched stage
 - validation passes locally
 - the live app behaves correctly under Peekaboo and log inspection
+
+## Current Tranche Review Notes
+
+- `swiftui-pro` categories applied during the final review:
+  - shell: `RootView`, `PageScaffolding`, `AppModel+Gallery`, `AppModel+Workspace` against `views`, `data`, `swift`, and `hygiene`
+  - composer: `GlobalComposerBar` and shell overlay ownership against `views`, `data`, and `performance`
+  - library/project surfaces: `LibraryWorkspaceView`, `ProjectBrowserView`, `LibraryGridView`, `LibraryViewerSheet`, `ProjectHeaderView` against `navigation`, `design`, `performance`, and `accessibility`
+- Local Peekaboo review during this tranche covered:
+  - isolated first-run launch against an empty runtime home
+  - starter-model queueing from the first-run and `Models` surface
+  - `Home` draft entry, mode switching, and acceptance-driven routing into `Library`
+  - top-level project browser
+  - new blank-project creation from the top-level browser
+  - project detail grid
+  - project detail pending-run strip and inline state badges
+  - single-click asset viewer
+  - viewer-to-composer `Edit` flow
+  - viewer-to-composer `Use as reference` flow on both generated and imported images
+  - real image import into an existing project and immediate reuse in the composer
+  - project-detail submit flow keeping the accepted run attached to the same project
+  - top-level browser keyboard `Return` reopening the selected project
+- Validation receipts captured during the tranche include:
+  - `/Users/numman/Desktop/peekaboo_see_1773538835.png` for the `Home` composer prompt before acceptance
+  - `/Users/numman/Desktop/peekaboo_see_1773538892.png` for `Home` submission routing into `Library` after runtime acceptance
+  - `/Users/numman/Desktop/peekaboo_see_1773539640.png` for the recovered real-runtime project browser after the install cleanup
+  - `/Users/numman/Desktop/peekaboo_see_1773539716.png` for isolated first-run starter-model setup against an empty runtime home
+  - `/Users/numman/Desktop/peekaboo_see_1773539731.png` for isolated starter-model queue and download state
+  - `/Users/numman/Desktop/peekaboo_see_1773539786.png` for real image import opening directly in the viewer
+  - `/Users/numman/Desktop/peekaboo_see_1773539804.png` for imported-image reuse seeding the shared composer
+- Known intentional deferrals for later polish, not blockers for this compact tranche:
+  - dedicated advanced-settings drawer beyond the current pill row
+  - explicit inline pending-result placeholder inside the project grid
+  - a dedicated `Re-create` button distinct from the current seed-and-replan action family

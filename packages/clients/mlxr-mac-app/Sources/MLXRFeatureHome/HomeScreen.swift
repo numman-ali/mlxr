@@ -19,6 +19,7 @@ public struct HomeScreen: View {
     let onOpenLibrary: () -> Void
     let onContinueAsset: (LibraryAsset) -> Void
     let onResumeWorkspace: () -> Void
+    @Environment(\.mlxrBottomOverlayInset) private var bottomOverlayInset
 
     public init(
         runtimeReady: Bool,
@@ -56,7 +57,7 @@ public struct HomeScreen: View {
 
     public var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
                 header
                 quickActions
 
@@ -71,8 +72,8 @@ public struct HomeScreen: View {
                 }
             }
             .padding(.horizontal, MLXRSpacing.xl)
-            .padding(.top, MLXRSpacing.xl)
-            .padding(.bottom, MLXRSpacing.xl + 16)
+            .padding(.top, MLXRSpacing.lg)
+            .padding(.bottom, max(MLXRSpacing.xl + 16, bottomOverlayInset))
         }
         .background(AdaptiveBackground())
     }
@@ -110,7 +111,7 @@ public struct HomeScreen: View {
 
     private var quickActions: some View {
         DenseSectionSurface {
-            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
                 Text("Quick start")
                     .font(MLXRType.titleSmall)
                     .foregroundStyle(MLXRColor.textPrimary)
@@ -118,16 +119,18 @@ public struct HomeScreen: View {
                 HStack(spacing: MLXRSpacing.md) {
                     actionButton(
                         title: "Make image",
-                        subtitle: "Generate or edit a still",
+                        subtitle: hasModels ? "Generate or edit a still" : "Install a runnable model first",
                         systemImage: "photo.fill",
                         tint: MLXRColor.brandPrimary,
+                        isEnabled: hasModels,
                         action: onCreateImage
                     )
                     actionButton(
                         title: "Make video",
-                        subtitle: "Text, image, audio, or retake",
+                        subtitle: hasModels ? "Text, image, audio, or retake" : "Install a runnable model first",
                         systemImage: "film.fill",
                         tint: MLXRColor.brandSecondary,
+                        isEnabled: hasModels,
                         action: onCreateVideo
                     )
                     actionButton(
@@ -149,7 +152,7 @@ public struct HomeScreen: View {
                     Text("Start with recommended models")
                         .font(MLXRType.titleSmall)
                         .foregroundStyle(MLXRColor.textPrimary)
-                    Text("No models are installed in MLXR yet.")
+                    Text(hasModels ? "MLXR needs at least one runnable model before you can create." : "No runnable models are installed in MLXR yet.")
                         .font(MLXRType.bodyMedium)
                         .foregroundStyle(MLXRColor.textPrimary)
                     Text("Open Models to queue the recommended image and video defaults.")
@@ -251,12 +254,13 @@ public struct HomeScreen: View {
         subtitle: String,
         systemImage: String,
         tint: Color,
+        isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(tint)
                 Text(title)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
@@ -265,8 +269,9 @@ public struct HomeScreen: View {
                     .font(MLXRType.bodySmall)
                     .foregroundStyle(MLXRColor.textSecondary)
             }
-            .frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
-            .padding(MLXRSpacing.md)
+            .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+            .padding(.horizontal, MLXRSpacing.md)
+            .padding(.vertical, MLXRSpacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: MLXRRadius.lg, style: .continuous)
                     .fill(MLXRColor.surfaceCard)
@@ -277,5 +282,7 @@ public struct HomeScreen: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.52)
     }
 }

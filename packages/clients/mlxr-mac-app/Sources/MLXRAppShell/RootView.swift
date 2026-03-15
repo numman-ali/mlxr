@@ -8,11 +8,18 @@ import MLXRFeatureToolkit
 import MLXRActivityStrip
 import SwiftUI
 
+private enum ComposerChromeState: String {
+    case hidden
+    case collapsed
+    case expanded
+}
+
 public struct MLXRMacAppRoot: View {
     private static let visibleDestinations: [Destination] = [.home, .library, .models, .settings]
+    private static let composerCourtesyInset: CGFloat = 112
 
     @AppStorage("mlxr.mac-app.last-destination") private var lastDestinationRaw = Destination.home.rawValue
-    @AppStorage("mlxr.mac-app.composer-collapsed") private var isComposerCollapsed = false
+    @AppStorage("mlxr.mac-app.composer-chrome-state") private var composerChromeStateRaw = ComposerChromeState.collapsed.rawValue
     @State private var appModel = MLXRAppModel()
     @State private var destination: Destination? = .home
     @State private var isActivityPresented = false
@@ -67,6 +74,7 @@ public struct MLXRMacAppRoot: View {
                     }
 
                     destinationContent
+                        .environment(\.mlxrBottomOverlayInset, composerBottomInset)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     if appModel.runtimeProcessDied {
@@ -77,7 +85,7 @@ public struct MLXRMacAppRoot: View {
                 }
                 .overlay(alignment: .bottom) {
                     if shouldShowGlobalComposer {
-                        globalComposerInset
+                        composerOverlay
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
@@ -86,7 +94,7 @@ public struct MLXRMacAppRoot: View {
         .task {
             await appModel.refresh()
             appModel.syncWorkspaceDefaultsForTask()
-            appModel.scheduleStudioPlan()
+            appModel.scheduleCreationPlan()
             chooseInitialDestinationIfNeeded()
         }
         .onChange(of: destination?.rawValue) { _, newValue in
@@ -94,8 +102,8 @@ public struct MLXRMacAppRoot: View {
                 lastDestinationRaw = newValue
             }
         }
-        .onChange(of: appModel.studioWorkspace) { _, _ in
-            appModel.scheduleStudioPlan()
+        .onChange(of: appModel.creationDraft) { _, _ in
+            appModel.scheduleCreationPlan()
         }
     }
 
@@ -114,11 +122,13 @@ public struct MLXRMacAppRoot: View {
                 recentAssets: appModel.recentLibraryAssets,
                 hasWorkspaceDraft: appModel.hasWorkspaceDraft,
                 onCreateImage: {
-                    isComposerCollapsed = false
+                    appModel.clearProjectScopedDraftContext()
+                    composerChromeState = .expanded
                     appModel.selectComposerTask(.imageGenerate)
                 },
                 onCreateVideo: {
-                    isComposerCollapsed = false
+                    appModel.clearProjectScopedDraftContext()
+                    composerChromeState = .expanded
                     appModel.selectComposerTask(.videoGenerate)
                 },
                 onOpenModels: {
@@ -135,7 +145,7 @@ public struct MLXRMacAppRoot: View {
                     }
                 },
                 onContinueAsset: { asset in
-                    libraryFocusedWorkspaceId = asset.workspaceId ?? appModel.activeWorkspaceId
+                    libraryFocusedWorkspaceId = appModel.resolvedWorkspaceId(for: asset)
                     libraryFocusedAssetId = asset.id
                     if let workspaceId = libraryFocusedWorkspaceId {
                         appModel.selectWorkspace(workspaceId)
@@ -147,60 +157,17 @@ public struct MLXRMacAppRoot: View {
                 onResumeWorkspace: {
                     libraryFocusedWorkspaceId = appModel.activeWorkspaceId
                     libraryFocusedAssetId = nil
-                    isComposerCollapsed = false
+                    composerChromeState = .expanded
                     withAnimation(MLXRMotion.snappy) {
                         destination = .library
                     }
                 }
             )
 
-        case .studio:
-            StudioScreen(
-                workspace: $appModel.studioWorkspace,
-                catalog: appModel.catalog,
-                libraryAssets: appModel.libraryAssets,
-                installOperations: appModel.installOperations,
-                jobs: appModel.jobs,
-                activePhases: appModel.activeJobPhases,
-                currentRunGroup: appModel.currentRunGroup,
-                currentRunGroupAssets: appModel.currentRunGroupAssets,
-                packs: appModel.packCatalog,
-                planningResult: appModel.studioPlanResult,
-                planningError: appModel.studioPlanError,
-                isPlanning: appModel.isPlanningStudio,
-                resolvedSettings: appModel.resolvedSettings(),
-                error: appModel.studioWorkspace.task.category == .image ? appModel.imageError : appModel.videoError,
-                onDismissError: {
-                    if appModel.studioWorkspace.task.category == .image {
-                        appModel.dismissImageError()
-                    } else {
-                        appModel.dismissVideoError()
-                    }
-                },
-                onDismissPlanningError: {
-                    appModel.dismissStudioPlanError()
-                },
-                onResetDraft: {
-                    appModel.resetStudioDraft()
-                },
-                onSyncWorkspaceDefaults: {
-                    appModel.syncWorkspaceDefaultsForTask()
-                },
-                onImportAssets: { urls in
-                    await appModel.importExternalAssets(from: urls)
-                },
-                onResolveAssetURL: { asset in
-                    await appModel.resolvedURL(for: asset)
-                },
-                onQueueInstall: { modelId in
-                    await appModel.queueModelInstall(modelId: modelId)
-                }
-            )
-
         case .library:
             GalleryScreen(
                 workspaces: appModel.workspaces,
-                activeWorkspaceId: appModel.activeWorkspaceId,
+                defaultWorkspaceId: appModel.defaultWorkspaceId,
                 focusedWorkspaceId: libraryFocusedWorkspaceId ?? appModel.selectedLibraryWorkspaceId,
                 focusedAssetId: libraryFocusedAssetId,
                 assets: appModel.libraryAssets,
@@ -209,8 +176,8 @@ public struct MLXRMacAppRoot: View {
                 onMaterialize: { asset in
                     await appModel.resolvedURL(for: asset)
                 },
-                onImportAssets: { urls in
-                    await appModel.importExternalAssets(from: urls)
+                onImportAssets: { urls, workspaceId in
+                    await appModel.importExternalAssets(from: urls, workspaceId: workspaceId)
                 },
                 onRemoveImportedAsset: { assetId in
                     await appModel.removeImportedAsset(assetId: assetId)
@@ -222,8 +189,13 @@ public struct MLXRMacAppRoot: View {
                     appModel.selectWorkspace(workspaceId)
                     libraryFocusedWorkspaceId = workspaceId
                 },
+                onShowProjectBrowser: {
+                    appModel.showLibraryBrowser()
+                    libraryFocusedWorkspaceId = nil
+                    libraryFocusedAssetId = nil
+                },
                 onCreateWorkspace: {
-                    let workspace = appModel.createWorkspace()
+                    let workspace = appModel.createFreshWorkspace()
                     libraryFocusedWorkspaceId = workspace.id
                     return workspace
                 },
@@ -335,10 +307,40 @@ public struct MLXRMacAppRoot: View {
         }
     }
 
+    private var composerChromeState: ComposerChromeState {
+        get { ComposerChromeState(rawValue: composerChromeStateRaw) ?? .collapsed }
+        nonmutating set { composerChromeStateRaw = newValue.rawValue }
+    }
+
+    private var composerBottomInset: CGFloat {
+        guard shouldShowGlobalComposer else { return 0 }
+        switch composerChromeState {
+        case .hidden:
+            return 0
+        case .collapsed:
+            return 0
+        case .expanded:
+            // Keep a stable courtesy inset so the shell reads as an overlay,
+            // not a footer that continuously resizes the content behind it.
+            return Self.composerCourtesyInset
+        }
+    }
+
+    private var composerOverlay: some View {
+        Group {
+            switch composerChromeState {
+            case .hidden:
+                composerRevealPill
+            case .collapsed, .expanded:
+                globalComposerInset
+            }
+        }
+    }
+
     private var globalComposerInset: some View {
         GlobalComposerBar(
-            workspace: $appModel.studioWorkspace,
-            isCollapsed: isComposerCollapsed,
+            workspace: $appModel.creationDraft,
+            isCollapsed: composerChromeState == .collapsed,
             mode: appModel.composerMode,
             availableModes: appModel.composerAvailableModes,
             subworkflows: appModel.composerSubworkflowOptions(for: appModel.composerMode),
@@ -347,14 +349,26 @@ public struct MLXRMacAppRoot: View {
             durationOptions: appModel.composerPresentation?.controls.durationPresets ?? [],
             variationOptions: appModel.composerPresentation?.controls.variationCounts ?? [],
             selectedModelName: appModel.composerSelectedModelName,
+            selectedAssetLabel: appModel.composerFocusedAssetLabel,
+            referenceSummaryLabel: appModel.composerReferenceSummaryLabel,
             runtimeStatusLabel: appModel.composerRuntimeStatusLabel,
-            isPlanning: appModel.isPlanningStudio,
+            isPlanning: appModel.isPlanningCreation,
             isBusy: appModel.isSubmittingImage || appModel.isSubmittingVideo,
             canSubmit: appModel.canSubmitCurrentWorkspace(),
             disabledReason: appModel.currentWorkspaceSubmitDisabledReason(),
-            onToggleCollapsed: {
+            onCollapse: {
                 withAnimation(MLXRMotion.snappy) {
-                    isComposerCollapsed.toggle()
+                    composerChromeState = .collapsed
+                }
+            },
+            onExpand: {
+                withAnimation(MLXRMotion.snappy) {
+                    composerChromeState = .expanded
+                }
+            },
+            onHide: {
+                withAnimation(MLXRMotion.snappy) {
+                    composerChromeState = .hidden
                 }
             },
             onSelectMode: { mode in
@@ -377,11 +391,47 @@ public struct MLXRMacAppRoot: View {
             },
             onSubmit: submitFromGlobalComposer
         )
+        .frame(maxWidth: composerChromeState == .collapsed ? 460 : 1_020)
+        .frame(maxWidth: .infinity, alignment: composerChromeState == .collapsed ? .trailing : .center)
         .padding(.horizontal, MLXRSpacing.xl)
         .padding(.bottom, MLXRSpacing.lg)
-        .padding(.top, MLXRSpacing.lg)
-        .frame(maxWidth: .infinity)
+        .padding(.top, MLXRSpacing.md)
         .background(Color.clear)
+    }
+
+    private var composerRevealPill: some View {
+        Button {
+            withAnimation(MLXRMotion.snappy) {
+                composerChromeState = .expanded
+            }
+        } label: {
+            HStack(spacing: MLXRSpacing.sm) {
+                Image(systemName: appModel.composerMode == .image ? "photo.on.rectangle" : "film.stack")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Open composer")
+                    .font(MLXRType.bodySmall)
+                    .fontWeight(.semibold)
+                StatusPill(
+                    label: appModel.composerRuntimeStatusLabel,
+                    tint: appModel.canSubmitCurrentWorkspace() ? MLXRColor.brandPrimary : MLXRColor.brandWarm
+                )
+            }
+            .padding(.horizontal, MLXRSpacing.md)
+            .padding(.vertical, MLXRSpacing.sm)
+        }
+        .buttonStyle(.plain)
+        .background(
+            Capsule(style: .continuous)
+                .fill(MLXRColor.canvasRaised)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.75)
+                )
+                .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+        )
+        .padding(.horizontal, MLXRSpacing.xl)
+        .padding(.bottom, MLXRSpacing.lg)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var activityOverlay: some View {
@@ -441,9 +491,10 @@ public struct MLXRMacAppRoot: View {
     private var shouldShowGlobalComposer: Bool {
         guard !shouldShowBootstrapOverlay else { return false }
         guard !appModel.hasPendingModelSetup else { return false }
+        guard appModel.hasRunnableCreationModels else { return false }
         guard !isLibraryViewerPresented else { return false }
         switch destination ?? .home {
-        case .home, .library, .studio:
+        case .home, .library:
             return true
         case .models, .settings:
             return false
@@ -569,17 +620,9 @@ public struct MLXRMacAppRoot: View {
             destination = .models
             return
         }
-        if !appModel.hasModelsReady {
-            destination = .home
-            return
-        }
         if appModel.hasContent {
-            if let stored = Destination(rawValue: lastDestinationRaw), stored != .studio {
-                destination = stored
-            } else {
-                destination = .library
-            }
-            libraryFocusedWorkspaceId = appModel.selectedLibraryWorkspaceId
+            destination = .library
+            libraryFocusedWorkspaceId = appModel.selectedLibraryWorkspaceId ?? appModel.preferredLibraryWorkspaceId
         } else {
             destination = .home
         }
@@ -587,23 +630,50 @@ public struct MLXRMacAppRoot: View {
 
     private func seedComposer(_ request: ComposerSeedRequest) {
         appModel.seedComposer(with: request)
-        libraryFocusedWorkspaceId = request.workspaceId ?? appModel.activeWorkspaceId
+        if let workspaceId = request.workspaceId {
+            libraryFocusedWorkspaceId = workspaceId
+        } else if let focusedAssetId = request.focusedAssetId,
+                  let asset = appModel.libraryAssets.first(where: { $0.id == focusedAssetId })
+        {
+            libraryFocusedWorkspaceId = appModel.resolvedWorkspaceId(for: asset)
+        } else {
+            libraryFocusedWorkspaceId = appModel.activeWorkspaceId
+        }
         libraryFocusedAssetId = nil
-        isComposerCollapsed = false
+        composerChromeState = .expanded
     }
 
     private func submitFromGlobalComposer() {
-        let targetWorkspaceId = appModel.studioWorkspace.workspaceId
-        libraryFocusedWorkspaceId = targetWorkspaceId
-        libraryFocusedAssetId = nil
+        Task {
+            let targetWorkspaceId = freshSubmissionWorkspaceId
+            guard let acceptedWorkspaceId = await appModel.submitCurrentWorkspace(targetWorkspaceId: targetWorkspaceId) else {
+                return
+            }
+            libraryFocusedWorkspaceId = acceptedWorkspaceId
+            libraryFocusedAssetId = nil
+            appModel.selectWorkspace(acceptedWorkspaceId, clearingDraftContext: false)
 
-        if destination != .library && destination != .studio {
-            withAnimation(MLXRMotion.snappy) {
-                destination = .library
+            if destination == .home {
+                withAnimation(MLXRMotion.snappy) {
+                    destination = .library
+                }
             }
         }
-        Task {
-            await appModel.submitCurrentWorkspace()
+    }
+
+    private var freshSubmissionWorkspaceId: String? {
+        if destination == .home {
+            return WorkspaceRecord(title: "New Project").id
         }
+        if isTopLevelLibraryBrowser {
+            return WorkspaceRecord(title: "New Project").id
+        }
+        return nil
+    }
+
+    private var isTopLevelLibraryBrowser: Bool {
+        destination == .library
+            && libraryFocusedWorkspaceId == nil
+            && appModel.selectedLibraryWorkspaceId == nil
     }
 }

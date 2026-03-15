@@ -4,17 +4,18 @@ import SwiftUI
 @MainActor
 public struct GalleryScreen: View {
     let workspaces: [WorkspaceRecord]
-    let activeWorkspaceId: String
+    let defaultWorkspaceId: String
     let focusedWorkspaceId: String?
     let focusedAssetId: String?
     let assets: [LibraryAsset]
     let runGroups: [RunGroupRecord]
     let collections: [CollectionRecord]
     let onMaterialize: @Sendable (LibraryAsset) async -> URL?
-    let onImportAssets: @Sendable ([URL]) async -> [ImportedAssetRecord]
+    let onImportAssets: @Sendable ([URL], String) async -> [ImportedAssetRecord]
     let onRemoveImportedAsset: @Sendable (String) async -> Void
     let onSeedComposer: (ComposerSeedRequest) -> Void
     let onSelectWorkspace: (String) -> Void
+    let onShowProjectBrowser: () -> Void
     let onCreateWorkspace: () -> WorkspaceRecord
     let onSetWorkspaceCover: (String, String) -> Void
     let onToggleFavorite: (String) -> Void
@@ -24,17 +25,18 @@ public struct GalleryScreen: View {
 
     public init(
         workspaces: [WorkspaceRecord],
-        activeWorkspaceId: String,
+        defaultWorkspaceId: String,
         focusedWorkspaceId: String?,
         focusedAssetId: String?,
         assets: [LibraryAsset],
         runGroups: [RunGroupRecord],
         collections: [CollectionRecord],
         onMaterialize: @escaping @Sendable (LibraryAsset) async -> URL?,
-        onImportAssets: @escaping @Sendable ([URL]) async -> [ImportedAssetRecord],
+        onImportAssets: @escaping @Sendable ([URL], String) async -> [ImportedAssetRecord],
         onRemoveImportedAsset: @escaping @Sendable (String) async -> Void,
         onSeedComposer: @escaping (ComposerSeedRequest) -> Void,
         onSelectWorkspace: @escaping (String) -> Void,
+        onShowProjectBrowser: @escaping () -> Void,
         onCreateWorkspace: @escaping () -> WorkspaceRecord,
         onSetWorkspaceCover: @escaping (String, String) -> Void,
         onToggleFavorite: @escaping (String) -> Void,
@@ -43,7 +45,7 @@ public struct GalleryScreen: View {
         onViewerPresentationChange: @escaping (Bool) -> Void
     ) {
         self.workspaces = workspaces
-        self.activeWorkspaceId = activeWorkspaceId
+        self.defaultWorkspaceId = defaultWorkspaceId
         self.focusedWorkspaceId = focusedWorkspaceId
         self.focusedAssetId = focusedAssetId
         self.assets = assets
@@ -54,6 +56,7 @@ public struct GalleryScreen: View {
         self.onRemoveImportedAsset = onRemoveImportedAsset
         self.onSeedComposer = onSeedComposer
         self.onSelectWorkspace = onSelectWorkspace
+        self.onShowProjectBrowser = onShowProjectBrowser
         self.onCreateWorkspace = onCreateWorkspace
         self.onSetWorkspaceCover = onSetWorkspaceCover
         self.onToggleFavorite = onToggleFavorite
@@ -65,7 +68,7 @@ public struct GalleryScreen: View {
     public var body: some View {
         LibraryWorkspaceView(
             workspaces: workspaces,
-            activeWorkspaceId: activeWorkspaceId,
+            defaultWorkspaceId: defaultWorkspaceId,
             focusedWorkspaceId: focusedWorkspaceId,
             focusedAssetId: focusedAssetId,
             assets: assets,
@@ -76,6 +79,7 @@ public struct GalleryScreen: View {
             onRemoveImportedAsset: onRemoveImportedAsset,
             onSeedComposer: onSeedComposer,
             onSelectWorkspace: onSelectWorkspace,
+            onShowProjectBrowser: onShowProjectBrowser,
             onCreateWorkspace: onCreateWorkspace,
             onSetWorkspaceCover: onSetWorkspaceCover,
             onToggleFavorite: onToggleFavorite,

@@ -61,7 +61,7 @@ public struct ModelsWorkspaceView: View {
 
     public var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
+            VStack(alignment: .leading, spacing: MLXRSpacing.md) {
                 if let error {
                     InlineErrorBanner(error, onDismiss: onDismissError)
                 }
@@ -97,7 +97,7 @@ public struct ModelsWorkspaceView: View {
                 }
             }
             .padding(.horizontal, MLXRSpacing.xl)
-            .padding(.top, MLXRSpacing.xl)
+            .padding(.top, MLXRSpacing.lg)
             .padding(.bottom, MLXRSpacing.xl + 16)
         }
         .sheet(
@@ -145,8 +145,8 @@ public struct ModelsWorkspaceView: View {
     private func availableRow(_ item: ModelCatalogItem) -> some View {
         let operation = operationByModelId[item.modelId]
         let preview = previews[item.modelId]
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
+        return VStack(alignment: .leading, spacing: MLXRSpacing.sm) {
+            HStack(alignment: .top, spacing: MLXRSpacing.md) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.displayName)
                         .font(.system(.headline, design: .rounded, weight: .semibold))
@@ -179,14 +179,14 @@ public struct ModelsWorkspaceView: View {
             }
 
             if let preview {
-                HStack(spacing: 18) {
+                HStack(spacing: MLXRSpacing.lg) {
                     DetailRow(label: "Download", value: bytesString(preview.totalSourceBytes))
                     DetailRow(label: "Access", value: preview.authRequired ? "Login required" : preview.supportedModel.accessState.capitalized)
                     DetailRow(label: "Tasks", value: item.tasks.map(\.title).joined(separator: ", "))
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, MLXRSpacing.xxs)
     }
 
     private var installQueueSection: some View {
@@ -203,7 +203,7 @@ public struct ModelsWorkspaceView: View {
                 )
             } else {
                 ForEach(installOperations.prefix(8)) { operation in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
                         HStack {
                             Text(operation.supportedModel.displayName)
                                 .font(.system(.headline, design: .rounded, weight: .semibold))
@@ -220,7 +220,7 @@ public struct ModelsWorkspaceView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, MLXRSpacing.xxs)
                 }
             }
         }
@@ -254,7 +254,7 @@ public struct ModelsWorkspaceView: View {
                             Spacer()
                             StatusPill(label: item.statusLabel, tint: MLXRTheme.accent)
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, MLXRSpacing.xxs)
                     }
                     .buttonStyle(.plain)
                 }
@@ -269,7 +269,7 @@ public struct ModelsWorkspaceView: View {
                 subtitle: "Friendly wrappers for the family-local style, motion, and control options used throughout creation."
             )
             ForEach(packs) { pack in
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: MLXRSpacing.xs) {
                     HStack {
                         Text(pack.title)
                             .font(.system(.headline, design: .rounded, weight: .semibold))
@@ -281,7 +281,7 @@ public struct ModelsWorkspaceView: View {
                     DetailRow(label: "Family", value: pack.family)
                     DetailRow(label: "Tasks", value: pack.tasks.map(\.title).joined(separator: ", "))
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, MLXRSpacing.xxs)
             }
         }
     }

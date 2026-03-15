@@ -68,23 +68,11 @@ extension MLXRAppModel {
         ]
     }
 
-    public var currentRunGroup: RunGroupRecord? {
-        guard let runGroupId = studioWorkspace.lastActiveRunGroupId else { return nil }
-        return runGroups.first(where: { $0.id == runGroupId })
-    }
-
-    public var currentRunGroupAssets: [LibraryAsset] {
-        guard let runGroupId = studioWorkspace.lastActiveRunGroupId else { return [] }
-        return libraryAssets.filter { $0.runGroupId == runGroupId }
-            .sorted { $0.createdAt < $1.createdAt }
-    }
-
     public var recentRunGroups: [RunGroupRecord] {
         runGroups.sorted { $0.updatedAt > $1.updatedAt }
     }
 
     public var activityRunGroups: [RunGroupRecord] {
-        let retentionCutoff = Date().addingTimeInterval(-(48 * 60 * 60))
         let persistedIds = Set(runGroups.map(\.id))
         let legacyGroups = jobs.compactMap { job -> RunGroupRecord? in
             guard job.request.context?.runGroupId == nil else {
@@ -112,12 +100,12 @@ extension MLXRAppModel {
                 updatedAt: job.updatedAt,
                 state: state(for: [job], assetCount: relatedAssets.count)
             )
-            return shouldIncludeInActivity(group, retentionCutoff: retentionCutoff)
+            return shouldIncludeInActivity(group)
                 ? group
                 : nil
         }
         let persistedGroups = runGroups.filter {
-            shouldIncludeInActivity($0, retentionCutoff: retentionCutoff)
+            shouldIncludeInActivity($0)
         }
         return (persistedGroups + legacyGroups).sorted { $0.updatedAt > $1.updatedAt }
     }
@@ -130,7 +118,7 @@ extension MLXRAppModel {
         do {
             try workspaceStateStore.persist(
                 AppPresentationState(
-                    hasCompletedModelSetup: hasCompletedOnboarding,
+                    hasCompletedOnboarding: hasCompletedOnboarding,
                     activeWorkspaceId: activeWorkspaceId,
                     selectedLibraryWorkspaceId: selectedLibraryWorkspaceId,
                     workspaces: workspaces,
@@ -138,7 +126,7 @@ extension MLXRAppModel {
                     runGroups: runGroups,
                     dismissedActivityRunGroupIds: Array(dismissedActivityRunGroupIds).sorted(),
                     assets: Array(assetRecords.values).sorted { $0.id < $1.id },
-                    workspaceDraft: studioWorkspace
+                    creationDraft: creationDraft
                 )
             )
         } catch {
@@ -151,83 +139,98 @@ extension MLXRAppModel {
         if let workspaceId = request.workspaceId, workspaces.contains(where: { $0.id == workspaceId }) {
             selectWorkspace(workspaceId)
         }
-        studioWorkspace.workspaceId = activeWorkspaceId
-        studioWorkspace.task = request.task
-        if let resolvedPrompt = request.prompt ?? request.focusedAssetId.flatMap({ assetId in
-            libraryAssets.first(where: { $0.id == assetId })?.prompt
-        }), !resolvedPrompt.isEmpty {
-            studioWorkspace.prompt = resolvedPrompt
+        creationDraft.workspaceId = activeWorkspaceId
+        creationDraft.task = request.task
+
+        func cleaned(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+                return nil
+            }
+            return trimmed
+        }
+
+        let resolvedPrompt =
+            cleaned(request.prompt)
+            ?? request.focusedAssetId.flatMap { assetId in
+                guard let asset = libraryAssets.first(where: { $0.id == assetId }) else {
+                    return nil
+                }
+                return cleaned(asset.prompt)
+                    ?? cleaned(asset.displayTitle)
+                    ?? cleaned(asset.title)
+            }
+
+        if let resolvedPrompt {
+            creationDraft.prompt = resolvedPrompt
         }
         if let focusedAssetId = request.focusedAssetId {
-            studioWorkspace.selectedAssetId = focusedAssetId
-            studioWorkspace.preferredDisplayedAssetId = focusedAssetId
+            creationDraft.selectedAssetId = focusedAssetId
+            creationDraft.preferredDisplayedAssetId = focusedAssetId
             markAssetUsed(focusedAssetId)
         } else {
-            studioWorkspace.selectedAssetId = nil
-            studioWorkspace.preferredDisplayedAssetId = nil
+            creationDraft.selectedAssetId = nil
+            creationDraft.preferredDisplayedAssetId = nil
         }
-        studioWorkspace.referenceAssetIds = request.referenceAssetIds
+        creationDraft.referenceAssetIds = request.referenceAssetIds
         if !request.referenceAssetIds.isEmpty {
             request.referenceAssetIds.forEach(markAssetUsed)
         }
-        if studioWorkspace.selectedModelId.isEmpty {
-            studioWorkspace.selectedModelId = preferredDefaultModelId(for: request.task) ?? ""
+        if creationDraft.selectedModelId.isEmpty {
+            creationDraft.selectedModelId = preferredDefaultModelId(for: request.task) ?? ""
         }
         syncWorkspaceDefaultsForTask()
     }
 
-    public func resetStudioDraft(task: ProductTask? = nil) {
-        let nextTask = task ?? studioWorkspace.task
-        let workspaceId = studioWorkspace.workspaceId
-        studioWorkspace = StudioWorkspaceDraft(workspaceId: workspaceId, task: nextTask)
-        studioWorkspace.selectedModelId = preferredDefaultModelId(for: nextTask) ?? ""
-        studioWorkspace.artifactFormat = nextTask.category == .image ? "png" : "mp4"
-        syncWorkspaceDefaultsForTask()
+    public func clearProjectScopedDraftContext() {
+        creationDraft.selectedAssetId = nil
+        creationDraft.referenceAssetIds = []
+        creationDraft.lastActiveRunGroupId = nil
+        creationDraft.preferredDisplayedAssetId = nil
     }
 
     public func syncWorkspaceDefaultsForTask() {
-        let compatibleItems = catalog.items(for: studioWorkspace.task)
-        let selectedItem = compatibleItems.first(where: { $0.modelId == studioWorkspace.selectedModelId })
+        let compatibleItems = catalog.items(for: creationDraft.task)
+        let selectedItem = compatibleItems.first(where: { $0.modelId == creationDraft.selectedModelId })
         if
-            studioWorkspace.selectedModelId.isEmpty
+            creationDraft.selectedModelId.isEmpty
             || selectedItem == nil
             || (selectedItem?.installed == false && compatibleItems.contains(where: \.installed))
         {
-            studioWorkspace.selectedModelId = preferredDefaultModelId(for: studioWorkspace.task) ?? ""
+            creationDraft.selectedModelId = preferredDefaultModelId(for: creationDraft.task) ?? ""
         }
-        let expectedArtifactFormat = studioWorkspace.task.category == .image ? "png" : "mp4"
-        if studioWorkspace.artifactFormat.isEmpty || studioWorkspace.artifactFormat != expectedArtifactFormat {
-            studioWorkspace.artifactFormat = expectedArtifactFormat
+        let expectedArtifactFormat = creationDraft.task.category == .image ? "png" : "mp4"
+        if creationDraft.artifactFormat.isEmpty || creationDraft.artifactFormat != expectedArtifactFormat {
+            creationDraft.artifactFormat = expectedArtifactFormat
         }
-        if !studioWorkspace.useCustomSettings {
+        if !creationDraft.useCustomSettings {
             let recommended = recommendedSettings(
-                for: studioWorkspace.task,
-                qualityPreset: studioWorkspace.qualityPreset,
-                aspectPreset: studioWorkspace.aspectPreset,
-                durationPreset: studioWorkspace.durationPreset,
+                for: creationDraft.task,
+                qualityPreset: creationDraft.qualityPreset,
+                aspectPreset: creationDraft.aspectPreset,
+                durationPreset: creationDraft.durationPreset,
                 selectedModel: selectedItem
             )
-            studioWorkspace.manualWidth = Double(recommended.width)
-            studioWorkspace.manualHeight = Double(recommended.height)
-            studioWorkspace.manualFrames = Double(recommended.numFrames)
-            studioWorkspace.manualFps = Double(recommended.fps)
-            studioWorkspace.manualSteps = Double(recommended.numInferenceSteps)
-            studioWorkspace.manualGuidance = recommended.guidanceScale
+            creationDraft.manualWidth = Double(recommended.width)
+            creationDraft.manualHeight = Double(recommended.height)
+            creationDraft.manualFrames = Double(recommended.numFrames)
+            creationDraft.manualFps = Double(recommended.fps)
+            creationDraft.manualSteps = Double(recommended.numInferenceSteps)
+            creationDraft.manualGuidance = recommended.guidanceScale
         }
         normalizeWorkspaceReferences()
         applyFixedModelConstraints(for: selectedItem)
         if
-            let selectedPackId = studioWorkspace.selectedPackId,
+            let selectedPackId = creationDraft.selectedPackId,
             !packCatalog.contains(where: {
                 $0.id == selectedPackId
                     && $0.family == selectedItem?.family
-                    && $0.supports(task: studioWorkspace.task)
+                    && $0.supports(task: creationDraft.task)
             })
         {
-            studioWorkspace.selectedPackId = nil
+            creationDraft.selectedPackId = nil
         }
-        if studioWorkspace.selectedPackId == nil {
-            studioWorkspace.selectedPackId = defaultPackId(for: studioWorkspace.selectedModelId, task: studioWorkspace.task)
+        if creationDraft.selectedPackId == nil {
+            creationDraft.selectedPackId = defaultPackId(for: creationDraft.selectedModelId, task: creationDraft.task)
         }
     }
 
@@ -244,8 +247,8 @@ extension MLXRAppModel {
         catalog.items.first(where: { $0.modelId == modelId })?.family
     }
 
-    public func selectedPack(for draft: StudioWorkspaceDraft? = nil) -> PackRecord? {
-        let current = draft ?? studioWorkspace
+    public func selectedPack(for draft: CreationDraft? = nil) -> PackRecord? {
+        let current = draft ?? creationDraft
         guard let selectedPackId = current.selectedPackId else { return nil }
         return packCatalog.first(where: { $0.id == selectedPackId })
     }
@@ -253,26 +256,27 @@ extension MLXRAppModel {
     public func prepareRunContext(
         task: ProductTask,
         title: String,
-        sourceAssetIds: [String]
+        sourceAssetIds: [String],
+        workspaceId: String? = nil
     ) -> WorkflowContextMetadata {
         WorkflowContextMetadata(
-            workspaceId: studioWorkspace.workspaceId,
+            workspaceId: workspaceId ?? creationDraft.workspaceId,
             collectionId: nil,
             runGroupId: UUID().uuidString,
             sourceAssetIds: sourceAssetIds,
             intentLabel: title.isEmpty ? task.title : title,
-            presetId: studioWorkspace.aspectPreset.rawValue.lowercased()
+            presetId: creationDraft.aspectPreset.rawValue.lowercased()
         )
     }
 
-    public func studioPlanningIntent(for draft: StudioWorkspaceDraft? = nil) -> WorkflowIntent? {
-        let current = draft ?? studioWorkspace
+    public func creationPlanningIntent(for draft: CreationDraft? = nil) -> WorkflowIntent? {
+        let current = draft ?? creationDraft
         guard let selectedModel = selectedModel(for: current), selectedModel.installed else {
             return nil
         }
         let settings = resolvedSettings(for: current)
         let references = planningReferences(for: current, settings: settings)
-        let familyExtensions = studioFamilyExtensions(for: current)
+        let familyExtensions = creationFamilyExtensions(for: current)
         var params: JSONMap = [
             "width": .integer(settings.width),
             "height": .integer(settings.height),
@@ -304,23 +308,19 @@ extension MLXRAppModel {
         )
     }
 
-    public func selectedModel(for draft: StudioWorkspaceDraft? = nil) -> ModelCatalogItem? {
-        let current = draft ?? studioWorkspace
+    public func selectedModel(for draft: CreationDraft? = nil) -> ModelCatalogItem? {
+        let current = draft ?? creationDraft
         let compatibleItems = catalog.items(for: current.task)
         return compatibleItems.first(where: { $0.modelId == current.selectedModelId })
             ?? compatibleItems.first
     }
 
-    public var currentStudioReferenceRequirements: [WorkflowReferenceRequirement] {
-        referenceRequirements(for: studioWorkspace)
-    }
-
-    public func resolvedSettings(for draft: StudioWorkspaceDraft? = nil) -> StudioResolvedSettings {
-        let current = draft ?? studioWorkspace
+    public func resolvedSettings(for draft: CreationDraft? = nil) -> CreationResolvedSettings {
+        let current = draft ?? creationDraft
         let selectedItem = selectedModel(for: current)
-        let baseSettings: StudioResolvedSettings
+        let baseSettings: CreationResolvedSettings
         if current.useCustomSettings {
-            baseSettings = StudioResolvedSettings(
+            baseSettings = CreationResolvedSettings(
                 width: Int(current.manualWidth),
                 height: Int(current.manualHeight),
                 numFrames: Int(current.manualFrames),
@@ -341,7 +341,7 @@ extension MLXRAppModel {
         guard let constraints = selectedItem?.capability?.constraints else {
             return baseSettings
         }
-        return StudioResolvedSettings(
+        return CreationResolvedSettings(
             width: baseSettings.width,
             height: baseSettings.height,
             numFrames: baseSettings.numFrames,
@@ -353,8 +353,8 @@ extension MLXRAppModel {
         )
     }
 
-    public func referenceKind(for asset: LibraryAsset, draft: StudioWorkspaceDraft? = nil) -> WorkflowReferenceKind? {
-        let current = draft ?? studioWorkspace
+    public func referenceKind(for asset: LibraryAsset, draft: CreationDraft? = nil) -> WorkflowReferenceKind? {
+        let current = draft ?? creationDraft
         let requirements = referenceRequirements(for: current)
         guard !requirements.isEmpty else { return nil }
         let kind: WorkflowReferenceKind
@@ -377,7 +377,7 @@ extension MLXRAppModel {
         aspectPreset: AspectPreset,
         durationPreset: DurationPreset,
         selectedModel: ModelCatalogItem?
-    ) -> StudioResolvedSettings {
+    ) -> CreationResolvedSettings {
         let dimensions = aspectPreset.dimensions(for: task.category)
         let imageStepsByFamily: [String: (Int, Int, Int)] = [
             "flux2": (4, 8, 12),
@@ -398,7 +398,7 @@ extension MLXRAppModel {
         let guidance = selectedModel?.capability?.constraints.object("guidance_scale")?.double("fixed")
             ?? (task.category == .image ? 4.0 : 3.0)
 
-        return StudioResolvedSettings(
+        return CreationResolvedSettings(
             width: dimensions.width,
             height: dimensions.height,
             numFrames: task.category == .video ? durationPreset.numFrames : 1,
@@ -408,8 +408,8 @@ extension MLXRAppModel {
         )
     }
 
-    public func hasRecommendedReset(for draft: StudioWorkspaceDraft? = nil) -> Bool {
-        let current = draft ?? studioWorkspace
+    public func hasRecommendedReset(for draft: CreationDraft? = nil) -> Bool {
+        let current = draft ?? creationDraft
         guard current.useCustomSettings else { return false }
         let recommended = recommendedSettings(
             for: current.task,
@@ -418,7 +418,7 @@ extension MLXRAppModel {
             durationPreset: current.durationPreset,
             selectedModel: selectedModel(for: current)
         )
-        let currentSettings = StudioResolvedSettings(
+        let currentSettings = CreationResolvedSettings(
             width: Int(current.manualWidth),
             height: Int(current.manualHeight),
             numFrames: Int(current.manualFrames),
@@ -430,7 +430,7 @@ extension MLXRAppModel {
     }
 
     public func resetWorkspaceToRecommended() {
-        studioWorkspace.useCustomSettings = false
+        creationDraft.useCustomSettings = false
         syncWorkspaceDefaultsForTask()
     }
 
@@ -453,19 +453,35 @@ extension MLXRAppModel {
     }
 
     @discardableResult
-    public func createWorkspace(named title: String? = nil) -> WorkspaceRecord {
+    public func createWorkspace(named title: String? = nil, select: Bool = true) -> WorkspaceRecord {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedTitle = (trimmed?.isEmpty == false ? trimmed : nil) ?? "New Project"
         let workspace = WorkspaceRecord(title: resolvedTitle)
         workspaces.insert(workspace, at: 0)
-        selectWorkspace(workspace.id)
+        if select {
+            selectWorkspace(workspace.id)
+        }
         return workspace
     }
 
-    public func selectWorkspace(_ workspaceId: String) {
+    @discardableResult
+    public func createFreshWorkspace(named title: String? = nil) -> WorkspaceRecord {
+        let preservedTask = creationDraft.task
+        let workspace = createWorkspace(named: title, select: true)
+        creationDraft = CreationDraft(workspaceId: workspace.id, task: preservedTask)
+        syncWorkspaceDefaultsForTask()
+        return workspace
+    }
+
+    public func selectWorkspace(_ workspaceId: String, clearingDraftContext: Bool = true) {
+        let didChangeWorkspace = activeWorkspaceId != workspaceId
         activeWorkspaceId = workspaceId
         selectedLibraryWorkspaceId = workspaceId
         ensureWorkspaceExists()
+        if didChangeWorkspace && clearingDraftContext {
+            clearProjectScopedDraftContext()
+            syncWorkspaceDefaultsForTask()
+        }
     }
 
     public func setWorkspaceCoverAsset(workspaceId: String, assetId: String) {
@@ -502,7 +518,7 @@ extension MLXRAppModel {
         jobId: String,
         variationCount: Int
     ) {
-        ensureWorkspaceExists()
+        materializeWorkspaceIfNeeded(context?.workspaceId ?? activeWorkspaceId)
         if let index = runGroups.firstIndex(where: { $0.id == runGroupId }) {
             if !runGroups[index].jobIds.contains(jobId) {
                 runGroups[index].jobIds.append(jobId)
@@ -510,7 +526,7 @@ extension MLXRAppModel {
             runGroups[index].state = .running
             runGroups[index].updatedAt = .now
             runGroups[index].variationCount = max(runGroups[index].variationCount, variationCount)
-            studioWorkspace.lastActiveRunGroupId = runGroupId
+            creationDraft.lastActiveRunGroupId = runGroupId
             lastSubmittedJobId = jobId
             renameWorkspaceIfPlaceholder(
                 workspaceId: runGroups[index].workspaceId,
@@ -534,7 +550,7 @@ extension MLXRAppModel {
             state: .running
         )
         runGroups.insert(group, at: 0)
-        studioWorkspace.lastActiveRunGroupId = runGroupId
+        creationDraft.lastActiveRunGroupId = runGroupId
         lastSubmittedJobId = jobId
         renameWorkspaceIfPlaceholder(
             workspaceId: group.workspaceId,
@@ -599,8 +615,7 @@ extension MLXRAppModel {
     }
 
     private func shouldIncludeInActivity(
-        _ group: RunGroupRecord,
-        retentionCutoff: Date
+        _ group: RunGroupRecord
     ) -> Bool {
         switch group.state {
         case .queued, .running:
@@ -608,9 +623,7 @@ extension MLXRAppModel {
         case .failed:
             return !dismissedActivityRunGroupIds.contains(group.id)
         case .completed, .cancelled:
-            return
-                group.updatedAt >= retentionCutoff
-                && !dismissedActivityRunGroupIds.contains(group.id)
+            return false
         }
     }
 
@@ -629,7 +642,7 @@ extension MLXRAppModel {
     }
 
     private func normalizeWorkspaceReferences() {
-        let requirements = referenceRequirements(for: studioWorkspace)
+        let requirements = referenceRequirements(for: creationDraft)
         let allowedKinds = Set(requirements.map(\.kind))
         let anyReferenceAssetIds = Set(
             libraryAssets
@@ -644,23 +657,23 @@ extension MLXRAppModel {
                 }
                 .map(\.id)
         )
-        var referenceIds = studioWorkspace.referenceAssetIds.filter { compatibleAssetIds.contains($0) }
+        var referenceIds = creationDraft.referenceAssetIds.filter { compatibleAssetIds.contains($0) }
 
         if allowedKinds.isEmpty {
-            let fallbackIds = studioWorkspace.referenceAssetIds.filter { anyReferenceAssetIds.contains($0) }
-            studioWorkspace.referenceAssetIds = Array(NSOrderedSet(array: fallbackIds)) as? [String] ?? fallbackIds
+            let fallbackIds = creationDraft.referenceAssetIds.filter { anyReferenceAssetIds.contains($0) }
+            creationDraft.referenceAssetIds = Array(NSOrderedSet(array: fallbackIds)) as? [String] ?? fallbackIds
             return
         }
 
         if referenceIds.isEmpty,
-           let selectedAssetId = studioWorkspace.selectedAssetId,
+           let selectedAssetId = creationDraft.selectedAssetId,
            compatibleAssetIds.contains(selectedAssetId)
         {
             referenceIds = [selectedAssetId]
         }
 
         referenceIds = trimmedReferenceIds(referenceIds, requirements: requirements)
-        studioWorkspace.referenceAssetIds = Array(NSOrderedSet(array: referenceIds)) as? [String] ?? referenceIds
+        creationDraft.referenceAssetIds = Array(NSOrderedSet(array: referenceIds)) as? [String] ?? referenceIds
     }
 
     private func applyFixedModelConstraints(for selectedItem: ModelCatalogItem?) {
@@ -668,10 +681,10 @@ extension MLXRAppModel {
             return
         }
         if let fixedSteps = constraints.object("num_inference_steps")?.integer("fixed") {
-            studioWorkspace.manualSteps = Double(fixedSteps)
+            creationDraft.manualSteps = Double(fixedSteps)
         }
         if let fixedGuidance = constraints.object("guidance_scale")?.double("fixed") {
-            studioWorkspace.manualGuidance = fixedGuidance
+            creationDraft.manualGuidance = fixedGuidance
         }
     }
 
@@ -700,16 +713,16 @@ extension MLXRAppModel {
         return trimmed
     }
 
-    private func referenceRequirements(for draft: StudioWorkspaceDraft) -> [WorkflowReferenceRequirement] {
-        if let studioPlanResult, studioPlanMatchesDraft(studioPlanResult, draft: draft) {
-            return studioPlanResult.readiness.referenceRequirements
+    private func referenceRequirements(for draft: CreationDraft) -> [WorkflowReferenceRequirement] {
+        if let creationPlanResult, creationPlanMatchesDraft(creationPlanResult, draft: draft) {
+            return creationPlanResult.readiness.referenceRequirements
         }
         return fallbackReferenceRequirements(for: draft.task)
     }
 
-    private func studioPlanMatchesDraft(
+    private func creationPlanMatchesDraft(
         _ result: WorkflowPlanResult,
-        draft: StudioWorkspaceDraft
+        draft: CreationDraft
     ) -> Bool {
         result.plan.selectedTask == draft.task.rawValue
             || result.presentation.selectedTask == draft.task.rawValue
@@ -766,7 +779,7 @@ extension MLXRAppModel {
         }
     }
 
-    private func studioFamilyExtensions(for draft: StudioWorkspaceDraft) -> JSONMap {
+    private func creationFamilyExtensions(for draft: CreationDraft) -> JSONMap {
         var familyExtensions = selectedPack(for: draft)?.familyExtensions ?? [:]
         if let workflowVariant = selectedPack(for: draft)?.workflowVariant {
             familyExtensions["workflow_variant"] = .string(workflowVariant)
@@ -781,8 +794,8 @@ extension MLXRAppModel {
     }
 
     private func planningReferences(
-        for draft: StudioWorkspaceDraft,
-        settings: StudioResolvedSettings
+        for draft: CreationDraft,
+        settings: CreationResolvedSettings
     ) -> [WorkflowReference] {
         let referenceAssets = libraryAssets.filter { draft.referenceAssetIds.contains($0.id) }
         let imageFrameIndices = imageFrameIndicesForPlanning(
@@ -857,12 +870,19 @@ extension MLXRAppModel {
         if workspaces.contains(where: { $0.id == activeWorkspaceId }) == false {
             workspaces.append(WorkspaceRecord(id: activeWorkspaceId, title: "New Project"))
         }
-        if studioWorkspace.workspaceId != activeWorkspaceId {
-            studioWorkspace.workspaceId = activeWorkspaceId
+        if creationDraft.workspaceId != activeWorkspaceId {
+            creationDraft.workspaceId = activeWorkspaceId
         }
         updateWorkspace(id: activeWorkspaceId) { workspace in
             workspace.lastOpenedAt = .now
         }
+    }
+
+    private func materializeWorkspaceIfNeeded(_ workspaceId: String) {
+        guard workspaces.contains(where: { $0.id == workspaceId }) == false else {
+            return
+        }
+        workspaces.append(WorkspaceRecord(id: workspaceId, title: "New Project"))
     }
 
     private func renameWorkspaceIfPlaceholder(workspaceId: String, using title: String) {

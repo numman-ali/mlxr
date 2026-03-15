@@ -32,7 +32,8 @@ When the user already has project history:
 
 ### Home behavior
 
-- Submitting from `Home` creates or reuses the active project.
+- Submitting from `Home` creates a new project by default unless the user
+  explicitly resumed an existing project.
 - After runtime acceptance, `Home` transitions into that project's library detail view.
 - `Home` does not own persistent result history; project detail does.
 
@@ -69,7 +70,6 @@ It shows:
 - queued jobs
 - install operations
 - failures until dismissed
-- a short recent-completed section when helpful
 
 It does not become:
 
@@ -101,6 +101,8 @@ Files to review:
 
 - `packages/clients/mlxr-mac-app/Sources/MLXRFeatureHome/HomeScreen.swift`
 - `packages/clients/mlxr-mac-app/Sources/MLXRFeatureToolkit/ToolkitScreen.swift`
+- `packages/clients/mlxr-mac-app/Sources/MLXRFeatureToolkit/ModelsWorkspaceView.swift`
+- `packages/clients/mlxr-mac-app/Sources/MLXRFeatureToolkit/ModelsWorkspaceView.swift`
 - activity footer and overlay views in `MLXRAppShell` / `MLXRActivityStrip`
 
 Reference categories:

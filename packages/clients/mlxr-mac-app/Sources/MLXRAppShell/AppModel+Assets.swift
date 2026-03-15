@@ -24,19 +24,27 @@ extension MLXRAppModel {
         libraryAssets.first(where: \.isGenerated)
     }
 
-    public func importExternalAssets(from urls: [URL]) async -> [ImportedAssetRecord] {
+    public func importExternalAssets(from urls: [URL], workspaceId: String) async -> [ImportedAssetRecord] {
         guard !urls.isEmpty else { return [] }
         do {
             let updated = try importedAssetStore.importFiles(
                 at: urls,
                 existing: importedAssets,
-                workspaceId: activeWorkspaceId
+                workspaceId: workspaceId
             )
             let existingIds = Set(importedAssets.map { $0.id })
             let createdIds = Set(updated.map { $0.id }).subtracting(existingIds)
             importedAssets = updated
             globalError = nil
-            return importedAssets.filter { createdIds.contains($0.id) }
+            let createdAssets = importedAssets.filter { createdIds.contains($0.id) }
+            guard !createdAssets.isEmpty else {
+                return []
+            }
+            selectWorkspace(
+                workspaceId,
+                clearingDraftContext: creationDraft.workspaceId != workspaceId
+            )
+            return createdAssets
         } catch {
             globalError = error.localizedDescription
             return []

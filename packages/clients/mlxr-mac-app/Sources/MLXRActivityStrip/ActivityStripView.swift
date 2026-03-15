@@ -130,12 +130,6 @@ public struct ActivityCenterSheet: View {
         runGroups.filter { $0.state == .failed }.prefix(8).map { $0 }
     }
 
-    private var recentCompletedGroups: [RunGroupRecord] {
-        runGroups.filter { $0.state == .completed || $0.state == .cancelled }
-            .prefix(10)
-            .map { $0 }
-    }
-
     public var body: some View {
         VStack(alignment: .leading, spacing: MLXRSpacing.lg) {
             header
@@ -143,7 +137,6 @@ public struct ActivityCenterSheet: View {
             if runningGroups.isEmpty
                 && queuedGroups.isEmpty
                 && failedGroups.isEmpty
-                && recentCompletedGroups.isEmpty
                 && activeInstallOperations.isEmpty
             {
                 EmptyStateView(
@@ -165,9 +158,6 @@ public struct ActivityCenterSheet: View {
                         }
                         if !failedGroups.isEmpty {
                             section(title: "Needs attention", groups: failedGroups)
-                        }
-                        if !recentCompletedGroups.isEmpty {
-                            section(title: "Recent", groups: recentCompletedGroups)
                         }
                     }
                     .padding(.bottom, MLXRSpacing.xl)

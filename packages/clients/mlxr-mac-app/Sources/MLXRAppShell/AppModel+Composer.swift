@@ -4,7 +4,7 @@ import MLXRAppDomain
 @MainActor
 extension MLXRAppModel {
     public var composerPresentation: WorkflowPlanPresentation? {
-        studioPlanResult?.presentation
+        creationPlanResult?.presentation
     }
 
     public var composerAvailableModes: [TaskCategory] {
@@ -22,8 +22,8 @@ extension MLXRAppModel {
     }
 
     public var composerMode: TaskCategory {
-        TaskCategory(rawValue: composerPresentation?.primaryMode ?? studioWorkspace.task.category.rawValue)
-            ?? studioWorkspace.task.category
+        TaskCategory(rawValue: composerPresentation?.primaryMode ?? creationDraft.task.category.rawValue)
+            ?? creationDraft.task.category
     }
 
     public func composerSubworkflowOptions(for mode: TaskCategory) -> [WorkflowPresentationSubworkflow] {
@@ -32,6 +32,44 @@ extension MLXRAppModel {
 
     public var composerSelectedModelName: String? {
         selectedModel()?.displayName
+    }
+
+    public var composerFocusedAssetLabel: String? {
+        guard let selectedAssetId = creationDraft.selectedAssetId,
+              let asset = libraryAssets.first(where: { $0.id == selectedAssetId })
+        else {
+            return nil
+        }
+        return asset.displayTitle
+    }
+
+    public var composerReferenceSummaryLabel: String? {
+        let referenceAssets = libraryAssets.filter { creationDraft.referenceAssetIds.contains($0.id) }
+        guard !referenceAssets.isEmpty else {
+            return nil
+        }
+        let total = referenceAssets.count
+        let images = referenceAssets.filter(\.isImage).count
+        let videos = referenceAssets.filter(\.isVideo).count
+        let audio = referenceAssets.filter(\.isAudio).count
+
+        var parts: [String] = []
+        if images > 0 {
+            parts.append("\(images) image")
+        }
+        if videos > 0 {
+            parts.append("\(videos) video")
+        }
+        if audio > 0 {
+            parts.append("\(audio) audio")
+        }
+
+        let detail = parts.joined(separator: ", ")
+        if detail.isEmpty {
+            return total == 1 ? "1 reference" : "\(total) references"
+        }
+        let noun = total == 1 ? "reference" : "references"
+        return "\(detail) \(noun)"
     }
 
     public var composerRuntimeStatusLabel: String {
@@ -47,7 +85,7 @@ extension MLXRAppModel {
         if isSubmittingImage || isSubmittingVideo {
             return "Generating"
         }
-        if isPlanningStudio {
+        if isPlanningCreation {
             return "Planning"
         }
         if selectedModel()?.installed != true {
@@ -58,7 +96,7 @@ extension MLXRAppModel {
 
     public func selectComposerMode(_ mode: TaskCategory) {
         let options = composerSubworkflowOptions(for: mode)
-        if let selected = options.first(where: { $0.task == studioWorkspace.task.rawValue }),
+        if let selected = options.first(where: { $0.task == creationDraft.task.rawValue }),
            ProductTask(rawValue: selected.task) != nil
         {
             return
@@ -77,80 +115,80 @@ extension MLXRAppModel {
     }
 
     public func selectComposerTask(_ task: ProductTask) {
-        studioWorkspace.task = task
+        creationDraft.task = task
         syncWorkspaceDefaultsForTask()
-        scheduleStudioPlan()
     }
 
     public func selectComposerQuality(_ value: String) {
         guard let preset = QualityPreset(composerValue: value) else { return }
-        studioWorkspace.qualityPreset = preset
-        if !studioWorkspace.useCustomSettings {
+        creationDraft.qualityPreset = preset
+        if !creationDraft.useCustomSettings {
             syncWorkspaceDefaultsForTask()
         }
-        scheduleStudioPlan()
     }
 
     public func selectComposerAspect(_ value: String) {
         guard let preset = AspectPreset(composerValue: value) else { return }
-        studioWorkspace.aspectPreset = preset
-        if !studioWorkspace.useCustomSettings {
+        creationDraft.aspectPreset = preset
+        if !creationDraft.useCustomSettings {
             syncWorkspaceDefaultsForTask()
         }
-        scheduleStudioPlan()
     }
 
     public func selectComposerDuration(_ value: String) {
         guard let preset = DurationPreset(composerValue: value) else { return }
-        studioWorkspace.durationPreset = preset
-        if !studioWorkspace.useCustomSettings {
+        creationDraft.durationPreset = preset
+        if !creationDraft.useCustomSettings {
             syncWorkspaceDefaultsForTask()
         }
-        scheduleStudioPlan()
     }
 
     public func selectComposerVariationCount(_ count: Int) {
-        studioWorkspace.variationCount = max(1, count)
-        scheduleStudioPlan()
+        creationDraft.variationCount = max(1, count)
     }
 
-    public func submitCurrentWorkspace() async {
-        guard canSubmitCurrentWorkspace() else { return }
-        guard let model = selectedModel(), model.installed else { return }
-        let currentTask = studioWorkspace.task
+    @discardableResult
+    public func submitCurrentWorkspace(targetWorkspaceId: String? = nil) async -> String? {
+        guard canSubmitCurrentWorkspace() else { return nil }
+        guard let model = selectedModel(), model.installed else { return nil }
+        let currentTask = creationDraft.task
         let settings = resolvedSettings()
         let references = await resolveComposerReferenceInputs()
         let sourceAssetIds = Array(
-            Set(studioWorkspace.referenceAssetIds + [studioWorkspace.selectedAssetId].compactMap { $0 })
+            Set(creationDraft.referenceAssetIds + [creationDraft.selectedAssetId].compactMap { $0 })
         )
         .sorted()
-        let runGroupTitle = studioWorkspace.prompt.trimmingCharacters(
+        let runGroupTitle = creationDraft.prompt.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
+        let effectiveWorkspaceId = targetWorkspaceId ?? creationDraft.workspaceId
         let context = prepareRunContext(
             task: currentTask,
             title: runGroupTitle,
-            sourceAssetIds: sourceAssetIds
+            sourceAssetIds: sourceAssetIds,
+            workspaceId: effectiveWorkspaceId
         )
 
+        var acceptedAnyRun = false
+
         if currentTask.category == .image {
-            let variationCount = max(1, studioWorkspace.variationCount)
-            let baseSeed = Int(studioWorkspace.seed)
+            let variationCount = max(1, creationDraft.variationCount)
+            let baseSeed = Int(creationDraft.seed)
             for index in 0..<variationCount {
                 let variationSeed = baseSeed.map { $0 + index }
-                await submitImage(
+                let accepted = await submitImage(
                     ImageGenerationRequest(
                         task: currentTask,
                         modelId: model.modelId,
-                        prompt: studioWorkspace.prompt,
-                        negativePrompt: studioWorkspace.negativePrompt,
+                        prompt: creationDraft.prompt,
+                        negativePrompt: creationDraft.negativePrompt,
                         width: settings.width,
                         height: settings.height,
                         numInferenceSteps: settings.numInferenceSteps,
                         guidanceScale: settings.guidanceScale,
                         seed: variationSeed,
-                        artifactFormat: studioWorkspace.artifactFormat,
-                        quality: studioWorkspace.qualityPreset.quality,
+                        artifactFormat: creationDraft.artifactFormat,
+                        quality: creationDraft.qualityPreset.quality,
                         context: context,
                         runGroupTitle: runGroupTitle,
                         variationCount: variationCount,
@@ -158,23 +196,24 @@ extension MLXRAppModel {
                         familyExtensions: selectedPack()?.familyExtensions ?? [:]
                     )
                 )
+                acceptedAnyRun = acceptedAnyRun || accepted
             }
         } else {
-            await submitVideo(
+            acceptedAnyRun = await submitVideo(
                 VideoGenerationRequest(
                     task: currentTask,
                     modelId: model.modelId,
-                    prompt: studioWorkspace.prompt,
-                    negativePrompt: studioWorkspace.negativePrompt,
+                    prompt: creationDraft.prompt,
+                    negativePrompt: creationDraft.negativePrompt,
                     width: settings.width,
                     height: settings.height,
                     numFrames: settings.numFrames,
                     fps: settings.fps,
                     numInferenceSteps: settings.numInferenceSteps,
                     guidanceScale: settings.guidanceScale,
-                    seed: Int(studioWorkspace.seed),
-                    artifactFormat: studioWorkspace.artifactFormat,
-                    quality: studioWorkspace.qualityPreset.quality,
+                    seed: Int(creationDraft.seed),
+                    artifactFormat: creationDraft.artifactFormat,
+                    quality: creationDraft.qualityPreset.quality,
                     context: context,
                     runGroupTitle: runGroupTitle,
                     variationCount: 1,
@@ -186,12 +225,14 @@ extension MLXRAppModel {
                 )
             )
         }
+
+        return acceptedAnyRun ? context.workspaceId : nil
     }
 
     public func canSubmitCurrentWorkspace() -> Bool {
         selectedModel()?.installed == true
-            && studioPlanError == nil
-            && (studioPlanResult?.readiness.ready ?? false)
+            && creationPlanError == nil
+            && (creationPlanResult?.readiness.ready ?? false)
     }
 
     public func currentWorkspaceSubmitDisabledReason() -> String? {
@@ -201,18 +242,18 @@ extension MLXRAppModel {
         if selectedModel()?.installed != true {
             return "Install the selected model or switch to an installed row before running."
         }
-        if isPlanningStudio {
+        if isPlanningCreation {
             return "Checking the draft against the runtime plan…"
         }
-        if let studioPlanError {
-            return studioPlanError
+        if let creationPlanError {
+            return creationPlanError
         }
-        return studioPlanResult?.readiness.blockingIssues.first
+        return creationPlanResult?.readiness.blockingIssues.first
     }
 
     private func resolveComposerReferenceInputs() async -> [MediaReferenceInput] {
         var resolved: [MediaReferenceInput] = []
-        for assetId in studioWorkspace.referenceAssetIds {
+        for assetId in creationDraft.referenceAssetIds {
             guard
                 let asset = libraryAssets.first(where: { $0.id == assetId }),
                 let referenceKind = referenceKind(for: asset),

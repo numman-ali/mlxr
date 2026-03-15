@@ -25,33 +25,6 @@ public struct ComposerSeedRequest: Identifiable, Sendable, Hashable {
     }
 }
 
-public enum StudioWorkflowAvailability: Sendable, Hashable {
-    case available(ProductTask)
-    case comingSoon
-}
-
-public struct StudioWorkflowOption: Identifiable, Sendable, Hashable {
-    public let id: String
-    public let title: String
-    public let subtitle: String
-    public let icon: String
-    public let availability: StudioWorkflowAvailability
-
-    public init(
-        id: String,
-        title: String,
-        subtitle: String,
-        icon: String,
-        availability: StudioWorkflowAvailability
-    ) {
-        self.id = id
-        self.title = title
-        self.subtitle = subtitle
-        self.icon = icon
-        self.availability = availability
-    }
-}
-
 public enum AssetSortMode: String, CaseIterable, Sendable, Codable {
     case newest = "Newest"
     case lastUsed = "Last Used"
@@ -212,7 +185,7 @@ public struct PackRecord: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-public struct StudioWorkspaceDraft: Codable, Hashable, Sendable {
+public struct CreationDraft: Codable, Hashable, Sendable {
     public var workspaceId: String
     public var task: ProductTask
     public var prompt: String
@@ -299,7 +272,7 @@ public struct StudioWorkspaceDraft: Codable, Hashable, Sendable {
 }
 
 public struct AppPresentationState: Codable, Hashable, Sendable {
-    public var hasCompletedModelSetup: Bool
+    public var hasCompletedOnboarding: Bool
     public var activeWorkspaceId: String
     public var selectedLibraryWorkspaceId: String?
     public var workspaces: [WorkspaceRecord]
@@ -307,9 +280,10 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
     public var runGroups: [RunGroupRecord]
     public var dismissedActivityRunGroupIds: [String]
     public var assets: [AssetRecord]
-    public var workspaceDraft: StudioWorkspaceDraft
+    public var creationDraft: CreationDraft
 
     private enum CodingKeys: String, CodingKey {
+        case hasCompletedOnboarding
         case hasCompletedModelSetup
         case activeWorkspaceId
         case selectedLibraryWorkspaceId
@@ -318,11 +292,12 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         case runGroups
         case dismissedActivityRunGroupIds
         case assets
+        case creationDraft
         case workspaceDraft
     }
 
     public init(
-        hasCompletedModelSetup: Bool = false,
+        hasCompletedOnboarding: Bool = false,
         activeWorkspaceId: String = "default-workspace",
         selectedLibraryWorkspaceId: String? = nil,
         workspaces: [WorkspaceRecord] = [WorkspaceRecord(id: "default-workspace", title: "New Project")],
@@ -330,9 +305,9 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         runGroups: [RunGroupRecord] = [],
         dismissedActivityRunGroupIds: [String] = [],
         assets: [AssetRecord] = [],
-        workspaceDraft: StudioWorkspaceDraft = .init()
+        creationDraft: CreationDraft = .init()
     ) {
-        self.hasCompletedModelSetup = hasCompletedModelSetup
+        self.hasCompletedOnboarding = hasCompletedOnboarding
         self.activeWorkspaceId = activeWorkspaceId
         self.selectedLibraryWorkspaceId = selectedLibraryWorkspaceId
         self.workspaces = workspaces
@@ -340,13 +315,15 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
         self.runGroups = runGroups
         self.dismissedActivityRunGroupIds = dismissedActivityRunGroupIds
         self.assets = assets
-        self.workspaceDraft = workspaceDraft
+        self.creationDraft = creationDraft
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        hasCompletedModelSetup =
-            try container.decodeIfPresent(Bool.self, forKey: .hasCompletedModelSetup) ?? false
+        hasCompletedOnboarding =
+            try container.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding)
+            ?? container.decodeIfPresent(Bool.self, forKey: .hasCompletedModelSetup)
+            ?? false
         activeWorkspaceId =
             try container.decodeIfPresent(String.self, forKey: .activeWorkspaceId)
             ?? "default-workspace"
@@ -368,16 +345,33 @@ public struct AppPresentationState: Codable, Hashable, Sendable {
             )
             ?? []
         assets = try container.decodeIfPresent([AssetRecord].self, forKey: .assets) ?? []
-        workspaceDraft =
+        creationDraft =
             try container.decodeIfPresent(
-                StudioWorkspaceDraft.self,
+                CreationDraft.self,
+                forKey: .creationDraft
+            )
+            ?? container.decodeIfPresent(
+                CreationDraft.self,
                 forKey: .workspaceDraft
             )
             ?? .init()
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(hasCompletedOnboarding, forKey: .hasCompletedOnboarding)
+        try container.encode(activeWorkspaceId, forKey: .activeWorkspaceId)
+        try container.encodeIfPresent(selectedLibraryWorkspaceId, forKey: .selectedLibraryWorkspaceId)
+        try container.encode(workspaces, forKey: .workspaces)
+        try container.encode(collections, forKey: .collections)
+        try container.encode(runGroups, forKey: .runGroups)
+        try container.encode(dismissedActivityRunGroupIds, forKey: .dismissedActivityRunGroupIds)
+        try container.encode(assets, forKey: .assets)
+        try container.encode(creationDraft, forKey: .creationDraft)
+    }
 }
 
-public struct StudioResolvedSettings: Equatable, Sendable, Hashable, Codable {
+public struct CreationResolvedSettings: Equatable, Sendable, Hashable, Codable {
     public var width: Int
     public var height: Int
     public var numFrames: Int

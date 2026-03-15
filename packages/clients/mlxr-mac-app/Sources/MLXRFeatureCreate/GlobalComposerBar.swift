@@ -3,7 +3,7 @@ import MLXRDesignSystem
 import SwiftUI
 
 public struct GlobalComposerBar: View {
-    @Binding private var workspace: StudioWorkspaceDraft
+    @Binding private var workspace: CreationDraft
 
     private let isCollapsed: Bool
     private let mode: TaskCategory
@@ -14,12 +14,16 @@ public struct GlobalComposerBar: View {
     private let durationOptions: [WorkflowPresentationControlOption]
     private let variationOptions: [Int]
     private let selectedModelName: String?
+    private let selectedAssetLabel: String?
+    private let referenceSummaryLabel: String?
     private let runtimeStatusLabel: String
     private let isPlanning: Bool
     private let isBusy: Bool
     private let canSubmit: Bool
     private let disabledReason: String?
-    private let onToggleCollapsed: () -> Void
+    private let onCollapse: () -> Void
+    private let onExpand: () -> Void
+    private let onHide: () -> Void
     private let onSelectMode: (TaskCategory) -> Void
     private let onSelectTask: (ProductTask) -> Void
     private let onSelectQuality: (String) -> Void
@@ -29,7 +33,7 @@ public struct GlobalComposerBar: View {
     private let onSubmit: () -> Void
 
     public init(
-        workspace: Binding<StudioWorkspaceDraft>,
+        workspace: Binding<CreationDraft>,
         isCollapsed: Bool,
         mode: TaskCategory,
         availableModes: [TaskCategory],
@@ -39,12 +43,16 @@ public struct GlobalComposerBar: View {
         durationOptions: [WorkflowPresentationControlOption],
         variationOptions: [Int],
         selectedModelName: String?,
+        selectedAssetLabel: String?,
+        referenceSummaryLabel: String?,
         runtimeStatusLabel: String,
         isPlanning: Bool,
         isBusy: Bool,
         canSubmit: Bool,
         disabledReason: String?,
-        onToggleCollapsed: @escaping () -> Void,
+        onCollapse: @escaping () -> Void,
+        onExpand: @escaping () -> Void,
+        onHide: @escaping () -> Void,
         onSelectMode: @escaping (TaskCategory) -> Void,
         onSelectTask: @escaping (ProductTask) -> Void,
         onSelectQuality: @escaping (String) -> Void,
@@ -63,12 +71,16 @@ public struct GlobalComposerBar: View {
         self.durationOptions = durationOptions
         self.variationOptions = variationOptions
         self.selectedModelName = selectedModelName
+        self.selectedAssetLabel = selectedAssetLabel
+        self.referenceSummaryLabel = referenceSummaryLabel
         self.runtimeStatusLabel = runtimeStatusLabel
         self.isPlanning = isPlanning
         self.isBusy = isBusy
         self.canSubmit = canSubmit
         self.disabledReason = disabledReason
-        self.onToggleCollapsed = onToggleCollapsed
+        self.onCollapse = onCollapse
+        self.onExpand = onExpand
+        self.onHide = onHide
         self.onSelectMode = onSelectMode
         self.onSelectTask = onSelectTask
         self.onSelectQuality = onSelectQuality
@@ -87,13 +99,13 @@ public struct GlobalComposerBar: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
+            RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
                 .fill(MLXRColor.canvasRaised)
                 .overlay(
-                    RoundedRectangle(cornerRadius: MLXRRadius.xl, style: .continuous)
-                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: containerCornerRadius, style: .continuous)
+                        .strokeBorder(containerBorderColor, lineWidth: isCollapsed ? 0.75 : 0.5)
                 )
-                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                .shadow(color: .black.opacity(isCollapsed ? 0.14 : 0.18), radius: isCollapsed ? 14 : 18, y: isCollapsed ? 6 : 8)
         )
     }
 
@@ -127,13 +139,25 @@ public struct GlobalComposerBar: View {
 
                 Spacer(minLength: 0)
 
-                Button {
-                    onToggleCollapsed()
-                } label: {
-                    Label("Collapse", systemImage: "chevron.down")
-                        .labelStyle(.iconOnly)
+                HStack(spacing: MLXRSpacing.xs) {
+                    Button {
+                        onHide()
+                    } label: {
+                        Label("Hide", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Hide composer")
+
+                    Button {
+                        onCollapse()
+                    } label: {
+                        Label("Collapse", systemImage: "chevron.down")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Collapse composer")
                 }
-                .buttonStyle(.bordered)
             }
 
             TextField(
@@ -154,6 +178,10 @@ public struct GlobalComposerBar: View {
                             .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
                     )
             )
+
+            if selectedAssetLabel != nil || referenceSummaryLabel != nil {
+                composerContextRow
+            }
 
             HStack(spacing: MLXRSpacing.sm) {
                 if let selectedModelName {
@@ -190,34 +218,111 @@ public struct GlobalComposerBar: View {
                 .disabled(!canSubmit)
             }
         }
-        .padding(MLXRSpacing.lg)
+        .padding(MLXRSpacing.md)
     }
 
     private var collapsedBody: some View {
-        HStack(spacing: MLXRSpacing.md) {
-            Label(mode == .image ? "Image" : "Video", systemImage: mode == .image ? "photo" : "film")
-                .font(MLXRType.bodySmall)
-                .foregroundStyle(MLXRColor.textSecondary)
+        HStack(spacing: MLXRSpacing.sm) {
+            HStack(spacing: MLXRSpacing.xs) {
+                Image(systemName: mode == .image ? "photo" : "film")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(mode == .image ? "Image" : "Video")
+                    .font(MLXRType.bodySmall)
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(MLXRColor.textSecondary)
+
+            Rectangle()
+                .fill(MLXRColor.borderSubtle)
+                .frame(width: 1, height: 14)
 
             Text(promptSummary)
-                .font(MLXRType.bodyMedium)
+                .font(MLXRType.bodySmall)
                 .foregroundStyle(promptSummary == placeholderPrompt ? MLXRColor.textTertiary : MLXRColor.textPrimary)
                 .lineLimit(1)
-
-            Spacer(minLength: 0)
 
             StatusPill(
                 label: runtimeStatusLabel,
                 tint: canSubmit ? MLXRColor.brandPrimary : MLXRColor.brandWarm
             )
 
-            Button("Open") {
-                onToggleCollapsed()
+            if let referenceSummaryLabel {
+                StatusPill(label: referenceSummaryLabel, tint: MLXRColor.brandSecondary)
             }
-            .buttonStyle(.borderedProminent)
+
+            HStack(spacing: MLXRSpacing.xs) {
+                Button {
+                    onHide()
+                } label: {
+                    Label("Hide composer", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Hide composer")
+
+                Button {
+                    onExpand()
+                } label: {
+                    Label("Open composer", systemImage: "chevron.up")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .help("Open composer")
+            }
         }
-        .padding(.horizontal, MLXRSpacing.lg)
-        .padding(.vertical, MLXRSpacing.md)
+        .padding(.horizontal, MLXRSpacing.md)
+        .padding(.vertical, MLXRSpacing.sm)
+    }
+
+    private var composerContextRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: MLXRSpacing.xs) {
+                if let selectedAssetLabel {
+                    composerContextChip(
+                        icon: "scope",
+                        title: "Focused asset",
+                        value: selectedAssetLabel
+                    )
+                }
+
+                if let referenceSummaryLabel {
+                    composerContextChip(
+                        icon: "paperclip",
+                        title: "References",
+                        value: referenceSummaryLabel
+                    )
+                }
+            }
+        }
+    }
+
+    private func composerContextChip(icon: String, title: String, value: String) -> some View {
+        HStack(spacing: MLXRSpacing.xs) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MLXRColor.brandPrimary)
+
+            Text(title)
+                .font(MLXRType.captionSmall)
+                .foregroundStyle(MLXRColor.textTertiary)
+
+            Text(value)
+                .font(MLXRType.captionLarge)
+                .foregroundStyle(MLXRColor.textPrimary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, MLXRSpacing.sm)
+        .padding(.vertical, MLXRSpacing.xs)
+        .background(
+            Capsule(style: .continuous)
+                .fill(MLXRColor.surfaceCard)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(MLXRColor.borderSubtle, lineWidth: 0.5)
+                )
+        )
     }
 
     private var modeBinding: Binding<TaskCategory> {
@@ -229,6 +334,17 @@ public struct GlobalComposerBar: View {
 
     private var currentTaskLabel: String {
         ProductTask(rawValue: workspace.task.rawValue)?.title ?? workspace.task.title
+    }
+
+    private var containerCornerRadius: CGFloat {
+        isCollapsed ? MLXRRadius.pill : MLXRRadius.xl
+    }
+
+    private var containerBorderColor: Color {
+        if isCollapsed {
+            return canSubmit ? MLXRColor.borderSubtle : MLXRColor.brandWarm.opacity(0.35)
+        }
+        return MLXRColor.borderSubtle
     }
 
     @ViewBuilder
