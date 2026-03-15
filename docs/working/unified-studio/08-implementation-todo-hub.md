@@ -235,14 +235,14 @@ Do not call the redesign done until:
   - real image import into an existing project and immediate reuse in the composer
   - project-detail submit flow keeping the accepted run attached to the same project
   - top-level browser keyboard `Return` reopening the selected project
-- Validation receipts captured during the tranche include:
-  - `/Users/numman/Desktop/peekaboo_see_1773538835.png` for the `Home` composer prompt before acceptance
-  - `/Users/numman/Desktop/peekaboo_see_1773538892.png` for `Home` submission routing into `Library` after runtime acceptance
-  - `/Users/numman/Desktop/peekaboo_see_1773539640.png` for the recovered real-runtime project browser after the install cleanup
-  - `/Users/numman/Desktop/peekaboo_see_1773539716.png` for isolated first-run starter-model setup against an empty runtime home
-  - `/Users/numman/Desktop/peekaboo_see_1773539731.png` for isolated starter-model queue and download state
-  - `/Users/numman/Desktop/peekaboo_see_1773539786.png` for real image import opening directly in the viewer
-  - `/Users/numman/Desktop/peekaboo_see_1773539804.png` for imported-image reuse seeding the shared composer
+- Local validation receipts captured during the tranche include:
+  - the `Home` composer prompt before acceptance
+  - `Home` submission routing into `Library` after runtime acceptance
+  - the recovered real-runtime project browser after install cleanup
+  - isolated first-run starter-model setup against an empty runtime home
+  - isolated starter-model queue and download state
+  - real image import opening directly in the viewer
+  - imported-image reuse seeding the shared composer
 - Known intentional deferrals for later polish, not blockers for this compact tranche:
   - dedicated advanced-settings drawer beyond the current pill row
   - explicit inline pending-result placeholder inside the project grid
